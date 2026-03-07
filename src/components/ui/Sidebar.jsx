@@ -14,10 +14,12 @@ import {
   Calculator,
   ChevronDown,
   ChevronUp,
+  Plug,
 } from "lucide-react";
 import { useTheme } from "../../Theme-provider";
 import { db, auth } from "../../firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
+import ConnectMT5Modal from "./ConnectMT5Modal";
 
 export default function Sidebar({
   open,
@@ -32,10 +34,12 @@ export default function Sidebar({
   const navigate = useNavigate();
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountBalance, setNewAccountBalance] = useState("");
   const [newAccountLeverage, setNewAccountLeverage] = useState("100");
   const [createError, setCreateError] = useState("");
+  const [connectSuccess, setConnectSuccess] = useState(false);
   const hasAutoCreated = useRef(false);
 
   // ─── Automatically create a default account if none exist ─────────
@@ -187,8 +191,11 @@ export default function Sidebar({
               {open && (
                 <>
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium text-gray-200">
+                    <div className="text-xs font-medium text-gray-200 flex items-center gap-1">
                       {currentAccount?.name || "Account"}
+                      {currentAccount?.mt5Connected && (
+                        <span className="text-xs text-green-400" title="MT5 Connected">🔌</span>
+                      )}
                     </div>
                     {currentAccount?.starting_balance && (
                       <div className="text-[10px] text-gray-400">
@@ -227,7 +234,12 @@ export default function Sidebar({
                           : "text-gray-400 hover:bg-gray-700 hover:text-white"
                       }`}
                     >
-                      <span>{account.name}</span>
+                      <span className="flex items-center gap-1">
+                        {account.name}
+                        {account.mt5Connected && (
+                          <span className="text-xs text-green-400" title="MT5 Connected">🔌</span>
+                        )}
+                      </span>
                       {account.starting_balance && (
                         <span className="text-[10px] text-gray-500">
                           ${account.starting_balance.toLocaleString()}
@@ -255,6 +267,20 @@ export default function Sidebar({
                   >
                     Manage Accounts
                   </button>
+                  
+                  {/* Connect MT5 Button - Only show if an account is selected */}
+                  {currentAccount && (
+                    <button
+                      onClick={() => {
+                        setShowConnectModal(true);
+                        setIsAccountDropdownOpen(false);
+                      }}
+                      className="w-full p-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center gap-1 mt-2"
+                    >
+                      <Plug size={12} />
+                      {currentAccount.mt5Connected ? 'Update MT5 Connection' : 'Connect MT5'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -293,6 +319,7 @@ export default function Sidebar({
           </nav>
         </div>
       </div>
+      
       {/* CREATE ACCOUNT MODAL (dark themed) */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[2000] p-4">
@@ -360,6 +387,32 @@ export default function Sidebar({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* CONNECT MT5 MODAL */}
+      {showConnectModal && currentAccount && (
+        <ConnectMT5Modal
+          isOpen={showConnectModal}
+          onClose={(success) => {
+            setShowConnectModal(false);
+            if (success) {
+              setConnectSuccess(true);
+              setTimeout(() => setConnectSuccess(false), 3000);
+              // Refresh current account data
+              if (onSwitchAccount) {
+                onSwitchAccount(currentAccount.id);
+              }
+            }
+          }}
+          account={currentAccount}
+        />
+      )}
+
+      {/* Success Toast */}
+      {connectSuccess && (
+        <div className="fixed bottom-4 right-4 z-[2000] bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in-up">
+          MT5 connected successfully!
         </div>
       )}
     </>
