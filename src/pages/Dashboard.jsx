@@ -180,66 +180,29 @@ export default function Dashboard({ currentAccount }) {
       const toDate = new Date().toISOString().split('T')[0];
       const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
-      // Try to sync from backend, but if it fails, use mock data for testing
-      let tradesData;
+      // Call your working backend
+      const response = await fetch('http://localhost:8891/v1/mt5/sync-trades', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          server: currentAccount.mt5Server,
+          login: currentAccount.mt5Login,
+          password: currentAccount.mt5Password,
+          fromDate,
+          toDate
+        })
+      });
       
-      try {
-        const response = await fetch(`https://mt-nodejs.fly.dev/api/sync-trades`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${await user.getIdToken()}`
-          },
-          body: JSON.stringify({
-            accountId: currentAccount.id,
-            fromDate,
-            toDate
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Backend error: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        tradesData = data.trades;
-      } catch (backendError) {
-        console.warn('Backend sync failed, using mock data for testing:', backendError);
-        
-        // Mock data for testing
-        tradesData = [
-          {
-            symbol: 'EURUSD',
-            type: 'BUY',
-            entry: 1.08500,
-            exit: 1.09500,
-            profit: 100.00,
-            date: new Date().toISOString(),
-            volume: 0.1,
-            sl: 1.08000,
-            tp: 1.10000
-          },
-          {
-            symbol: 'GBPUSD',
-            type: 'SELL',
-            entry: 1.26500,
-            exit: 1.25500,
-            profit: 100.00,
-            date: new Date(Date.now() - 86400000).toISOString(),
-            volume: 0.1,
-            sl: 1.27000,
-            tp: 1.25000
-          }
-        ];
-        
-        setSyncMessage({ 
-          text: "Using test data - backend not connected", 
-          type: "info" 
-        });
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to sync trades');
       }
       
       // Format trades to match your app's structure
-      const formattedTrades = tradesData.map(trade => ({
+      const formattedTrades = data.trades.map(trade => ({
         pair: trade.symbol,
         direction: trade.type === 'BUY' ? 'Long' : 'Short',
         entry: trade.entry,
