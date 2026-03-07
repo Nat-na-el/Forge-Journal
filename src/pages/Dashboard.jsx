@@ -170,8 +170,9 @@ export default function Dashboard({ currentAccount }) {
       const toDate = new Date().toISOString().split('T')[0];
       const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
+      // 🔥 CHANGED: Using Fly.io URL instead of localhost
       const response = await fetch(
-        `http://localhost:8890/v1/history/orders?mode=deals&from_date=${fromDate}&to_date=${toDate}`
+        `https://mt-nodejs.fly.dev/v1/history/orders?mode=deals&from_date=${fromDate}&to_date=${toDate}`
       );
       
       if (!response.ok) {
