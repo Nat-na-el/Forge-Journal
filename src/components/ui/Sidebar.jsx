@@ -20,7 +20,6 @@ import { useTheme } from "../../Theme-provider";
 import { db, auth } from "../../firebase";
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 import ConnectMT5Modal from "./ConnectMT5Modal";
-import DisconnectConfirmModal from "./DisconnectConfirmModal";
 
 export default function Sidebar({
   open,
@@ -36,7 +35,6 @@ export default function Sidebar({
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountBalance, setNewAccountBalance] = useState("");
   const [newAccountLeverage, setNewAccountLeverage] = useState("100");
@@ -139,27 +137,6 @@ export default function Sidebar({
     } catch (error) {
       console.error("Error creating account:", error);
       setCreateError("Failed to create account. Please try again.");
-    }
-  };
-
-  // ─── Disconnect MT5 ───────────────────────────────────────────────
-  const handleDisconnectMT5 = async () => {
-    const user = auth.currentUser;
-    if (!user || !currentAccount) return;
-
-    try {
-      const accountRef = doc(db, "users", user.uid, "accounts", currentAccount.id);
-      await updateDoc(accountRef, {
-        mt5Connected: false,
-        mt5Server: null,
-        mt5Login: null,
-        mt5Password: null,
-        mt5AccountInfo: null,
-      });
-      setShowDisconnectModal(false);
-      onSwitchAccount(currentAccount.id); // refresh UI
-    } catch (error) {
-      console.error("Error disconnecting MT5:", error);
     }
   };
 
@@ -291,8 +268,8 @@ export default function Sidebar({
                     Manage Accounts
                   </button>
                   
-                  {/* Connect/Disconnect MT5 Buttons */}
-                  {currentAccount && !currentAccount.mt5Connected && (
+                  {/* Connect MT5 Button - Only show if an account is selected */}
+                  {currentAccount && (
                     <button
                       onClick={() => {
                         setShowConnectModal(true);
@@ -301,19 +278,7 @@ export default function Sidebar({
                       className="w-full p-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center gap-1 mt-2"
                     >
                       <Plug size={12} />
-                      Connect MT5
-                    </button>
-                  )}
-                  {currentAccount?.mt5Connected && (
-                    <button
-                      onClick={() => {
-                        setShowDisconnectModal(true);
-                        setIsAccountDropdownOpen(false);
-                      }}
-                      className="w-full p-2 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded flex items-center justify-center gap-1 mt-2"
-                    >
-                      <Plug size={12} />
-                      Disconnect MT5
+                      {currentAccount.mt5Connected ? 'Update MT5 Connection' : 'Connect MT5'}
                     </button>
                   )}
                 </div>
@@ -434,20 +399,13 @@ export default function Sidebar({
             if (success) {
               setConnectSuccess(true);
               setTimeout(() => setConnectSuccess(false), 3000);
-              onSwitchAccount(currentAccount.id);
+              // Refresh current account data
+              if (onSwitchAccount) {
+                onSwitchAccount(currentAccount.id);
+              }
             }
           }}
           account={currentAccount}
-        />
-      )}
-
-      {/* DISCONNECT CONFIRMATION MODAL */}
-      {showDisconnectModal && currentAccount && (
-        <DisconnectConfirmModal
-          isOpen={showDisconnectModal}
-          onClose={() => setShowDisconnectModal(false)}
-          onConfirm={handleDisconnectMT5}
-          accountName={currentAccount.name}
         />
       )}
 
