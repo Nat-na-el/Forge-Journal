@@ -31,15 +31,17 @@ export default function ConnectMT5Modal({ isOpen, onClose, account }) {
       if (!form.password.trim()) throw new Error('Password is required');
 
       // Test connection to your working backend
-      const testResponse = await fetch('http://localhost:8891/v1/mt5/test-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          server: form.server.trim(),
-          login: parseInt(form.login.trim()),
-          password: form.password
-        })
-      });
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8891';
+
+const testResponse = await fetch(`${API_URL}/v1/mt5/test-connection`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    server: form.server.trim(),
+    login: parseInt(form.login.trim()),
+    password: form.password
+  })
+});
 
       const result = await testResponse.json();
 
