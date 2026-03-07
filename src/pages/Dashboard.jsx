@@ -147,11 +147,21 @@ export default function Dashboard({ currentAccount }) {
     }
   };
 
-  // ─── Sync trades from MT5 ────────────────────────────────────────
+  // ─── Sync trades from MT5 using stored credentials ─────────────────
   const syncFromMT5 = async () => {
     if (!currentAccount?.id) {
       setSyncMessage({ text: "No account selected", type: "error" });
       setTimeout(() => setSyncMessage({ text: "", type: "" }), 3000);
+      return;
+    }
+
+    // Check if MT5 is connected
+    if (!currentAccount.mt5Connected) {
+      setSyncMessage({ 
+        text: "Please connect your MT5 account first (click 'Connect MT5' in sidebar)", 
+        type: "error" 
+      });
+      setTimeout(() => setSyncMessage({ text: "", type: "" }), 5000);
       return;
     }
 
@@ -170,56 +180,41 @@ export default function Dashboard({ currentAccount }) {
       const toDate = new Date().toISOString().split('T')[0];
       const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
-      // 🔥 CHANGED: Using Fly.io URL instead of localhost
-      const response = await fetch(
-        `https://mt-nodejs.fly.dev/v1/history/orders?mode=deals&from_date=${fromDate}&to_date=${toDate}`
-      );
+      // Use your Fly.io backend with the stored credentials
+      const response = await fetch(`https://mt-nodejs.fly.dev/api/sync-trades`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await user.getIdToken()}`
+        },
+        body: JSON.stringify({
+          accountId: currentAccount.id,
+          fromDate,
+          toDate
+        })
+      });
       
       if (!response.ok) {
-        throw new Error(`MT5 connection failed: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Sync failed: ${response.status}`);
       }
       
       const data = await response.json();
       
-      // Filter out balance operations and keep only actual trades
-      const trades = data.data.filter(trade => 
-        trade.symbol && // Has a symbol (not a deposit)
-        trade.type !== 'DEAL_TYPE_BALANCE' && // Not a balance operation
-        (trade.type === 'DEAL_TYPE_BUY' || trade.type === 'DEAL_TYPE_SELL') // Only buy/sell
-      );
-      
-      // Group by position_id to combine entry and exit
-      const tradesByPosition = {};
-      trades.forEach(trade => {
-        if (!tradesByPosition[trade.position_id]) {
-          tradesByPosition[trade.position_id] = [];
-        }
-        tradesByPosition[trade.position_id].push(trade);
-      });
-      
-      // Convert to your app's format
-      const formattedTrades = [];
-      
-      Object.values(tradesByPosition).forEach(positionTrades => {
-        const entryTrade = positionTrades.find(t => t.entry === 'DEAL_ENTRY_IN');
-        const exitTrade = positionTrades.find(t => t.entry === 'DEAL_ENTRY_OUT');
-        
-        if (entryTrade && exitTrade) {
-          formattedTrades.push({
-            pair: entryTrade.symbol,
-            direction: entryTrade.type === 'DEAL_TYPE_BUY' ? 'Long' : 'Short',
-            entry: entryTrade.price,
-            exit: exitTrade.price,
-            pnl: exitTrade.profit,
-            date: new Date(entryTrade.time * 1000).toISOString().split('T')[0],
-            lotSize: entryTrade.volume,
-            stopLoss: entryTrade.sl_price || 0,
-            takeProfit: entryTrade.tp_price || 0,
-            rr: exitTrade.profit && entryTrade.price ? 
-              (exitTrade.profit / (entryTrade.price * entryTrade.volume)).toFixed(2) : "",
-          });
-        }
-      });
+      // Format trades to match your app's structure
+      const formattedTrades = data.trades.map(trade => ({
+        pair: trade.symbol,
+        direction: trade.type === 'BUY' ? 'Long' : 'Short',
+        entry: trade.entry,
+        exit: trade.exit,
+        pnl: trade.profit,
+        date: trade.date.split('T')[0],
+        lotSize: trade.volume,
+        stopLoss: trade.sl || 0,
+        takeProfit: trade.tp || 0,
+        rr: trade.profit && trade.entry ? 
+          (trade.profit / (trade.entry * trade.volume)).toFixed(2) : "",
+      }));
       
       // Save to Firestore
       const batch = writeBatch(db);
@@ -243,9 +238,7 @@ export default function Dashboard({ currentAccount }) {
     } catch (error) {
       console.error('Sync failed:', error);
       setSyncMessage({ 
-        text: error.message.includes('fetch') 
-          ? 'Failed to connect to MT5. Make sure MT5 is running with SocketBridge attached.' 
-          : 'Failed to sync trades from MT5', 
+        text: error.message || 'Failed to sync trades from MT5', 
         type: "error" 
       });
     } finally {
@@ -734,6 +727,11 @@ export default function Dashboard({ currentAccount }) {
             </h1>
             <p className="mt-1.5 text-gray-400">
               {format(viewDate, "MMMM yyyy")} • {currentAccount?.name || "Account"}
+              {currentAccount.mt5Connected && (
+                <span className="ml-2 text-xs bg-green-600/20 text-green-400 px-2 py-1 rounded-full">
+                  MT5 Connected
+                </span>
+              )}
             </p>
           </div>
 
@@ -744,8 +742,11 @@ export default function Dashboard({ currentAccount }) {
               className={`flex items-center gap-2.5 px-6 py-3.5 rounded-xl shadow-md transition-all duration-200 ${
                 syncing 
                   ? 'bg-gray-500 cursor-not-allowed' 
-                  : 'bg-green-600 hover:bg-green-700 text-white'
+                  : currentAccount.mt5Connected
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-gray-600 hover:bg-gray-700 text-white opacity-50 cursor-not-allowed'
               }`}
+              title={!currentAccount.mt5Connected ? 'Connect MT5 first in sidebar' : ''}
             >
               <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
               {syncing ? 'Syncing...' : 'Sync from MT5'}
