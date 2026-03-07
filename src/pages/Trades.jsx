@@ -1,3 +1,4 @@
+// src/pages/Trades.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { Card } from "../components/ui/card";
@@ -16,11 +17,9 @@ import {
   PlusCircle,
   BookOpen,
   Tag,
-  Upload,
-  Loader2,
 } from "lucide-react";
 import DeleteConfirmModal from "../components/ui/DeleteConfirmModal";
-import { db, auth, storage } from "../firebase";
+import { db, auth } from "../firebase";
 import {
   collection,
   getDocs,
@@ -32,7 +31,6 @@ import {
   serverTimestamp,
   writeBatch,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const formatNumber = (num) => {
   if (!num && num !== 0) return "0.00";
@@ -42,7 +40,7 @@ const formatNumber = (num) => {
   });
 };
 
-// Tag input component for confluences
+// Tag input component for confluences (if editing, but we can keep simple display)
 const ConfluenceTags = ({ tags, onChange }) => {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef(null);
@@ -114,7 +112,6 @@ export default function Trades({ currentAccount }) {
   const [selectedTrade, setSelectedTrade] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingTrade, setEditingTrade] = useState(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
   const [editForm, setEditForm] = useState({
     pair: "",
     direction: "",
@@ -128,15 +125,15 @@ export default function Trades({ currentAccount }) {
     status: "executed",
     confluences: [],
     screenshotUrl: "",
+    openDateTime: "",
+    closeDateTime: "",
   });
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [tradeToDelete, setTradeToDelete] = useState(null);
   const [user, setUser] = useState(null);
 
-  const modalContentRef = useRef(null);
   const isAccountReady = user && currentAccount;
 
-  // ─── Auth listener ─────────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((authUser) => {
       setUser(authUser);
@@ -148,7 +145,6 @@ export default function Trades({ currentAccount }) {
     return unsubscribe;
   }, []);
 
-  // ─── Fetch trades when account is ready ────────────────────────────
   const refreshTrades = async () => {
     if (!user || !currentAccount?.id) {
       setTrades([]);
@@ -189,54 +185,10 @@ export default function Trades({ currentAccount }) {
     }
   }, [currentAccount, user]);
 
-  // ─── Image upload handler ──────────────────────────────────────────
-  const handleImageUpload = async (file) => {
-    if (!file || !user || !currentAccount?.id) return;
-    setUploadingImage(true);
-    try {
-      const storageRef = ref(storage, `users/${user.uid}/accounts/${currentAccount.id}/trades/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      setEditForm(prev => ({ ...prev, screenshotUrl: url }));
-    } catch (err) {
-      console.error("Upload failed:", err);
-      setMessage({ text: "Failed to upload image", type: "error" });
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  // ─── Handle paste on edit modal ────────────────────────────────────
-  useEffect(() => {
-    if (!editModalOpen) return;
-    const handlePaste = (e) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (const item of items) {
-        if (item.type.indexOf("image") !== -1) {
-          e.preventDefault();
-          const file = item.getAsFile();
-          handleImageUpload(file);
-          break;
-        }
-      }
-    };
-    const currentModal = modalContentRef.current;
-    if (currentModal) {
-      currentModal.addEventListener('paste', handlePaste);
-    }
-    return () => {
-      if (currentModal) {
-        currentModal.removeEventListener('paste', handlePaste);
-      }
-    };
-  }, [editModalOpen]);
-
-  // ─── Filtered + Sorted trades ──────────────────────────────────────
   const filteredTrades = useMemo(() => {
     let result = [...trades];
     if (selectedDate) {
-      result = result.filter((t) => t.date?.startsWith(selectedDate));
+      result = result.filter((t) => t.openDateTime?.startsWith(selectedDate));
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -249,8 +201,8 @@ export default function Trades({ currentAccount }) {
       );
     }
     result.sort((a, b) => {
-      if (sortBy === "date-desc") return new Date(b.date || 0) - new Date(a.date || 0);
-      if (sortBy === "date-asc") return new Date(a.date || 0) - new Date(b.date || 0);
+      if (sortBy === "date-desc") return new Date(b.openDateTime || 0) - new Date(a.openDateTime || 0);
+      if (sortBy === "date-asc") return new Date(a.openDateTime || 0) - new Date(b.openDateTime || 0);
       if (sortBy === "pnl-desc") return Number(b.pnl || 0) - Number(a.pnl || 0);
       if (sortBy === "pnl-asc") return Number(a.pnl || 0) - Number(b.pnl || 0);
       if (sortBy === "pair") return (a.pair || "").localeCompare(b.pair || "");
@@ -259,7 +211,6 @@ export default function Trades({ currentAccount }) {
     return result;
   }, [trades, selectedDate, searchQuery, sortBy]);
 
-  // ─── Stats ─────────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const executed = filteredTrades.filter(t => t.status !== "pending");
     if (!executed.length) {
@@ -277,7 +228,6 @@ export default function Trades({ currentAccount }) {
     };
   }, [filteredTrades]);
 
-  // ─── Open edit modal ───────────────────────────────────────────────
   const openEdit = (trade) => {
     setEditingTrade(trade);
     setEditForm({
@@ -293,11 +243,12 @@ export default function Trades({ currentAccount }) {
       status: trade.status || "executed",
       confluences: trade.confluences || [],
       screenshotUrl: trade.screenshotUrl || "",
+      openDateTime: trade.openDateTime || "",
+      closeDateTime: trade.closeDateTime || "",
     });
     setEditModalOpen(true);
   };
 
-  // ─── Save edited trade ─────────────────────────────────────────────
   const saveEdit = async (e) => {
     e.preventDefault();
     if (!editingTrade) return;
@@ -330,7 +281,6 @@ export default function Trades({ currentAccount }) {
     }
   };
 
-  // ─── Delete trade ──────────────────────────────────────────────────
   const deleteTrade = async (id) => {
     if (!user || !currentAccount?.id) return;
     try {
@@ -348,11 +298,11 @@ export default function Trades({ currentAccount }) {
     setTradeToDelete(null);
   };
 
-  // ─── Export CSV ────────────────────────────────────────────────────
   const exportCSV = () => {
     if (!filteredTrades.length) return;
     const headers = [
-      "Date",
+      "Open Date",
+      "Close Date",
       "Pair",
       "Direction",
       "Entry",
@@ -366,7 +316,8 @@ export default function Trades({ currentAccount }) {
       "Notes",
     ];
     const rows = filteredTrades.map((t) => [
-      t.date || "",
+      t.openDateTime || "",
+      t.closeDateTime || "",
       t.pair || "",
       t.direction || "",
       t.entry || "",
@@ -388,7 +339,6 @@ export default function Trades({ currentAccount }) {
     link.click();
   };
 
-  // ─── Migrate old flat trades ───────────────────────────────────────
   const migrateOldTrades = async () => {
     if (!user || !currentAccount?.id) {
       setMessage({ text: "No user or account selected", type: "error" });
@@ -420,7 +370,6 @@ export default function Trades({ currentAccount }) {
     }
   };
 
-  // ─── If no account selected ───────────────────────────────────────
   if (!currentAccount) {
     return (
       <div className={`min-h-screen w-full p-8 flex items-center justify-center ${isDark ? "bg-gray-950" : "bg-gray-50"}`}>
@@ -584,28 +533,30 @@ export default function Trades({ currentAccount }) {
         ) : error ? (
           <div className="text-center py-16 text-rose-400 text-xl font-medium">{error}</div>
         ) : filteredTrades.length === 0 ? (
-          <Card className="p-8 text-center bg-white/70 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl max-w-lg mx-auto">
-            <AlertCircle size={48} className="mx-auto text-amber-500 mb-4" />
-            <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-gray-100">
-              No trades yet
+          <Card className="p-12 text-center bg-white/70 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl max-w-2xl mx-auto">
+            <AlertCircle size={72} className="mx-auto text-amber-500 mb-6 opacity-90" />
+            <h2 className="text-3xl font-bold mb-4 text-gray-900 dark:text-gray-100">
+              No trades yet in {currentAccount.name}
             </h2>
-            <p className="text-base opacity-80 mb-6">
+            <p className="text-lg opacity-80 mb-10 leading-relaxed">
               Start building your performance history.
             </p>
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
+            <div className="flex flex-col sm:flex-row justify-center gap-6">
               <Button
-                className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md px-6 py-5 text-base font-semibold border-2 border-indigo-400"
+                size="lg"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg px-10 py-7 text-xl font-medium border-2 border-indigo-400"
                 onClick={() => navigate("/trades/new")}
               >
-                <PlusCircle size={20} className="mr-2" />
+                <PlusCircle size={24} className="mr-3" />
                 Add New Trade
               </Button>
               <Button
+                size="lg"
                 variant="outline"
-                className="border-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400 hover:bg-indigo-600/10 px-6 py-5 text-base font-semibold"
+                className="border-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400 hover:bg-indigo-600/10 px-10 py-7 text-xl font-medium"
                 onClick={() => navigate("/journal")}
               >
-                <BookOpen size={20} className="mr-2" />
+                <BookOpen size={24} className="mr-3" />
                 Journal Today
               </Button>
             </div>
@@ -643,9 +594,10 @@ export default function Trades({ currentAccount }) {
                           )}
                         </div>
                         <div className="text-sm opacity-70 flex flex-wrap gap-3 mt-1">
-                          <span>
-                            {trade.date ? format(parseISO(trade.date), "dd MMM yyyy • HH:mm") : "—"}
-                          </span>
+                          <span>Open: {trade.openDateTime ? new Date(trade.openDateTime).toLocaleString() : "—"}</span>
+                          {trade.status === "executed" && trade.closeDateTime && (
+                            <span>Close: {new Date(trade.closeDateTime).toLocaleString()}</span>
+                          )}
                           <span>Lot: {trade.lotSize || "—"}</span>
                           {trade.status === "executed" && trade.rr && <span>R:R {trade.rr}</span>}
                         </div>
@@ -748,7 +700,7 @@ export default function Trades({ currentAccount }) {
           </div>
         )}
 
-        {/* View Details Modal (unchanged) */}
+        {/* View Details Modal */}
         {selectedTrade && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4">
             <div
@@ -773,11 +725,19 @@ export default function Trades({ currentAccount }) {
                       </div>
                     </div>
                     <div>
-                      <div className="text-sm opacity-70 mb-1">Date & Time</div>
+                      <div className="text-sm opacity-70 mb-1">Open Date & Time</div>
                       <div className="text-lg">
-                        {selectedTrade.date
-                          ? format(parseISO(selectedTrade.date), "PPP • p")
+                        {selectedTrade.openDateTime
+                          ? new Date(selectedTrade.openDateTime).toLocaleString()
                           : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm opacity-70 mb-1">Close Date & Time</div>
+                      <div className="text-lg">
+                        {selectedTrade.closeDateTime
+                          ? new Date(selectedTrade.closeDateTime).toLocaleString()
+                          : selectedTrade.status === "pending" ? "Pending" : "—"}
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -891,7 +851,6 @@ export default function Trades({ currentAccount }) {
         {editModalOpen && editingTrade && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4">
             <div
-              ref={modalContentRef}
               className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border backdrop-blur-md
                 ${isDark ? "bg-gray-900/95 border-gray-700/60" : "bg-white/95 border-gray-200/60"}`}
             >
@@ -928,6 +887,33 @@ export default function Trades({ currentAccount }) {
                         <option value="Long">Long</option>
                         <option value="Short">Short</option>
                       </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Open Date/Time</label>
+                      <input
+                        type="datetime-local"
+                        value={editForm.openDateTime}
+                        onChange={(e) => setEditForm({ ...editForm, openDateTime: e.target.value })}
+                        className={`w-full p-3 rounded-xl border ${
+                          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
+                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Close Date/Time</label>
+                      <input
+                        type="datetime-local"
+                        value={editForm.closeDateTime}
+                        onChange={(e) => setEditForm({ ...editForm, closeDateTime: e.target.value })}
+                        disabled={editForm.status === "pending"}
+                        className={`w-full p-3 rounded-xl border ${
+                          editForm.status === "pending"
+                            ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed"
+                            : isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
+                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
@@ -1040,54 +1026,18 @@ export default function Trades({ currentAccount }) {
                     />
                   </div>
 
-                  {/* Screenshot upload */}
+                  {/* Screenshot URL */}
                   <div>
-                    <label className="block text-sm font-medium mb-1.5">Chart Screenshot</label>
-                    <div className="flex items-center gap-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => document.getElementById("edit-image-upload").click()}
-                        disabled={uploadingImage}
-                        className="relative border-2"
-                      >
-                        {uploadingImage ? (
-                          <Loader2 className="animate-spin h-5 w-5" />
-                        ) : (
-                          <>
-                            <Upload size={18} className="mr-2" />
-                            Upload Image
-                          </>
-                        )}
-                      </Button>
-                      <input
-                        id="edit-image-upload"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleImageUpload(file);
-                        }}
-                      />
-                      <span className="text-xs opacity-60">or paste an image</span>
-                    </div>
-                    {editForm.screenshotUrl && (
-                      <div className="mt-2 relative inline-block">
-                        <img
-                          src={editForm.screenshotUrl}
-                          alt="Preview"
-                          className="h-20 w-20 object-cover rounded-lg border"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setEditForm({ ...editForm, screenshotUrl: "" })}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    )}
+                    <label className="block text-sm font-medium mb-1.5">Screenshot URL</label>
+                    <input
+                      type="url"
+                      value={editForm.screenshotUrl}
+                      onChange={(e) => setEditForm({ ...editForm, screenshotUrl: e.target.value })}
+                      placeholder="https://i.imgur.com/your-image.png"
+                      className={`w-full p-3 rounded-xl border ${
+                        isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
+                      } focus:ring-2 focus:ring-indigo-500 outline-none`}
+                    />
                   </div>
 
                   {/* Notes */}
@@ -1107,19 +1057,15 @@ export default function Trades({ currentAccount }) {
                   <div className="flex gap-4 pt-4">
                     <Button
                       type="submit"
-                      disabled={uploadingImage}
-                      className="flex-1 bg-indigo-700 hover:bg-indigo-800 text-white py-6 text-base font-bold border-2 border-indigo-500 shadow-lg disabled:opacity-50"
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700"
                     >
-                      {uploadingImage ? (
-                        <Loader2 className="animate-spin mr-2 h-5 w-5" />
-                      ) : null}
                       Save Changes
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setEditModalOpen(false)}
-                      className="flex-1 py-6 text-base font-semibold border-2 border-gray-400 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
+                      className="flex-1"
                     >
                       Cancel
                     </Button>
