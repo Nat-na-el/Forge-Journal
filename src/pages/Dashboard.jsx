@@ -1,701 +1,455 @@
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  addMonths,
-  subMonths,
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  format,
-  isSameMonth,
-} from "date-fns";
-import { Card } from "../components/ui/card";
-import { useNavigate } from "react-router-dom";
+// src/pages/DailyJournal.jsx
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { Trash2, Plus, Loader2, Check, AlertCircle, FileText, X, Edit, Image, Tag, Upload, Link } from "lucide-react";
 import { useTheme } from "../Theme-provider";
-import {
-  TrendingUp,
-  Activity,
-  Percent,
-  Zap,
-  BarChart3,
-  DollarSign,
-  X,
-  Lightbulb,
-  AlertCircle,
-  CheckCircle,
-  ArrowUpRight,
-  ArrowDownRight,
-  RefreshCw,
-} from "lucide-react";
-import { db, auth } from "../firebase";
+import DeleteConfirmModal from "../components/ui/DeleteConfirmModal";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { db, auth, storage } from "../firebase";
 import {
   collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
   getDocs,
   query,
   orderBy,
-  doc,
-  getDoc,
-  writeBatch,
   serverTimestamp,
 } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-// ────────────────────────────────────────────────
-// Animated number component
-// ────────────────────────────────────────────────
-const AnimatedNumber = ({ value, duration = 1500, decimals = 2 }) => {
-  const [display, setDisplay] = useState(0);
-
-  useEffect(() => {
-    const start = performance.now();
-    const step = (timestamp) => {
-      const progress = Math.min((timestamp - start) / duration, 1);
-      setDisplay(value * progress);
-      if (progress < 1) requestAnimationFrame(step);
+// Helper: compress image before upload
+const compressImage = (file, maxWidth = 1200, quality = 0.8) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) return reject(new Error('Canvas to blob failed'));
+          resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = reject;
     };
-    requestAnimationFrame(step);
-  }, [value, duration]);
-
-  return <>{Number(display).toFixed(decimals)}</>;
+    reader.onerror = reject;
+  });
 };
 
-// Helper to format numbers with commas and 2 decimals
+const formatDateTimeLocal = (d = new Date()) => {
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const formatNumber = (num) => {
-  if (num === undefined || num === null) return "0.00";
+  if (!num && num !== 0) return "";
   return Number(num).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 };
 
-// ────────────────────────────────────────────────
-// Main Dashboard Component – Forgex
-// ────────────────────────────────────────────────
-export default function Dashboard({ currentAccount }) {
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
-  const navigate = useNavigate();
+const COMMON_ASSETS = [
+  "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD", "USDCHF",
+  "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "CHFJPY",
+  "UK100", "US30", "NAS100", "SPX500", "DE40", "JP225", "FRA40", "AUS200",
+  "HSI", "CHINA50", "UK100.cash", "US30.cash", "NAS100.cash",
+  "AAPL", "TSLA", "AMZN", "GOOGL", "MSFT", "NVDA", "META", "NFLX", "AMD", "INTC",
+  "BABA", "PDD", "JD", "SHOP", "SQ", "PYPL", "DIS", "BA", "GE", "F"
+];
 
-  const [trades, setTrades] = useState([]);
-  const [accountMeta, setAccountMeta] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [viewDate, setViewDate] = useState(new Date());
-  const [showQuickAnalysis, setShowQuickAnalysis] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState({ text: "", type: "" });
+// Tag input component for confluences
+const ConfluenceTags = ({ tags, onChange }) => {
+  const [inputValue, setInputValue] = useState("");
+  const inputRef = useRef(null);
 
-  // ─── Fetch account metadata ───────────────────────────────────────
-  const fetchAccountMeta = async (user, accountId) => {
-    if (!user || !accountId) return null;
-    try {
-      const docRef = doc(db, "users", user.uid, "accounts", accountId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() };
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const value = inputValue.trim();
+      if (value && !tags.includes(value)) {
+        onChange([...tags, value]);
+        setInputValue("");
       }
-    } catch (err) {
-      console.error("Error fetching account meta:", err);
     }
-    return null;
   };
 
-  // ─── Fetch trades from the selected account's subcollection ───────
-  const refreshTrades = async () => {
-    const user = auth.currentUser;
-    if (!user) {
-      setTrades([]);
-      setAccountMeta(null);
+  const removeTag = (tagToRemove) => {
+    onChange(tags.filter(tag => tag !== tagToRemove));
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2 p-2 border rounded-xl min-h-[60px] items-center bg-white dark:bg-gray-800">
+        {tags.map((tag, idx) => (
+          <span
+            key={idx}
+            className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30"
+          >
+            <Tag size={12} />
+            {tag}
+            <button
+              type="button"
+              onClick={() => removeTag(tag)}
+              className="ml-1 hover:text-indigo-900 dark:hover:text-indigo-100"
+            >
+              <X size={14} />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={tags.length === 0 ? "Type a confluence and press Enter..." : ""}
+          className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm p-1"
+        />
+      </div>
+      <p className="text-xs opacity-60">Press Enter or comma to add a tag</p>
+    </div>
+  );
+};
+
+export default function DailyJournal({ currentAccount }) {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState(null);
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [user, setUser] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [form, setForm] = useState({
+    openDateTime: formatDateTimeLocal(),
+    closeDateTime: formatDateTimeLocal(),
+    pair: "",
+    direction: "Long",
+    entry: "",
+    exit: "",
+    stopLoss: "",
+    takeProfit: "",
+    notes: "",
+    pnl: "",
+    rr: "",
+    lotSize: "0.1",
+    status: "executed",
+    confluences: [],
+    screenshotUrl: "",
+  });
+
+  const modalContentRef = useRef(null);
+  const accountLeverage = currentAccount?.leverage || 100;
+  const isAccountReady = user && currentAccount;
+
+  // ─── Image upload handler with compression ─────────────────────────
+  const handleImageUpload = async (file) => {
+    if (!file || !user || !currentAccount?.id) return;
+    setUploadingImage(true);
+    try {
+      const compressedFile = await compressImage(file);
+      const storageRef = ref(storage, `users/${user.uid}/accounts/${currentAccount.id}/trades/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, compressedFile);
+      const url = await getDownloadURL(storageRef);
+      setForm(prev => ({ ...prev, screenshotUrl: url }));
+      setSuccessMsg("Image uploaded successfully!");
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setError("Failed to upload image. Try a smaller file or use URL.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // ─── Handle paste (images only) on the modal ───────────────────────
+  useEffect(() => {
+    if (!modalOpen) return;
+    const handlePaste = (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.indexOf("image") !== -1) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            handleImageUpload(file);
+          }
+          break;
+        }
+      }
+    };
+    const currentModal = modalContentRef.current;
+    if (currentModal) {
+      currentModal.addEventListener('paste', handlePaste);
+    }
+    return () => {
+      if (currentModal) {
+        currentModal.removeEventListener('paste', handlePaste);
+      }
+    };
+  }, [modalOpen]);
+
+  // ─── Fetch journal entries ────────────────────────────────────────
+  const refreshEntries = async () => {
+    if (!user || !currentAccount?.id) {
+      setEntries([]);
       setLoading(false);
-      setError("Please log in to view dashboard data");
       return;
     }
-
-    if (!currentAccount?.id) {
-      setTrades([]);
-      setAccountMeta(null);
-      setLoading(false);
-      setError("No account selected. Please create or select an account.");
-      return;
-    }
-
     setLoading(true);
     setError(null);
-
     try {
-      // Fetch account metadata
-      const meta = await fetchAccountMeta(user, currentAccount.id);
-      setAccountMeta(meta);
-
-      // Fetch trades from the account's trades subcollection
-      const q = query(
-        collection(db, "users", user.uid, "accounts", currentAccount.id, "trades"),
-        orderBy("createdAt", "desc")
+      const entriesRef = collection(
+        db,
+        "users",
+        user.uid,
+        "accounts",
+        currentAccount.id,
+        "trades"
       );
+      const q = query(entriesRef, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
-      const loadedTrades = snapshot.docs.map((doc) => ({
+      const loaded = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-      setTrades(loadedTrades);
+      setEntries(loaded);
     } catch (err) {
-      console.error("❌ Dashboard fetch error:", err);
-      setError("Failed to load trades. " + (err.message || "Check connection"));
-      setTrades([]);
+      console.error("❌ Journal fetch error:", err);
+      setError("Could not load journal entries. " + (err.message || ""));
+      setEntries([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // ─── Sync trades from MT5 using stored credentials ─────────────────
-  const syncFromMT5 = async () => {
-    if (!currentAccount?.id) {
-      setSyncMessage({ text: "No account selected", type: "error" });
-      setTimeout(() => setSyncMessage({ text: "", type: "" }), 3000);
-      return;
-    }
-
-    // Check if MT5 is connected
-    if (!currentAccount.mt5Connected) {
-      setSyncMessage({ 
-        text: "Please connect your MT5 account first (click 'Connect MT5' in sidebar)", 
-        type: "error" 
-      });
-      setTimeout(() => setSyncMessage({ text: "", type: "" }), 5000);
-      return;
-    }
-
-    const user = auth.currentUser;
-    if (!user) {
-      setSyncMessage({ text: "Please log in first", type: "error" });
-      setTimeout(() => setSyncMessage({ text: "", type: "" }), 3000);
-      return;
-    }
-
-    setSyncing(true);
-    setSyncMessage({ text: "Syncing trades from MT5...", type: "info" });
-
-    try {
-      // Get last 30 days of trades
-      const toDate = new Date().toISOString().split('T')[0];
-      const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      // Call your working backend
-      const response = await fetch('http://localhost:8891/v1/mt5/sync-trades', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          server: currentAccount.mt5Server,
-          login: currentAccount.mt5Login,
-          password: currentAccount.mt5Password,
-          fromDate,
-          toDate
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to sync trades');
-      }
-      
-      // Format trades to match your app's structure
-      const formattedTrades = data.trades.map(trade => ({
-        pair: trade.symbol,
-        direction: trade.type === 'BUY' ? 'Long' : 'Short',
-        entry: trade.entry,
-        exit: trade.exit,
-        pnl: trade.profit,
-        date: trade.date.split('T')[0],
-        lotSize: trade.volume,
-        stopLoss: trade.sl || 0,
-        takeProfit: trade.tp || 0,
-        rr: trade.profit && trade.entry ? 
-          (Math.abs(trade.profit) / (trade.entry * trade.volume)).toFixed(2) : "",
-      }));
-      
-      // Save to Firestore
-      const batch = writeBatch(db);
-      formattedTrades.forEach(trade => {
-        const docRef = doc(collection(db, 'users', user.uid, 'accounts', currentAccount.id, 'trades'));
-        batch.set(docRef, {
-          ...trade,
-          createdAt: serverTimestamp(),
-        });
-      });
-      await batch.commit();
-      
-      setSyncMessage({ 
-        text: `Successfully synced ${formattedTrades.length} trades from MT5!`, 
-        type: "success" 
-      });
-      
-      // Refresh the trades display
-      await refreshTrades();
-      
-    } catch (error) {
-      console.error('Sync failed:', error);
-      setSyncMessage({ 
-        text: error.message || 'Failed to sync trades from MT5', 
-        type: "error" 
-      });
-    } finally {
-      setSyncing(false);
-      setTimeout(() => setSyncMessage({ text: "", type: "" }), 5000);
-    }
-  };
-
+  // ─── Auth listener ─────────────────────────────────────────────────
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        refreshTrades();
-      } else {
-        setTrades([]);
-        setAccountMeta(null);
+    const unsubscribe = auth.onAuthStateChanged((authUser) => {
+      setUser(authUser);
+      if (!authUser) {
+        setEntries([]);
         setLoading(false);
       }
     });
-    return () => unsubscribe();
-  }, [currentAccount]);
+    return unsubscribe;
+  }, []);
 
-  // ─── Calendar month navigation ───────────────────────────────
-  const prevMonth = () => setViewDate((d) => subMonths(d, 1));
-  const nextMonth = () => setViewDate((d) => addMonths(d, 1));
-  const jumpTo = (y, m) => setViewDate(new Date(y, m - 1, 1));
-  const monthStart = startOfMonth(viewDate);
-  const monthEnd = endOfMonth(viewDate);
+  useEffect(() => {
+    if (user && currentAccount) {
+      refreshEntries();
+    }
+  }, [currentAccount, user]);
 
-  // ─── Monthly trades filtering & sorting ─────────────────────
-  const monthlyTrades = useMemo(() => {
-    return trades
-      .filter((t) => {
-        const td = new Date(t.date);
-        return td >= monthStart && td <= monthEnd;
-      })
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [trades, viewDate]);
+  // ─── Auto‑calculate PnL and R:R (only if executed and exit given) ─
+  useEffect(() => {
+    if (form.status === "pending" || !form.exit) {
+      setForm(prev => ({ ...prev, pnl: "", rr: "" }));
+      return;
+    }
+    const entry = Number(form.entry) || 0;
+    const exitPrice = Number(form.exit) || 0;
+    const sl = Number(form.stopLoss) || 0;
+    const tp = Number(form.takeProfit) || 0;
+    const lot = Number(form.lotSize) || 0.1;
 
-  // ─── Weekly trades for streak calculation ────────────────────
-  const weeklyTrades = useMemo(() => {
-    const ws = startOfWeek(new Date(), { weekStartsOn: 1 });
-    const we = endOfWeek(new Date(), { weekStartsOn: 1 });
-    return trades
-      .filter((t) => {
-        const td = new Date(t.date);
-        return td >= ws && td <= we;
-      })
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [trades]);
+    let calculatedPnL = "";
+    if (entry && exitPrice && lot && accountLeverage) {
+      const priceDiff = form.direction === "Long" ? (exitPrice - entry) : (entry - exitPrice);
+      calculatedPnL = (priceDiff * lot * accountLeverage * 100).toFixed(2);
+    }
 
-  // ─── Current streak calculation ──────────────────────────────
-  const currentStreak = useMemo(() => {
-    let streak = { type: "None", count: 0 };
-    let current = null;
-    for (const trade of [...weeklyTrades].reverse()) {
-      const pnl = Number(trade.pnl) || 0;
-      if (pnl === 0) continue;
-      if (current === null) {
-        current = pnl > 0 ? "Win" : "Loss";
-        streak = { type: current, count: 1 };
-      } else if (
-        (pnl > 0 && current === "Win") ||
-        (pnl < 0 && current === "Loss")
-      ) {
-        streak.count += 1;
-      } else {
-        break;
+    let calculatedRR = "";
+    if (entry && sl && tp) {
+      const risk = form.direction === "Long" ? (entry - sl) : (sl - entry);
+      const reward = form.direction === "Long" ? (tp - entry) : (entry - tp);
+      if (risk !== 0) {
+        calculatedRR = (reward / risk).toFixed(2);
+      } else if (reward > 0) {
+        calculatedRR = "∞";
       }
     }
-    return streak;
-  }, [weeklyTrades]);
 
-  // ─── Monthly stats calculation (core metrics) ────────────────
-  const monthlyStats = useMemo(() => {
-    if (!monthlyTrades.length) {
-      return {
-        totalPnL: 0,
-        winRate: "0.0",
-        profitFactor: "—",
-        expectancy: "0.00",
-        winCount: 0,
-        lossCount: 0,
-        totalTrades: 0,
-        avgPnL: "0.00",
-        bestDayPnL: 0,
-        bestDayDate: "—",
-        worstDayPnL: 0,
-        worstDayDate: "—",
-        avgRR: "0.00",
-        consistencyScore: 0,
-      };
+    setForm((prev) => ({
+      ...prev,
+      pnl: calculatedPnL,
+      rr: calculatedRR,
+    }));
+  }, [form.entry, form.exit, form.stopLoss, form.takeProfit, form.lotSize, form.direction, form.status, accountLeverage]);
+
+  // ─── Today's entries ────────────────────────────────────────────────
+  const todayEntries = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return entries.filter((e) => e.openDateTime?.startsWith(today));
+  }, [entries]);
+
+  // ─── Metrics for today (only executed trades) ───────────────────────
+  const metrics = useMemo(() => {
+    const executed = todayEntries.filter(e => e.status === "executed");
+    if (!executed.length) {
+      return { net: 0, wins: 0, losses: 0, winRate: 0, avgPnL: 0 };
     }
-
-    const profits = monthlyTrades
-      .filter((t) => Number(t.pnl || 0) > 0)
-      .reduce((a, b) => a + Number(b.pnl || 0), 0);
-    const losses = monthlyTrades
-      .filter((t) => Number(t.pnl || 0) < 0)
-      .reduce((a, b) => a + Math.abs(Number(b.pnl || 0)), 0);
-    const profitFactor = losses ? (profits / losses).toFixed(2) : "∞";
-    const wins = monthlyTrades.filter((t) => Number(t.pnl || 0) > 0).length;
-    const total = monthlyTrades.length;
-    const winRate = ((wins / total) * 100).toFixed(1);
-    const expectancy = (
-      monthlyTrades.reduce((a, b) => a + Number(b.pnl || 0), 0) / total
-    ).toFixed(2);
-    const dailyPnL = {};
-    monthlyTrades.forEach((t) => {
-      const day = format(new Date(t.date), "yyyy-MM-dd");
-      dailyPnL[day] = (dailyPnL[day] || 0) + Number(t.pnl || 0);
+    const total = executed.length;
+    let net = 0;
+    let wins = 0;
+    executed.forEach((e) => {
+      const pnl = Number(e.pnl || 0);
+      net += pnl;
+      if (pnl > 0) wins++;
     });
-    let bestDayPnL = 0;
-    let bestDayDate = "—";
-    let worstDayPnL = 0;
-    let worstDayDate = "—";
-    let bestWinningDayPnl = 0;
-
-    if (Object.keys(dailyPnL).length > 0) {
-      const entries = Object.entries(dailyPnL);
-      const bestEntry = entries.reduce((max, curr) =>
-        curr[1] > max[1] ? curr : max
-      );
-      const worstEntry = entries.reduce((min, curr) =>
-        curr[1] < min[1] ? curr : min
-      );
-      bestDayPnL = bestEntry[1].toFixed(2);
-      bestDayDate = format(new Date(bestEntry[0]), "dd MMM");
-      worstDayPnL = worstEntry[1].toFixed(2);
-      worstDayDate = format(new Date(worstEntry[0]), "dd MMM");
-
-      const winningDays = entries.filter(([, pnl]) => pnl > 0);
-      if (winningDays.length) {
-        bestWinningDayPnl = Math.max(...winningDays.map(([, pnl]) => pnl));
-      }
-    }
-
-    const totalRR = monthlyTrades.reduce(
-      (sum, t) => sum + (Number(t.rr) || 0),
-      0
-    );
-    const avgRR = total ? (totalRR / total).toFixed(2) : "0.00";
-
-    const totalPnLNum = profits - losses;
-    let consistencyScore = 0;
-    if (totalPnLNum > 0 && bestWinningDayPnl > 0) {
-      consistencyScore = Math.min(100, (bestWinningDayPnl / totalPnLNum) * 100);
-    }
-
+    const winRate = Math.round((wins / total) * 100);
+    const avgPnL = net / total;
     return {
-      totalPnL: totalPnLNum.toFixed(2),
+      net: net.toFixed(2),
+      wins,
+      losses: total - wins,
       winRate,
-      profitFactor,
-      expectancy,
-      winCount: wins,
-      lossCount: total - wins,
-      totalTrades: total,
-      avgPnL: (
-        monthlyTrades.reduce((a, b) => a + Number(b.pnl || 0), 0) / total
-      ).toFixed(2),
-      bestDayPnL,
-      bestDayDate,
-      worstDayPnL,
-      worstDayDate,
-      avgRR,
-      consistencyScore: consistencyScore.toFixed(1),
+      avgPnL: avgPnL.toFixed(2),
     };
-  }, [monthlyTrades]);
+  }, [todayEntries]);
 
-  // ─── Monthly asset‑specific stats ─────────────────────────────
-  const monthlyAssetStats = useMemo(() => {
-    if (!monthlyTrades.length) {
-      return {
-        topPair: "—",
-        totalLots: 0,
-        assetPnL: [],
-      };
+  // ─── Save entry ────────────────────────────────────────────────────
+  const saveEntry = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
+
+    if (!user || !currentAccount?.id) {
+      setError("Please log in and select an account");
+      return;
     }
 
-    const pairCount = {};
-    const pairPnL = {};
-    let totalLots = 0;
+    // Build payload with both open and close datetimes
+    const payload = {
+      openDateTime: form.openDateTime || formatDateTimeLocal(),
+      closeDateTime: form.status === "pending" ? null : (form.closeDateTime || null),
+      pair: form.pair?.toUpperCase() || "",
+      direction: form.direction || "Long",
+      entry: Number(form.entry) || 0,
+      exit: form.status === "pending" ? 0 : (Number(form.exit) || 0),
+      stopLoss: Number(form.stopLoss) || 0,
+      takeProfit: Number(form.takeProfit) || 0,
+      pnl: form.status === "pending" ? 0 : (Number(form.pnl) || 0),
+      rr: form.status === "pending" ? "" : form.rr,
+      lotSize: Number(form.lotSize) || 0.1,
+      notes: form.notes || "",
+      status: form.status || "executed",
+      confluences: form.confluences || [],
+      screenshotUrl: form.screenshotUrl || "",
+    };
 
-    monthlyTrades.forEach((t) => {
-      const pair = t.pair || "Unknown";
-      pairCount[pair] = (pairCount[pair] || 0) + 1;
-      pairPnL[pair] = (pairPnL[pair] || 0) + Number(t.pnl || 0);
-      totalLots += Number(t.lotSize) || 0;
-    });
-
-    // Most traded pair
-    let topPair = "—";
-    let maxCount = 0;
-    Object.entries(pairCount).forEach(([p, c]) => {
-      if (c > maxCount) {
-        maxCount = c;
-        topPair = p;
+    try {
+      if (editingEntry) {
+        const entryRef = doc(
+          db,
+          "users",
+          user.uid,
+          "accounts",
+          currentAccount.id,
+          "trades",
+          editingEntry.id
+        );
+        await updateDoc(entryRef, {
+          ...payload,
+          updatedAt: serverTimestamp(),
+        });
+        setSuccessMsg("Entry updated successfully!");
+      } else {
+        await addDoc(
+          collection(db, "users", user.uid, "accounts", currentAccount.id, "trades"),
+          {
+            ...payload,
+            createdAt: serverTimestamp(),
+          }
+        );
+        setSuccessMsg("Entry added successfully!");
       }
-    });
-
-    // Top 5 assets by absolute PnL
-    const assetPnL = Object.entries(pairPnL)
-      .map(([pair, pnl]) => ({ pair, pnl }))
-      .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
-      .slice(0, 5);
-
-    return {
-      topPair,
-      topPairCount: maxCount,
-      totalLots: totalLots.toFixed(2),
-      assetPnL,
-    };
-  }, [monthlyTrades]);
-
-  // ─── Weekly Wins/Losses/Breakeven (last 4 weeks) ───────────────
-  const weeklyBreakdown = useMemo(() => {
-    const weeks = [];
-    const today = new Date();
-    for (let i = 0; i < 4; i++) {
-      const weekStart = startOfWeek(subMonths(today, i), { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-      const weekTrades = trades.filter((t) => {
-        const td = new Date(t.date);
-        return td >= weekStart && td <= weekEnd;
+      setModalOpen(false);
+      setEditingEntry(null);
+      setForm({
+        openDateTime: formatDateTimeLocal(),
+        closeDateTime: formatDateTimeLocal(),
+        pair: "",
+        direction: "Long",
+        entry: "",
+        exit: "",
+        stopLoss: "",
+        takeProfit: "",
+        notes: "",
+        pnl: "",
+        rr: "",
+        lotSize: "0.1",
+        status: "executed",
+        confluences: [],
+        screenshotUrl: "",
       });
-      const wins = weekTrades.filter((t) => Number(t.pnl) > 0).length;
-      const losses = weekTrades.filter((t) => Number(t.pnl) < 0).length;
-      const breakeven = weekTrades.filter((t) => Number(t.pnl) === 0).length;
-      weeks.push({
-        label: format(weekStart, "dd MMM"),
-        wins,
-        losses,
-        breakeven,
-        total: weekTrades.length,
-      });
+      await refreshEntries();
+    } catch (err) {
+      console.error("Save error:", err);
+      setError("Failed to save entry: " + err.message);
     }
-    return weeks.reverse();
-  }, [trades]);
-
-  // ─── Trades grouped by date for calendar ─────────────────────
-  const tradesByDate = useMemo(() => {
-    return monthlyTrades.reduce((acc, t) => {
-      const d = t.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
-      if (!acc[d]) acc[d] = [];
-      acc[d].push(t);
-      return acc;
-    }, {});
-  }, [monthlyTrades]);
-
-  // ─── Day summary helper ──────────────────────────────────────
-  function daySummary(dateObj) {
-    const key = format(dateObj, "yyyy-MM-dd");
-    const list = tradesByDate[key] || [];
-    if (!list.length) return null;
-    const pnl = list.reduce((s, t) => s + Number(t.pnl || 0), 0);
-    const count = list.length;
-    const wins = list.filter((t) => Number(t.pnl || 0) > 0).length;
-    const winRate = Math.round((wins / count) * 100) || 0;
-    return { date: key, pnl, count, winRate };
-  }
-
-  // ─── Week summary helper ─────────────────────────────────────
-  function weekSummary(weekArray) {
-    const sums = weekArray.reduce(
-      (acc, d) => {
-        const ds = daySummary(d);
-        if (!ds) return acc;
-        acc.count += ds.count;
-        acc.pnl += ds.pnl;
-        acc.wins += Math.round((ds.winRate / 100) * ds.count);
-        return acc;
-      },
-      { pnl: 0, count: 0, wins: 0 }
-    );
-    const winRate = sums.count ? Math.round((sums.wins / sums.count) * 100) : 0;
-    return { pnl: +sums.pnl.toFixed(2), count: sums.count, winRate };
-  }
-
-  // ─── Calendar weeks generation ───────────────────────────────
-  const calendarWeeks = useMemo(() => {
-    const start = startOfWeek(startOfMonth(viewDate), { weekStartsOn: 1 });
-    const end = endOfWeek(endOfMonth(viewDate), { weekStartsOn: 1 });
-    const days = eachDayOfInterval({ start, end });
-    const weeks = [];
-    for (let i = 0; i < days.length; i += 7) {
-      weeks.push(days.slice(i, i + 7));
-    }
-    return weeks;
-  }, [viewDate]);
-
-  // ─── Open day detail ─────────────────────────────────────────
-  const openDay = (dayObj) => {
-    const formattedDate = format(dayObj, "yyyy-MM-dd");
-    navigate("/trades?date=" + formattedDate);
   };
 
-  // ─── Recent trades preview ───────────────────────────────────
-  const recentTrades = useMemo(() => {
-    return [...trades]
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 5);
-  }, [trades]);
-
-  // ─── All-time total PnL ──────────────────────────────────────
-  const allTimePnL = useMemo(() => {
-    if (!trades.length) return 0;
-    return trades.reduce((sum, t) => sum + Number(t.pnl || 0), 0).toFixed(2);
-  }, [trades]);
-
-  // ─── Account data ────────────────────────────────────────────
-  const initialBalance = accountMeta?.starting_balance || 10000;
-  const accountCreatedAt = accountMeta?.createdAt?.toDate?.() || new Date("2024-01-01");
-
-  // ─── Account growth percentage ───────────────────────────────
-  const accountGrowth = useMemo(() => {
-    if (initialBalance <= 0) return 0;
-    return ((allTimePnL / initialBalance) * 100).toFixed(1);
-  }, [allTimePnL, initialBalance]);
-
-  // ─── Quick Analysis Modal Content (unchanged) ────────────────
-  const quickAnalysisContent = () => {
-    if (!monthlyTrades.length) {
-      return (
-        <div className="text-center py-10 px-4">
-          <AlertCircle size={64} className="mx-auto text-indigo-400 mb-6 opacity-80" />
-          <h3 className="text-2xl font-semibold mb-4 text-gray-200">
-            No trades recorded this month
-          </h3>
-          <p className="text-gray-400 max-w-lg mx-auto leading-relaxed">
-            Add some trades to unlock real-time performance insights, pattern detection,
-            and personalized trading suggestions.
-          </p>
-          <button
-            onClick={() => {
-              setShowQuickAnalysis(false);
-              navigate("/trades/new");
-            }}
-            className="mt-8 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all"
-          >
-            Add Your First Trade
-          </button>
-        </div>
+  // ─── Delete entry ──────────────────────────────────────────────────
+  const deleteEntry = async (id) => {
+    if (!user || !currentAccount?.id) return;
+    try {
+      await deleteDoc(
+        doc(db, "users", user.uid, "accounts", currentAccount.id, "trades", id)
       );
+      setSuccessMsg("Entry deleted successfully");
+      await refreshEntries();
+    } catch (err) {
+      console.error("Delete failed:", err);
+      setError("Failed to delete entry");
     }
-
-    const winRate = Number(monthlyStats.winRate);
-    const totalPnL = Number(monthlyStats.totalPnL);
-    const avgRR = Number(monthlyStats.avgRR);
-    const totalTrades = monthlyStats.totalTrades;
-
-    return (
-      <div className="space-y-8">
-        {/* Performance Snapshot */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="p-6 bg-gray-900/70 rounded-2xl border border-gray-700 shadow-inner">
-            <div className="text-sm text-gray-400 mb-2">Win Rate</div>
-            <div className="text-4xl font-bold text-indigo-300">{winRate}%</div>
-            <div className="mt-3 text-sm opacity-80 flex items-center gap-2">
-              {winRate >= 60 ? (
-                <CheckCircle className="text-emerald-400" size={18} />
-              ) : winRate >= 45 ? (
-                <AlertCircle className="text-amber-400" size={18} />
-              ) : (
-                <AlertCircle className="text-rose-400" size={18} />
-              )}
-              {winRate >= 60
-                ? "Strong performance — protect your edge"
-                : winRate >= 45
-                ? "Solid base — improve reward:risk"
-                : "Needs attention — focus on high-probability entries"}
-            </div>
-          </div>
-
-          <div className="p-6 bg-gray-900/70 rounded-2xl border border-gray-700 shadow-inner">
-            <div className="text-sm text-gray-400 mb-2">Net Result</div>
-            <div
-              className={`text-4xl font-bold ${
-                totalPnL >= 0 ? "text-emerald-400" : "text-rose-400"
-              }`}
-            >
-              {totalPnL >= 0 ? "+" : ""}${Math.abs(totalPnL).toFixed(2)}
-            </div>
-            <div className="mt-3 text-sm opacity-80 flex items-center gap-2">
-              {totalPnL >= 0 ? (
-                <ArrowUpRight className="text-emerald-400" size={18} />
-              ) : (
-                <ArrowDownRight className="text-rose-400" size={18} />
-              )}
-              {totalPnL >= 0 ? "Positive month — manage greed" : "Drawdown — tighten risk now"}
-            </div>
-          </div>
-
-          <div className="p-6 bg-gray-900/70 rounded-2xl border border-gray-700 shadow-inner">
-            <div className="text-sm text-gray-400 mb-2">Average R:R</div>
-            <div className="text-4xl font-bold text-purple-300">{avgRR}</div>
-            <div className="mt-3 text-sm opacity-80 flex items-center gap-2">
-              {avgRR >= 2.5 ? (
-                <CheckCircle className="text-emerald-400" size={18} />
-              ) : (
-                <AlertCircle className="text-amber-400" size={18} />
-              )}
-              {avgRR >= 2.5
-                ? "Excellent asymmetry — keep hunting"
-                : "Can improve — aim for 1:3+ setups"}
-            </div>
-          </div>
-        </div>
-
-        {/* Personalized Suggestions */}
-        <div className="p-6 bg-gradient-to-br from-gray-950 to-gray-900 rounded-2xl border border-gray-700 shadow-inner">
-          <h4 className="text-xl font-semibold mb-5 flex items-center gap-3 text-gray-200">
-            <Lightbulb size={22} className="text-yellow-400" />
-            Instant Coaching Insights
-          </h4>
-          <div className="space-y-4 text-gray-300 text-sm leading-relaxed">
-            {totalTrades < 15 && (
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-amber-400 mt-1 shrink-0" size={18} />
-                <p>
-                  Sample size still small ({totalTrades} trades). Aim for at least 20–30 trades before drawing strong conclusions.
-                </p>
-              </div>
-            )}
-            {winRate < 50 && (
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-rose-400 mt-1 shrink-0" size={18} />
-                <p>
-                  Win rate below 50% — be extra selective this week. Only take A+ setups.
-                </p>
-              </div>
-            )}
-            {avgRR < 2 && (
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-amber-400 mt-1 shrink-0" size={18} />
-                <p>
-                  Average reward:risk is low ({avgRR}). Focus on trades with minimum 1:2.5.
-                </p>
-              </div>
-            )}
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-emerald-400 mt-1 shrink-0" size={18} />
-              <p>Review your last 5 losing trades in detail. Fix one repeating mistake.</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-emerald-400 mt-1 shrink-0" size={18} />
-              <p>Maintain risk at ≤1% per trade until win rate exceeds 55%.</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-emerald-400 mt-1 shrink-0" size={18} />
-              <p>Journal every trade’s emotion and confidence level (1–10).</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    setDeleteModalOpen(false);
+    setEntryToDelete(null);
   };
 
-  // If no account is selected, show a message
+  // ─── Clear today's entries ─────────────────────────────────────────
+  const clearTodayEntries = async () => {
+    if (!user || !currentAccount?.id) return;
+    try {
+      const batchPromises = todayEntries.map((e) =>
+        deleteDoc(
+          doc(db, "users", user.uid, "accounts", currentAccount.id, "trades", e.id)
+        )
+      );
+      await Promise.all(batchPromises);
+      setSuccessMsg("Today's entries cleared successfully");
+      await refreshEntries();
+    } catch (err) {
+      console.error("Batch delete failed:", err);
+      setError("Failed to clear entries");
+    }
+    setDeleteModalOpen(false);
+  };
+
+  // ─── If no account selected ───────────────────────────────────────
   if (!currentAccount) {
     return (
       <div className={`min-h-screen w-full p-8 flex items-center justify-center ${isDark ? "bg-gray-950" : "bg-gray-50"}`}>
@@ -703,558 +457,599 @@ export default function Dashboard({ currentAccount }) {
           <AlertCircle size={48} className="mx-auto text-amber-500 mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Account Selected</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Please create or select an account from the sidebar to view your dashboard.
+            Please create or select an account from the sidebar to start journaling.
           </p>
-          <button
-            onClick={() => {}}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
-          >
-            Create Account
-          </button>
         </Card>
       </div>
     );
   }
 
   return (
-    <div className={`relative min-h-screen w-full p-4 sm:p-6 lg:p-8 text-gray-100 ${isDark ? "bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950" : "bg-gradient-to-br from-gray-50 via-white to-gray-100"}`}>
-      {/* Header + Account Details */}
-      <div className="mb-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <div
+      className={`min-h-screen w-full p-4 sm:p-6 transition-colors duration-300
+        ${isDark
+          ? "bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100"
+          : "bg-gradient-to-br from-gray-50 via-white to-gray-100 text-gray-900"}`}
+    >
+      <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-0 z-10 bg-inherit py-2">
           <div>
-            <h1 className="text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
-              Forgex Dashboard
+            <h1 className="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
+              Daily Journal – {currentAccount.name}
             </h1>
-            <p className="mt-1.5 text-gray-400">
-              {format(viewDate, "MMMM yyyy")} • {currentAccount?.name || "Account"}
-              {currentAccount.mt5Connected && (
-                <span className="ml-2 text-xs bg-green-600/20 text-green-400 px-2 py-1 rounded-full">
-                  MT5 Connected
-                </span>
-              )}
+            <p className="text-sm sm:text-base mt-1 opacity-80">
+              Log trades with auto PnL (Leverage {accountLeverage}:1)
             </p>
           </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={syncFromMT5}
-              disabled={syncing}
-              className={`flex items-center gap-2.5 px-6 py-3.5 rounded-xl shadow-md transition-all duration-200 ${
-                syncing 
-                  ? 'bg-gray-500 cursor-not-allowed' 
-                  : currentAccount.mt5Connected
-                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : 'bg-gray-600 hover:bg-gray-700 text-white opacity-50 cursor-not-allowed'
-              }`}
-              title={!currentAccount.mt5Connected ? 'Connect MT5 first in sidebar' : ''}
-            >
-              <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
-              {syncing ? 'Syncing...' : 'Sync from MT5'}
-            </button>
-
-            <button
-              onClick={() => setShowQuickAnalysis(true)}
-              className="flex items-center gap-2.5 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all duration-200"
-            >
-              <Zap size={18} />
-              Quick Analysis
-            </button>
-          </div>
+          <Button
+            onClick={() => {
+              if (!isAccountReady) return;
+              setModalOpen(true);
+              setEditingEntry(null);
+              setForm({
+                openDateTime: formatDateTimeLocal(),
+                closeDateTime: formatDateTimeLocal(),
+                pair: "",
+                direction: "Long",
+                entry: "",
+                exit: "",
+                stopLoss: "",
+                takeProfit: "",
+                notes: "",
+                pnl: "",
+                rr: "",
+                lotSize: "0.1",
+                status: "executed",
+                confluences: [],
+                screenshotUrl: "",
+              });
+            }}
+            disabled={!isAccountReady}
+            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white shadow-md py-5 sm:py-4 text-base font-semibold border-2 border-indigo-400 dark:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus size={18} className="mr-2" /> Add Entry
+          </Button>
         </div>
 
-        {/* Sync Message */}
-        {syncMessage.text && (
-          <div className={`mb-4 p-3 rounded-lg ${
-            syncMessage.type === 'success' ? 'bg-green-500/20 text-green-200' :
-            syncMessage.type === 'error' ? 'bg-red-500/20 text-red-200' :
-            'bg-blue-500/20 text-blue-200'
-          }`}>
-            {syncMessage.text}
+        {/* Feedback */}
+        {error && (
+          <div className="p-4 rounded-xl bg-rose-100/80 dark:bg-rose-900/30 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-700 flex items-center gap-3">
+            <AlertCircle size={20} />
+            {error}
+          </div>
+        )}
+        {successMsg && (
+          <div className="p-4 rounded-xl bg-emerald-100/80 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 flex items-center gap-3">
+            <Check size={20} />
+            {successMsg}
           </div>
         )}
 
-        {/* Account Overview Card */}
-        <Card className="p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg">
-          <h3 className="text-lg font-semibold mb-5 flex items-center gap-2 text-gray-900 dark:text-gray-100">
-            <DollarSign className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
-            Account Overview
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Total PnL (All Time)</div>
-              <div
-                className={`text-2xl font-bold mt-1 ${
-                  allTimePnL >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                }`}
-              >
-                {allTimePnL >= 0 ? "+" : ""}${Math.abs(allTimePnL)}
-              </div>
+        {/* Metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <Card className="p-4 rounded-xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md">
+            <div className="text-xs font-medium opacity-70 mb-1">Net P&L Today</div>
+            <div
+              className={`text-xl sm:text-2xl font-bold ${
+                metrics.net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+              }`}
+            >
+              {metrics.net >= 0 ? "+" : "-"}${formatNumber(Math.abs(metrics.net))}
             </div>
-
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Starting Balance</div>
-              <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">
-                ${initialBalance.toLocaleString()}
-              </div>
+          </Card>
+          <Card className="p-4 rounded-xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md">
+            <div className="text-xs font-medium opacity-70 mb-1">Win Rate</div>
+            <div className="text-xl sm:text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+              {metrics.winRate}%
             </div>
-
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Account Growth</div>
-              <div
-                className={`text-2xl font-bold mt-1 ${
-                  accountGrowth >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                }`}
-              >
-                {accountGrowth}%
-              </div>
+          </Card>
+          <Card className="p-4 rounded-xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md">
+            <div className="text-xs font-medium opacity-70 mb-1">Wins / Losses</div>
+            <div className="text-xl sm:text-2xl font-bold text-violet-600 dark:text-violet-400">
+              {metrics.wins} / {metrics.losses}
             </div>
-
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Created</div>
-              <div className="text-xl font-medium text-gray-700 dark:text-gray-300 mt-1">
-                {format(accountCreatedAt, "dd MMM yyyy")}
-              </div>
+          </Card>
+          <Card className="p-4 rounded-xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md">
+            <div className="text-xs font-medium opacity-70 mb-1">Avg P&L</div>
+            <div
+              className={`text-xl sm:text-2xl font-bold ${
+                metrics.avgPnL >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+              }`}
+            >
+              {metrics.avgPnL >= 0 ? "+" : "-"}${formatNumber(Math.abs(metrics.avgPnL))}
             </div>
+          </Card>
+        </div>
+
+        {/* Entries List */}
+        {loading ? (
+          <div className="flex justify-center items-center py-20">
+            <Loader2 className="animate-spin h-12 w-12 text-indigo-500" />
           </div>
-        </Card>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-        </div>
-      ) : error ? (
-        <div className="text-center p-8 text-rose-400">
-          {error}
-        </div>
-      ) : (
-        <>
-          {/* Stats Cards (core metrics) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 lg:gap-5 mb-8">
-            {[
-              {
-                title: "Monthly P&L",
-                value: Number(monthlyStats.totalPnL),
-                prefix: Number(monthlyStats.totalPnL) >= 0 ? "+" : "-",
-                color: Number(monthlyStats.totalPnL) >= 0 ? "emerald" : "rose",
-                icon: TrendingUp,
-              },
-              {
-                title: "Win Rate",
-                value: Number(monthlyStats.winRate),
-                suffix: "%",
-                color: "indigo",
-                icon: Percent,
-                animated: true,
-              },
-              {
-                title: "Profit Factor",
-                value: monthlyStats.profitFactor,
-                color: "cyan",
-                icon: Activity,
-              },
-              {
-                title: "Consistency Score",
-                value: Number(monthlyStats.consistencyScore),
-                suffix: "%",
-                color: "violet",
-                icon: Zap,
-                animated: true,
-              },
-              {
-                title: "Total Trades",
-                value: monthlyStats.totalTrades,
-                color: "violet",
-                icon: BarChart3,
-                animated: true,
-              },
-              {
-                title: "Expectancy",
-                value: Number(monthlyStats.expectancy),
-                prefix: "$",
-                color: "teal",
-                icon: DollarSign,
-              },
-            ].map((stat, i) => (
+        ) : error ? (
+          <div className="text-center py-16 text-rose-400">{error}</div>
+        ) : !isAccountReady ? (
+          <Card className="p-6 sm:p-8 text-center bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-2xl">
+            <p className="text-lg sm:text-xl font-medium opacity-70 mb-3">
+              Preparing your account...
+            </p>
+            <p className="text-sm opacity-60 mb-5">
+              Please wait while we set up your journal.
+            </p>
+          </Card>
+        ) : todayEntries.length === 0 ? (
+          <Card className="p-6 sm:p-8 text-center bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-2xl">
+            <p className="text-lg sm:text-xl font-medium opacity-70 mb-3">
+              No entries logged today
+            </p>
+            <p className="text-sm opacity-60 mb-5">
+              Add your first journal entry to start tracking
+            </p>
+            <Button
+              onClick={() => {
+                setModalOpen(true);
+                setEditingEntry(null);
+              }}
+              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-semibold border-2 border-indigo-400"
+            >
+              <Plus size={18} className="mr-2" /> Log First Entry
+            </Button>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {todayEntries.map((entry) => (
               <Card
-                key={i}
-                className="p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200 group"
+                key={entry.id}
+                className="p-4 sm:p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md hover:shadow-xl transition-all duration-200 group"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-xs font-medium text-gray-600 dark:text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                    {stat.title}
+                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center text-base font-bold shadow-sm flex-shrink-0 ${
+                          entry.status === "pending"
+                            ? "bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                            : Number(entry.pnl || 0) >= 0
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                            : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
+                        }`}
+                      >
+                        {entry.pair?.slice(0, 2) || "?"}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-lg">
+                            {entry.pair || "—"} • {entry.direction || "—"}
+                          </span>
+                          {entry.status === "pending" && (
+                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                              Pending
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm opacity-70 flex flex-wrap gap-3 mt-1">
+                          <span>Open: {entry.openDateTime ? new Date(entry.openDateTime).toLocaleString() : "—"}</span>
+                          {entry.status === "executed" && entry.closeDateTime && (
+                            <span>Close: {new Date(entry.closeDateTime).toLocaleString()}</span>
+                          )}
+                          <span>Lot: {entry.lotSize || "—"}</span>
+                          {entry.status === "executed" && entry.rr && <span>R:R {entry.rr}</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Confluences */}
+                    {entry.confluences?.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {entry.confluences.map((conf, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20"
+                          >
+                            <Tag size={12} />
+                            {conf}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Notes */}
+                    {entry.notes && (
+                      <div className="text-sm opacity-80 line-clamp-2 mt-2">
+                        <FileText size={14} className="inline mr-1" />
+                        {entry.notes}
+                      </div>
+                    )}
+
+                    {/* Screenshot thumbnail */}
+                    {entry.screenshotUrl && (
+                      <a
+                        href={entry.screenshotUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block mt-2"
+                      >
+                        <img
+                          src={entry.screenshotUrl}
+                          alt="Chart"
+                          className="h-16 w-16 object-cover rounded-lg border border-gray-300 dark:border-gray-600 hover:opacity-80 transition"
+                        />
+                      </a>
+                    )}
                   </div>
-                  <stat.icon className="h-5 w-5 text-gray-500 dark:text-gray-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
-                </div>
-                <div
-                  className={`text-2xl sm:text-3xl font-extrabold ${
-                    stat.color === "emerald"
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : stat.color === "rose"
-                      ? "text-rose-600 dark:text-rose-400"
-                      : stat.color === "indigo"
-                      ? "text-indigo-600 dark:text-indigo-400"
-                      : stat.color === "cyan"
-                      ? "text-cyan-600 dark:text-cyan-400"
-                      : stat.color === "violet"
-                      ? "text-violet-600 dark:text-violet-400"
-                      : "text-teal-600 dark:text-teal-400"
-                  }`}
-                >
-                  {stat.animated ? (
-                    <AnimatedNumber value={stat.value} decimals={stat.decimals || 0} />
-                  ) : (
-                    <>
-                      {stat.prefix || ""}
-                      {stat.value}
-                      {stat.suffix || ""}
-                    </>
-                  )}
+
+                  <div className="flex items-center justify-between lg:justify-end w-full lg:w-auto gap-6">
+                    <div className="text-right min-w-[100px]">
+                      {entry.status === "pending" ? (
+                        <div className="text-lg font-semibold text-amber-600 dark:text-amber-400">Pending</div>
+                      ) : (
+                        <>
+                          <div
+                            className={`text-xl font-bold ${
+                              Number(entry.pnl || 0) >= 0
+                                ? "text-emerald-700 dark:text-emerald-500"
+                                : "text-rose-700 dark:text-rose-500"
+                            }`}
+                          >
+                            {Number(entry.pnl || 0) >= 0 ? "+" : "-"}${formatNumber(Math.abs(Number(entry.pnl || 0)))}
+                          </div>
+                          {entry.rr && <div className="text-xs opacity-70">R:R {entry.rr}</div>}
+                        </>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingEntry(entry);
+                          setForm({
+                            openDateTime: entry.openDateTime || formatDateTimeLocal(),
+                            closeDateTime: entry.closeDateTime || formatDateTimeLocal(),
+                            pair: entry.pair || "",
+                            direction: entry.direction || "Long",
+                            entry: entry.entry?.toString() || "",
+                            exit: entry.exit?.toString() || "",
+                            stopLoss: entry.stopLoss?.toString() || "",
+                            takeProfit: entry.takeProfit?.toString() || "",
+                            notes: entry.notes || "",
+                            pnl: entry.pnl?.toString() || "",
+                            rr: entry.rr || "",
+                            lotSize: entry.lotSize?.toString() || "0.1",
+                            status: entry.status || "executed",
+                            confluences: Array.isArray(entry.confluences) ? entry.confluences : [],
+                            screenshotUrl: entry.screenshotUrl || "",
+                          });
+                          setModalOpen(true);
+                        }}
+                        className="h-10 w-10 rounded-lg border-2 hover:bg-indigo-100 dark:hover:bg-indigo-900"
+                      >
+                        <Edit size={18} />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        onClick={() => {
+                          setEntryToDelete(entry.id);
+                          setDeleteModalOpen(true);
+                        }}
+                        className="h-10 w-10 rounded-lg border-2 border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900"
+                      >
+                        <Trash2 size={18} />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </Card>
             ))}
           </div>
+        )}
 
-          {/* New Row: Asset‑specific stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-8">
-            {/* Most Traded Pair */}
-            <Card className="p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Most Traded Pair</h3>
-              <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
-                {monthlyAssetStats.topPair}
-              </div>
-              {monthlyAssetStats.topPairCount > 0 && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {monthlyAssetStats.topPairCount} trades this month
-                </p>
-              )}
-            </Card>
+        {/* Add / Edit Entry Modal */}
+        {modalOpen && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4 overflow-y-auto">
+            <div
+              ref={modalContentRef}
+              className={`w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden border backdrop-blur-md
+                ${isDark ? "bg-gray-900/95 border-gray-700/60" : "bg-white/95 border-gray-200/60"}`}
+            >
+              <div className="p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-5 sticky top-0 bg-inherit z-10">
+                  <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
+                    {editingEntry ? "Edit Entry" : "Add New Entry"}
+                  </h2>
+                  <Button variant="ghost" size="icon" onClick={() => setModalOpen(false)}>
+                    <X size={24} />
+                  </Button>
+                </div>
+                <form onSubmit={saveEntry} className="space-y-4 sm:space-y-5">
+                  {/* Date/Time row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Open Date & Time</Label>
+                      <Input
+                        type="datetime-local"
+                        value={form.openDateTime}
+                        onChange={(e) => setForm({ ...form, openDateTime: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Close Date & Time</Label>
+                      <Input
+                        type="datetime-local"
+                        value={form.closeDateTime}
+                        onChange={(e) => setForm({ ...form, closeDateTime: e.target.value })}
+                        disabled={form.status === "pending"}
+                      />
+                    </div>
+                  </div>
 
-            {/* Total Lot Size */}
-            <Card className="p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Total Lot Size (Monthly)</h3>
-              <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                {monthlyAssetStats.totalLots}
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {monthlyTrades.length} trades
-              </p>
-            </Card>
-
-            {/* Top Performing Assets */}
-            <Card className="p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Top Assets by PnL</h3>
-              <div className="space-y-2">
-                {monthlyAssetStats.assetPnL.length > 0 ? (
-                  monthlyAssetStats.assetPnL.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-sm">
-                      <span className="font-medium truncate max-w-[100px]">{item.pair}</span>
-                      <span
-                        className={`font-bold ${
-                          item.pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                        }`}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Pair / Asset</Label>
+                      <Input
+                        list="assets-list"
+                        value={form.pair}
+                        onChange={(e) => setForm({ ...form, pair: e.target.value.toUpperCase() })}
+                        placeholder="Type or select..."
+                      />
+                      <datalist id="assets-list">
+                        {COMMON_ASSETS.map((asset) => (
+                          <option key={asset} value={asset} />
+                        ))}
+                      </datalist>
+                    </div>
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Direction</Label>
+                      <select
+                        value={form.direction}
+                        onChange={(e) => setForm({ ...form, direction: e.target.value })}
+                        className={`w-full p-3 rounded-xl border text-sm ${
+                          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
+                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
                       >
-                        {item.pnl >= 0 ? "+" : ""}${formatNumber(Math.abs(item.pnl))}
-                      </span>
+                        <option value="Long">Long</option>
+                        <option value="Short">Short</option>
+                      </select>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-                    No asset data
                   </div>
-                )}
-              </div>
-            </Card>
-          </div>
 
-          {/* Recent Trades + Weekly Breakdown */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-            <Card className="lg:col-span-2 p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                  <Activity className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
-                  Recent Trades
-                </h3>
-                <button
-                  onClick={() => navigate("/trades")}
-                  className="text-sm flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                >
-                  View All →
-                </button>
-              </div>
-
-              {recentTrades.length === 0 ? (
-                <div className="text-center py-12 rounded-xl bg-white/50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400">
-                  No recent trades yet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recentTrades.map((trade, i) => (
-                    <div
-                      key={i}
-                      onClick={() => navigate(`/trades?date=${format(new Date(trade.date), "yyyy-MM-dd")}`)}
-                      className="flex items-center justify-between p-4 rounded-xl bg-white/60 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-700/60 transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div
-                          className={`w-12 h-12 rounded-xl flex items-center justify-center text-base font-bold shadow-sm ${
-                            trade.pnl >= 0
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                              : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
-                          }`}
-                        >
-                          {trade.pair?.slice(0, 2) || "T"}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-gray-900 dark:text-gray-100">
-                            {trade.pair} {trade.direction}
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            {format(new Date(trade.date), "dd MMM yyyy • HH:mm")}
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        className={`font-bold text-lg ${
-                          trade.pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                        }`}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Lot Size</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={form.lotSize}
+                        onChange={(e) => setForm({ ...form, lotSize: e.target.value })}
+                        placeholder="0.1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Status</Label>
+                      <select
+                        value={form.status}
+                        onChange={(e) => setForm({ ...form, status: e.target.value })}
+                        className={`w-full p-3 rounded-xl border text-sm ${
+                          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
+                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
                       >
-                        {trade.pnl >= 0 ? "+" : ""}${Math.abs(Number(trade.pnl || 0)).toFixed(2)}
-                      </div>
+                        <option value="executed">Executed</option>
+                        <option value="pending">Pending</option>
+                      </select>
                     </div>
-                  ))}
-                </div>
-              )}
-            </Card>
+                  </div>
 
-            {/* Weekly Breakdown Card */}
-            <Card className="p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <h3 className="text-lg font-semibold mb-5 flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                <BarChart3 className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
-                Weekly Performance
-              </h3>
-
-              <div className="space-y-4">
-                {weeklyBreakdown.map((week, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-400 w-16">{week.label}</span>
-                    <div className="flex gap-3">
-                      <span className="text-emerald-400 font-medium">{week.wins}W</span>
-                      <span className="text-rose-400 font-medium">{week.losses}L</span>
-                      <span className="text-gray-500 font-medium">{week.breakeven}B</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Entry Price</Label>
+                      <Input
+                        type="number"
+                        step="0.00001"
+                        value={form.entry}
+                        onChange={(e) => setForm({ ...form, entry: e.target.value })}
+                        placeholder="1.08500"
+                      />
                     </div>
-                    <span className="text-gray-300 font-semibold">
-                      {week.total} trades
-                    </span>
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Exit Price</Label>
+                      <Input
+                        type="number"
+                        step="0.00001"
+                        value={form.exit}
+                        onChange={(e) => setForm({ ...form, exit: e.target.value })}
+                        placeholder={form.status === "pending" ? "Pending – no exit" : "1.09000"}
+                        disabled={form.status === "pending"}
+                        className={form.status === "pending" ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed" : ""}
+                      />
+                    </div>
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">P&L (auto)</Label>
+                      <Input
+                        type="text"
+                        value={form.status === "pending" ? "Pending" : formatNumber(form.pnl)}
+                        readOnly
+                        placeholder="Auto-calculated"
+                        className={`w-full p-3 rounded-xl border bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed font-bold text-sm ${
+                          Number(form.pnl) > 0
+                            ? "text-emerald-700 dark:text-emerald-500"
+                            : Number(form.pnl) < 0
+                            ? "text-rose-700 dark:text-rose-500"
+                            : ""
+                        }`}
+                      />
+                    </div>
                   </div>
-                ))}
-                {weeklyBreakdown.every((w) => w.total === 0) && (
-                  <div className="text-center py-6 text-gray-500">No trades in last 4 weeks</div>
-                )}
-              </div>
 
-              <div className="mt-6 pt-4 border-t border-gray-700">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-400">Current Streak</span>
-                  <span
-                    className={`font-bold ${
-                      currentStreak.type === "Win"
-                        ? "text-emerald-400"
-                        : currentStreak.type === "Loss"
-                        ? "text-rose-400"
-                        : "text-gray-400"
-                    }`}
-                  >
-                    {currentStreak.type === "None" ? "—" : `${currentStreak.count} ${currentStreak.type}`}
-                  </span>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Calendar (unchanged) */}
-          <Card className="p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={prevMonth}
-                  className={`p-3 rounded-xl transition-all shadow-sm hover:shadow-md ${
-                    isDark ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  ◀
-                </button>
-                <button
-                  onClick={() => {
-                    const res = prompt("Enter month (YYYY-MM)");
-                    if (res && /^\d{4}-\d{2}$/.test(res)) {
-                      const [y, m] = res.split("-").map(Number);
-                      jumpTo(y, m);
-                    }
-                  }}
-                  className={`px-5 py-3 rounded-xl border transition-all shadow-sm hover:shadow-md ${
-                    isDark ? "bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700" : "bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  {format(viewDate, "MMMM yyyy")}
-                </button>
-                <button
-                  onClick={nextMonth}
-                  className={`p-3 rounded-xl transition-all shadow-sm hover:shadow-md ${
-                    isDark ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  ▶
-                </button>
-              </div>
-              <span className="text-sm font-medium text-gray-400 dark:text-gray-400">
-                Tap a day to view trades
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <div className="grid grid-cols-8 min-w-[640px] gap-1.5 sm:gap-2">
-                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Wk"].map((d) => (
-                  <div
-                    key={d}
-                    className={`text-xs font-medium text-center py-3 ${isDark ? "text-gray-400" : "text-gray-600"}`}
-                  >
-                    {d}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Stop Loss</Label>
+                      <Input
+                        type="number"
+                        step="0.00001"
+                        value={form.stopLoss}
+                        onChange={(e) => setForm({ ...form, stopLoss: e.target.value })}
+                        placeholder="1.08200"
+                      />
+                    </div>
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Take Profit</Label>
+                      <Input
+                        type="number"
+                        step="0.00001"
+                        value={form.takeProfit}
+                        onChange={(e) => setForm({ ...form, takeProfit: e.target.value })}
+                        placeholder="1.09500"
+                      />
+                    </div>
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">R:R (auto)</Label>
+                      <Input
+                        type="text"
+                        value={form.status === "pending" ? "—" : form.rr}
+                        readOnly
+                        placeholder="Auto-calculated"
+                        className={`w-full p-3 rounded-xl border bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed font-bold text-sm`}
+                      />
+                    </div>
                   </div>
-                ))}
 
-                {calendarWeeks.map((week, wi) => {
-                  const wSum = weekSummary(week);
-                  return (
-                    <React.Fragment key={wi}>
-                      {week.map((dayObj, di) => {
-                        const ds = daySummary(dayObj);
-                        const isCur = isSameMonth(dayObj, viewDate);
-                        const pnl = ds?.pnl || 0;
-                        const intensity = Math.min(Math.abs(pnl) / 1500, 0.6);
+                  {/* Confluence Tags */}
+                  <div>
+                    <Label className="block text-sm font-medium mb-1.5">Confluences</Label>
+                    <ConfluenceTags
+                      tags={form.confluences}
+                      onChange={(newTags) => setForm({ ...form, confluences: newTags })}
+                    />
+                  </div>
 
-                        return (
-                          <div
-                            key={di}
-                            onClick={() => openDay(dayObj)}
-                            className={`
-                              cursor-pointer aspect-square rounded-xl p-1.5 sm:p-2 flex flex-col justify-between border transition-all duration-300
-                              ${isCur
-                                ? isDark
-                                  ? "bg-gray-900/70 border-indigo-500/30"
-                                  : "bg-white/80 border-gray-200"
-                                : isDark
-                                ? "bg-transparent border-dashed border-gray-700/40"
-                                : "bg-transparent border-dashed border-gray-300"}
-                              hover:shadow-xl hover:scale-[1.03] hover:border-indigo-400
-                            `}
-                            style={{
-                              backgroundColor: pnl > 0
-                                ? `rgba(34, 197, 94, ${intensity})`
-                                : pnl < 0
-                                ? `rgba(239, 68, 68, ${intensity})`
-                                : undefined,
-                            }}
+                  {/* Screenshot – URL input + file upload */}
+                  <div>
+                    <Label className="block text-sm font-medium mb-1.5">Chart Screenshot</Label>
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => document.getElementById("image-upload").click()}
+                            disabled={uploadingImage}
+                            className="relative border-2 flex-1"
                           >
-                            <div className={`text-xs text-center ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                              {format(dayObj, "d")}
-                            </div>
-                            <div className="flex-1 flex flex-col items-center justify-center text-center">
-                              {ds ? (
-                                <>
-                                  <div
-                                    className={`font-bold text-xs sm:text-sm ${
-                                      pnl >= 0
-                                        ? "text-emerald-400"
-                                        : "text-rose-400"
-                                    }`}
-                                  >
-                                    {pnl >= 0 ? "+" : ""}${Math.abs(pnl).toFixed(2)}
-                                  </div>
-                                  <div className={`text-[10px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                                    {ds.count}t • {ds.winRate}%
-                                  </div>
-                                </>
-                              ) : (
-                                <div className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>—</div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      {/* Weekly Summary */}
-                      <div
-                        className={`aspect-square rounded-xl p-1.5 sm:p-2 flex flex-col justify-center items-center border ${
-                          isDark ? "bg-gray-800/50 border-gray-700" : "bg-gray-100/50 border-gray-200"
-                        }`}
-                      >
-                        <div className={`text-xs mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                          W{wi + 1}
+                            {uploadingImage ? (
+                              <Loader2 className="animate-spin h-5 w-5" />
+                            ) : (
+                              <>
+                                <Upload size={18} className="mr-2" />
+                                Upload Image
+                              </>
+                            )}
+                          </Button>
+                          <span className="text-xs opacity-60">or paste</span>
                         </div>
-                        <div
-                          className={`text-sm font-bold ${
-                            wSum.pnl >= 0
-                              ? "text-emerald-400"
-                              : "text-rose-400"
-                          }`}
-                        >
-                          {wSum.pnl >= 0 ? "+" : ""}${Math.abs(wSum.pnl).toFixed(2)}
-                        </div>
-                        <div className={`text-[10px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                          {wSum.count}t • {wSum.winRate}%
+                        <input
+                          id="image-upload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImageUpload(file);
+                          }}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Link size={18} className="text-gray-400" />
+                          <Input
+                            type="url"
+                            value={form.screenshotUrl}
+                            onChange={(e) => setForm({ ...form, screenshotUrl: e.target.value })}
+                            placeholder="https://i.imgur.com/your-image.png"
+                            className="flex-1"
+                          />
                         </div>
                       </div>
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            </div>
-          </Card>
-
-          {/* Floating Quick Add Button */}
-          <button
-            onClick={() => navigate("/trades/new")}
-            className="fixed bottom-6 right-6 z-[1000] w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg transition-all duration-200 flex items-center justify-center transform hover:scale-110 active:scale-95"
-            aria-label="Add New Trade"
-          >
-            <span className="text-3xl font-bold leading-none">+</span>
-          </button>
-
-          {/* Quick Analysis Modal */}
-          {showQuickAnalysis && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[2000] p-4">
-              <div className="w-full max-w-3xl rounded-2xl bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-2xl overflow-hidden">
-                <div className="p-6 sm:p-8">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
-                      Quick Analysis
-                    </h2>
-                    <button
-                      onClick={() => setShowQuickAnalysis(false)}
-                      className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                    >
-                      <X size={28} />
-                    </button>
+                    </div>
+                    {form.screenshotUrl && (
+                      <div className="mt-2 relative inline-block">
+                        <img
+                          src={form.screenshotUrl}
+                          alt="Preview"
+                          className="h-20 w-20 object-cover rounded-lg border"
+                          onError={(e) => e.target.style.display = 'none'}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, screenshotUrl: "" })}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
-                  {quickAnalysisContent()}
-
-                  <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
-                    <button
-                      onClick={() => setShowQuickAnalysis(false)}
-                      className="px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-xl transition-colors"
-                    >
-                      Close
-                    </button>
+                  {/* Notes */}
+                  <div>
+                    <Label className="block text-sm font-medium mb-1.5">Notes / Thoughts</Label>
+                    <textarea
+                      placeholder="What went well? What to improve? Emotional state? Market context?..."
+                      value={form.notes}
+                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      className={`w-full p-3 rounded-xl border min-h-[100px] text-sm resize-y focus:ring-2 focus:ring-indigo-500 outline-none ${
+                        isDark ? "bg-gray-800 border-gray-700 text-gray-100" : "bg-white border-gray-300 text-gray-900"
+                      }`}
+                    />
                   </div>
-                </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                    <Button
+                      type="submit"
+                      disabled={uploadingImage}
+                      className="flex-1 bg-indigo-700 hover:bg-indigo-800 text-white py-6 sm:py-4 text-base font-bold border-2 border-indigo-500 shadow-lg disabled:opacity-50"
+                    >
+                      {uploadingImage ? (
+                        <Loader2 className="animate-spin mr-2 h-5 w-5" />
+                      ) : null}
+                      {editingEntry ? "Update Entry" : "Save Entry"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setModalOpen(false)}
+                      className="flex-1 py-6 sm:py-4 text-base font-semibold border-2 border-gray-400 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
               </div>
             </div>
-          )}
-        </>
-      )}
+          </div>
+        )}
+
+        {/* Delete Confirmation */}
+        {deleteModalOpen && (
+          <DeleteConfirmModal
+            isOpen={deleteModalOpen}
+            onClose={() => {
+              setDeleteModalOpen(false);
+              setEntryToDelete(null);
+            }}
+            onConfirm={entryToDelete ? () => deleteEntry(entryToDelete) : clearTodayEntries}
+            title={entryToDelete ? "Delete Entry" : "Clear Today's Entries"}
+            message={
+              entryToDelete
+                ? "Are you sure you want to delete this journal entry? This action cannot be undone."
+                : `Are you sure you want to delete all ${todayEntries.length} entries from today?`
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }
