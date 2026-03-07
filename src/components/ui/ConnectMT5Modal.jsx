@@ -12,7 +12,6 @@ export default function ConnectMT5Modal({ isOpen, onClose, account }) {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [testMode, setTestMode] = useState(false); // For testing without backend
 
   if (!isOpen) return null;
 
@@ -31,72 +30,41 @@ export default function ConnectMT5Modal({ isOpen, onClose, account }) {
       if (!form.login.trim()) throw new Error('Login is required');
       if (!form.password.trim()) throw new Error('Password is required');
 
-      // Option 1: Test mode - skip backend validation (for testing)
-      if (testMode) {
-        // Save credentials directly to Firestore
-        const accountRef = doc(db, 'users', user.uid, 'accounts', account.id);
-        await updateDoc(accountRef, {
-          mt5Server: form.server.trim(),
-          mt5Login: form.login.trim(),
-          mt5Password: form.password,
-          mt5Connected: true,
-          mt5ConnectedAt: new Date().toISOString()
-        });
+      // Test connection to your working backend
+      const testResponse = await fetch('http://localhost:8891/v1/mt5/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          server: form.server.trim(),
+          login: parseInt(form.login.trim()),
+          password: form.password
+        })
+      });
 
-        setSuccess('MT5 account connected successfully! (Test Mode)');
-        setTimeout(() => {
-          onClose(true);
-        }, 1500);
-        return;
+      const result = await testResponse.json();
+
+      if (!result.success) {
+        throw new Error(result.message || 'Connection failed');
       }
 
-      // Option 2: Try to connect to backend (may fail if backend not ready)
-      try {
-        const testResponse = await fetch('https://mt-nodejs.fly.dev/api/test-connection', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            server: form.server.trim(),
-            login: form.login.trim(),
-            password: form.password
-          })
-        });
-
-        if (!testResponse.ok) {
-          // If backend returns error, show helpful message
-          const errorData = await testResponse.json().catch(() => ({}));
-          
-          // If backend is not ready, suggest test mode
-          if (testResponse.status === 404) {
-            throw new Error('Backend endpoint not ready. Would you like to use Test Mode? (Check the box below)');
-          }
-          
-          throw new Error(errorData.message || 'Connection failed');
-        }
-      } catch (fetchError) {
-        // Handle network errors
-        if (fetchError.message.includes('Failed to fetch')) {
-          throw new Error('Cannot reach server. Make sure your backend is running on Fly.io');
-        }
-        throw fetchError;
-      }
-
-      // If we get here, backend connection worked
+      // Save credentials to Firestore
       const accountRef = doc(db, 'users', user.uid, 'accounts', account.id);
       await updateDoc(accountRef, {
         mt5Server: form.server.trim(),
-        mt5Login: form.login.trim(),
+        mt5Login: parseInt(form.login.trim()),
         mt5Password: form.password,
         mt5Connected: true,
-        mt5ConnectedAt: new Date().toISOString()
+        mt5ConnectedAt: new Date().toISOString(),
+        mt5AccountInfo: result.account_info // Save account info for display
       });
 
-      setSuccess('MT5 account connected successfully!');
+      setSuccess(`Connected successfully! Balance: $${result.account_info.balance}`);
       setTimeout(() => {
         onClose(true);
-      }, 1500);
+      }, 2000);
 
     } catch (err) {
+      console.error('Connection error:', err);
       setError(err.message);
     } finally {
       setConnecting(false);
@@ -162,20 +130,6 @@ export default function ConnectMT5Modal({ isOpen, onClose, account }) {
               />
             </div>
 
-            {/* Test Mode Toggle - for when backend isn't ready */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="testMode"
-                checked={testMode}
-                onChange={(e) => setTestMode(e.target.checked)}
-                className="w-4 h-4 bg-gray-800 border-gray-700 rounded"
-              />
-              <label htmlFor="testMode" className="text-sm text-gray-400">
-                Test Mode (skip backend validation)
-              </label>
-            </div>
-
             {error && (
               <div className="p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm flex items-center gap-2">
                 <AlertCircle size={16} />
@@ -202,7 +156,7 @@ export default function ConnectMT5Modal({ isOpen, onClose, account }) {
                     Connecting...
                   </>
                 ) : (
-                  'Connect'
+                  'Connect MT5'
                 )}
               </button>
               <button
@@ -216,7 +170,7 @@ export default function ConnectMT5Modal({ isOpen, onClose, account }) {
           </form>
 
           <div className="mt-4 text-xs text-gray-500 text-center">
-            {testMode ? 'Test Mode: Credentials saved without validation' : 'Your credentials are encrypted and only used to sync your trades.'}
+            Your credentials are encrypted and only used to sync your trades.
           </div>
         </div>
       </div>
