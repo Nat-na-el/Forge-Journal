@@ -26,6 +26,7 @@ import {
   CheckCircle,
   ArrowUpRight,
   ArrowDownRight,
+  RefreshCw,
 } from "lucide-react";
 import { db, auth } from "../firebase";
 import {
@@ -35,6 +36,8 @@ import {
   orderBy,
   doc,
   getDoc,
+  writeBatch,
+  serverTimestamp,
 } from "firebase/firestore";
 
 // ────────────────────────────────────────────────
@@ -79,6 +82,8 @@ export default function Dashboard({ currentAccount }) {
   const [error, setError] = useState(null);
   const [viewDate, setViewDate] = useState(new Date());
   const [showQuickAnalysis, setShowQuickAnalysis] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState({ text: "", type: "" });
 
   // ─── Fetch account metadata ───────────────────────────────────────
   const fetchAccountMeta = async (user, accountId) => {
@@ -139,6 +144,112 @@ export default function Dashboard({ currentAccount }) {
       setTrades([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ─── Sync trades from MT5 ────────────────────────────────────────
+  const syncFromMT5 = async () => {
+    if (!currentAccount?.id) {
+      setSyncMessage({ text: "No account selected", type: "error" });
+      setTimeout(() => setSyncMessage({ text: "", type: "" }), 3000);
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      setSyncMessage({ text: "Please log in first", type: "error" });
+      setTimeout(() => setSyncMessage({ text: "", type: "" }), 3000);
+      return;
+    }
+
+    setSyncing(true);
+    setSyncMessage({ text: "Syncing trades from MT5...", type: "info" });
+
+    try {
+      // Get last 30 days of trades
+      const toDate = new Date().toISOString().split('T')[0];
+      const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const response = await fetch(
+        `http://localhost:8890/v1/history/orders?mode=deals&from_date=${fromDate}&to_date=${toDate}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`MT5 connection failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Filter out balance operations and keep only actual trades
+      const trades = data.data.filter(trade => 
+        trade.symbol && // Has a symbol (not a deposit)
+        trade.type !== 'DEAL_TYPE_BALANCE' && // Not a balance operation
+        (trade.type === 'DEAL_TYPE_BUY' || trade.type === 'DEAL_TYPE_SELL') // Only buy/sell
+      );
+      
+      // Group by position_id to combine entry and exit
+      const tradesByPosition = {};
+      trades.forEach(trade => {
+        if (!tradesByPosition[trade.position_id]) {
+          tradesByPosition[trade.position_id] = [];
+        }
+        tradesByPosition[trade.position_id].push(trade);
+      });
+      
+      // Convert to your app's format
+      const formattedTrades = [];
+      
+      Object.values(tradesByPosition).forEach(positionTrades => {
+        const entryTrade = positionTrades.find(t => t.entry === 'DEAL_ENTRY_IN');
+        const exitTrade = positionTrades.find(t => t.entry === 'DEAL_ENTRY_OUT');
+        
+        if (entryTrade && exitTrade) {
+          formattedTrades.push({
+            pair: entryTrade.symbol,
+            direction: entryTrade.type === 'DEAL_TYPE_BUY' ? 'Long' : 'Short',
+            entry: entryTrade.price,
+            exit: exitTrade.price,
+            pnl: exitTrade.profit,
+            date: new Date(entryTrade.time * 1000).toISOString().split('T')[0],
+            lotSize: entryTrade.volume,
+            stopLoss: entryTrade.sl_price || 0,
+            takeProfit: entryTrade.tp_price || 0,
+            rr: exitTrade.profit && entryTrade.price ? 
+              (exitTrade.profit / (entryTrade.price * entryTrade.volume)).toFixed(2) : "",
+          });
+        }
+      });
+      
+      // Save to Firestore
+      const batch = writeBatch(db);
+      formattedTrades.forEach(trade => {
+        const docRef = doc(collection(db, 'users', user.uid, 'accounts', currentAccount.id, 'trades'));
+        batch.set(docRef, {
+          ...trade,
+          createdAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
+      
+      setSyncMessage({ 
+        text: `Successfully synced ${formattedTrades.length} trades from MT5!`, 
+        type: "success" 
+      });
+      
+      // Refresh the trades display
+      await refreshTrades();
+      
+    } catch (error) {
+      console.error('Sync failed:', error);
+      setSyncMessage({ 
+        text: error.message.includes('fetch') 
+          ? 'Failed to connect to MT5. Make sure MT5 is running with SocketBridge attached.' 
+          : 'Failed to sync trades from MT5', 
+        type: "error" 
+      });
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMessage({ text: "", type: "" }), 5000);
     }
   };
 
@@ -625,14 +736,40 @@ export default function Dashboard({ currentAccount }) {
             </p>
           </div>
 
-          <button
-            onClick={() => setShowQuickAnalysis(true)}
-            className="flex items-center gap-2.5 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all duration-200"
-          >
-            <Zap size={18} />
-            Quick Analysis
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={syncFromMT5}
+              disabled={syncing}
+              className={`flex items-center gap-2.5 px-6 py-3.5 rounded-xl shadow-md transition-all duration-200 ${
+                syncing 
+                  ? 'bg-gray-500 cursor-not-allowed' 
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              }`}
+            >
+              <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Syncing...' : 'Sync from MT5'}
+            </button>
+
+            <button
+              onClick={() => setShowQuickAnalysis(true)}
+              className="flex items-center gap-2.5 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all duration-200"
+            >
+              <Zap size={18} />
+              Quick Analysis
+            </button>
+          </div>
         </div>
+
+        {/* Sync Message */}
+        {syncMessage.text && (
+          <div className={`mb-4 p-3 rounded-lg ${
+            syncMessage.type === 'success' ? 'bg-green-500/20 text-green-200' :
+            syncMessage.type === 'error' ? 'bg-red-500/20 text-red-200' :
+            'bg-blue-500/20 text-blue-200'
+          }`}>
+            {syncMessage.text}
+          </div>
+        )}
 
         {/* Account Overview Card */}
         <Card className="p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg">
