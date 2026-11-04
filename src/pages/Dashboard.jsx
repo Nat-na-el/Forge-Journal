@@ -9,6 +9,7 @@ import {
   eachDayOfInterval,
   format,
   isSameMonth,
+  subWeeks,
 } from "date-fns";
 import { Card } from "../components/ui/card";
 import { useNavigate } from "react-router-dom";
@@ -27,7 +28,22 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   RefreshCw,
+  Palette,
+  Target,
+  LineChart as LineChartIcon,
 } from "lucide-react";
+import {
+  Chart as ChartJS,
+  RadialLinearScale,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Radar, Line } from "react-chartjs-2";
 import { db, auth } from "../firebase";
 import {
   collection,
@@ -68,6 +84,94 @@ const formatNumber = (num) => {
   });
 };
 
+ChartJS.register(
+  RadialLinearScale,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend
+);
+
+// Accent themes (the light / dark mode still follows the app theme)
+const ACCENTS = {
+  indigo: { name: "Indigo", hex: "#6366f1", hex2: "#a855f7" },
+  emerald: { name: "Emerald", hex: "#10b981", hex2: "#06b6d4" },
+  cyan: { name: "Ocean", hex: "#06b6d4", hex2: "#3b82f6" },
+  amber: { name: "Amber", hex: "#f59e0b", hex2: "#ef4444" },
+  rose: { name: "Rose", hex: "#f43f5e", hex2: "#ec4899" },
+};
+
+// A trade's date, whichever field the page that saved it used
+const tDate = (t) => t?.date || t?.openDateTime || t?.closeDateTime || "";
+
+const CARD =
+  "rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200";
+
+const RADAR_LABELS = ["Win Rate", "Profit Factor", "Avg R:R", "Payoff", "Green Days", "Recovery"];
+
+// Scores a list of trades on six axes (each 0–100) for the spider-web chart
+function computeEdge(list) {
+  const n = list.length;
+  if (!n) return null;
+  const sorted = [...list].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const pnls = sorted.map((t) => Number(t.pnl) || 0);
+  const wins = pnls.filter((p) => p > 0);
+  const losses = pnls.filter((p) => p < 0);
+  const grossW = wins.reduce((a, b) => a + b, 0);
+  const grossL = Math.abs(losses.reduce((a, b) => a + b, 0));
+  const net = grossW - grossL;
+
+  const winRate = (wins.length / n) * 100;
+  const pf = grossL ? grossW / grossL : grossW > 0 ? 3 : 0;
+  const avgRR = sorted.reduce((a, t) => a + (Number(t.rr) || 0), 0) / n;
+  const avgW = wins.length ? grossW / wins.length : 0;
+  const avgL = losses.length ? grossL / losses.length : 0;
+  const payoff = avgL ? avgW / avgL : avgW > 0 ? 3 : 0;
+
+  const days = {};
+  sorted.forEach((t) => {
+    const k = String(t.date).slice(0, 10);
+    days[k] = (days[k] || 0) + (Number(t.pnl) || 0);
+  });
+  const dayVals = Object.values(days);
+  const greenDays = (dayVals.filter((v) => v > 0).length / dayVals.length) * 100;
+
+  let cum = 0;
+  let peak = 0;
+  let maxDD = 0;
+  pnls.forEach((p) => {
+    cum += p;
+    peak = Math.max(peak, cum);
+    maxDD = Math.max(maxDD, peak - cum);
+  });
+  const recovery = maxDD ? net / maxDD : net > 0 ? 3 : 0;
+
+  const cap = (v) => Math.min(100, Math.max(0, v));
+  const scores = [
+    cap(winRate),
+    cap((pf / 3) * 100),
+    cap((avgRR / 3) * 100),
+    cap((payoff / 3) * 100),
+    cap(greenDays),
+    cap((recovery / 3) * 100),
+  ];
+  return {
+    scores,
+    edge: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+    raw: [
+      `${winRate.toFixed(0)}%`,
+      pf >= 3 ? "3+" : pf.toFixed(2),
+      avgRR.toFixed(2),
+      payoff >= 3 ? "3+" : payoff.toFixed(2),
+      `${greenDays.toFixed(0)}%`,
+      recovery >= 3 ? "3+" : recovery.toFixed(2),
+    ],
+  };
+}
+
 // ────────────────────────────────────────────────
 // Main Dashboard Component – Forgex
 // ────────────────────────────────────────────────
@@ -84,6 +188,22 @@ export default function Dashboard({ currentAccount }) {
   const [showQuickAnalysis, setShowQuickAnalysis] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState({ text: "", type: "" });
+  const [accent, setAccent] = useState(() => {
+    try {
+      const saved = localStorage.getItem("forgexAccent");
+      return ACCENTS[saved] ? saved : "indigo";
+    } catch {
+      return "indigo";
+    }
+  });
+  const [curveRange, setCurveRange] = useState("month");
+  const ac = ACCENTS[accent] || ACCENTS.indigo;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("forgexAccent", accent);
+    } catch {}
+  }, [accent]);
 
   // ─── Fetch account metadata ───────────────────────────────────────
   const fetchAccountMeta = async (user, accountId) => {
@@ -133,10 +253,16 @@ export default function Dashboard({ currentAccount }) {
         orderBy("createdAt", "desc")
       );
       const snapshot = await getDocs(q);
-      const loadedTrades = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const loadedTrades = snapshot.docs.map((d) => {
+        const data = d.data();
+        const created = data.createdAt?.toDate?.();
+        return {
+          id: d.id,
+          ...data,
+          // works for trades saved with `date` or with openDateTime/closeDateTime
+          date: tDate(data) || (created ? created.toISOString() : new Date().toISOString()),
+        };
+      });
       setTrades(loadedTrades);
     } catch (err) {
       console.error("❌ Dashboard fetch error:", err);
@@ -457,7 +583,7 @@ export default function Dashboard({ currentAccount }) {
     const weeks = [];
     const today = new Date();
     for (let i = 0; i < 4; i++) {
-      const weekStart = startOfWeek(subMonths(today, i), { weekStartsOn: 1 });
+      const weekStart = startOfWeek(subWeeks(today, i), { weekStartsOn: 1 });
       const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
       const weekTrades = trades.filter((t) => {
         const td = new Date(t.date);
@@ -558,6 +684,116 @@ export default function Dashboard({ currentAccount }) {
   }, [allTimePnL, initialBalance]);
 
   // ─── Quick Analysis Modal Content (unchanged) ────────────────
+  // ─── Spider-web (radar) data: this month vs all-time ─────────
+  const radarMonth = useMemo(() => computeEdge(monthlyTrades), [monthlyTrades]);
+  const radarAll = useMemo(() => computeEdge(trades), [trades]);
+  const radarMain = radarMonth || radarAll;
+
+  // ─── Equity curve ────────────────────────────────────────────
+  const equity = useMemo(() => {
+    const src =
+      curveRange === "month"
+        ? monthlyTrades
+        : [...trades].sort((a, b) => new Date(a.date) - new Date(b.date));
+    let running = curveRange === "month" ? 0 : initialBalance;
+    const labels = ["Start"];
+    const values = [running];
+    src.forEach((t) => {
+      running += Number(t.pnl) || 0;
+      labels.push(format(new Date(t.date), "dd MMM"));
+      values.push(Number(running.toFixed(2)));
+    });
+    return { labels, values, count: src.length };
+  }, [curveRange, monthlyTrades, trades, initialBalance]);
+
+  const chartText = isDark ? "#9ca3af" : "#4b5563";
+  const chartGrid = isDark ? "rgba(148,163,184,0.16)" : "rgba(100,116,139,0.2)";
+
+  const radarChartData = {
+    labels: RADAR_LABELS,
+    datasets: [
+      radarAll && {
+        label: "All-time",
+        data: radarAll.scores,
+        borderColor: isDark ? "rgba(156,163,175,0.9)" : "rgba(107,114,128,0.9)",
+        backgroundColor: "rgba(156,163,175,0.08)",
+        borderDash: [5, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+      },
+      radarMonth && {
+        label: format(viewDate, "MMM yyyy"),
+        data: radarMonth.scores,
+        borderColor: ac.hex,
+        backgroundColor: ac.hex + "40",
+        borderWidth: 2.5,
+        pointBackgroundColor: ac.hex,
+        pointBorderColor: "#fff",
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      },
+    ].filter(Boolean),
+  };
+
+  const radarOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      r: {
+        min: 0,
+        max: 100,
+        ticks: { display: false, stepSize: 25 },
+        grid: { color: chartGrid },
+        angleLines: { color: chartGrid },
+        pointLabels: { color: chartText, font: { size: 11, weight: "600" } },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "bottom",
+        labels: { color: chartText, usePointStyle: true, boxWidth: 8, padding: 14 },
+      },
+      tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${Math.round(c.parsed.r)}/100` } },
+    },
+  };
+
+  const equityChartData = {
+    labels: equity.labels,
+    datasets: [
+      {
+        data: equity.values,
+        borderColor: ac.hex,
+        backgroundColor: ac.hex + "22",
+        fill: true,
+        tension: 0.35,
+        borderWidth: 2.5,
+        pointRadius: equity.count > 40 ? 0 : 3,
+        pointHoverRadius: 5,
+        pointBackgroundColor: ac.hex,
+      },
+    ],
+  };
+
+  const equityOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (c) => ` $${Number(c.parsed.y).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+        },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: chartText, maxTicksLimit: 6, maxRotation: 0 } },
+      y: { grid: { color: chartGrid }, ticks: { color: chartText, maxTicksLimit: 5 } },
+    },
+  };
+
+  const equityNet = equity.values[equity.values.length - 1] - equity.values[0];
+
   const quickAnalysisContent = () => {
     if (!monthlyTrades.length) {
       return (
@@ -722,7 +958,10 @@ export default function Dashboard({ currentAccount }) {
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
-            <h1 className="text-3xl sm:text-5xl font-extrabold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
+            <h1
+              className="text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-clip-text text-transparent"
+              style={{ backgroundImage: `linear-gradient(90deg, ${ac.hex}, ${ac.hex2})` }}
+            >
               Forgex Dashboard
             </h1>
             <p className="mt-1.5 text-gray-400">
@@ -735,6 +974,26 @@ export default function Dashboard({ currentAccount }) {
             </p>
           </div>
 
+          <div className="flex flex-col gap-3 w-full sm:w-auto sm:items-end">
+            {/* Accent theme picker */}
+            <div className="flex items-center gap-2" role="radiogroup" aria-label="Accent theme">
+              <Palette size={16} className="text-gray-400" />
+              {Object.entries(ACCENTS).map(([key, a]) => (
+                <button
+                  key={key}
+                  onClick={() => setAccent(key)}
+                  title={a.name}
+                  aria-label={`${a.name} theme`}
+                  aria-pressed={accent === key}
+                  className={`h-6 w-6 rounded-full transition-transform ${
+                    accent === key
+                      ? "ring-2 ring-offset-2 ring-offset-transparent ring-gray-500 dark:ring-white/70 scale-110"
+                      : "opacity-80 hover:scale-110"
+                  }`}
+                  style={{ backgroundImage: `linear-gradient(135deg, ${a.hex}, ${a.hex2})` }}
+                />
+              ))}
+            </div>
           <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={syncFromMT5}
@@ -754,11 +1013,13 @@ export default function Dashboard({ currentAccount }) {
 
             <button
               onClick={() => setShowQuickAnalysis(true)}
-              className="flex flex-1 sm:flex-none justify-center items-center gap-2 px-3 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all duration-200"
+              style={{ backgroundColor: ac.hex }}
+              className="flex flex-1 sm:flex-none justify-center items-center gap-2 px-3 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base hover:brightness-110 text-white rounded-xl shadow-md transition-all duration-200"
             >
               <Zap size={18} />
               Quick Analysis
             </button>
+          </div>
           </div>
         </div>
 
@@ -965,6 +1226,108 @@ export default function Dashboard({ currentAccount }) {
                   </div>
                 )}
               </div>
+            </Card>
+          </div>
+
+          {/* Performance Radar + Equity Curve */}
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 lg:gap-6 mb-8">
+            <Card className={`${CARD} xl:col-span-2 p-4 sm:p-6`}>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                    <Target className="h-5 w-5" style={{ color: ac.hex }} />
+                    Performance Radar
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {radarMonth ? `${format(viewDate, "MMMM yyyy")} vs all-time` : "All-time (no trades this month)"}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Edge Score</div>
+                  <div className="text-3xl font-extrabold leading-none mt-1" style={{ color: ac.hex }}>
+                    {radarMain ? radarMain.edge : "—"}
+                    <span className="text-sm font-semibold text-gray-400">/100</span>
+                  </div>
+                </div>
+              </div>
+
+              {radarMain ? (
+                <>
+                  <div className="relative h-72 sm:h-80">
+                    <Radar data={radarChartData} options={radarOptions} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-4">
+                    {RADAR_LABELS.map((label, i) => (
+                      <div
+                        key={label}
+                        className="rounded-xl bg-gray-100/70 dark:bg-gray-900/40 px-2 py-2 text-center"
+                      >
+                        <div className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">{label}</div>
+                        <div className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">
+                          {radarMain.raw[i]}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="h-72 flex flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400 gap-2">
+                  <Target size={40} className="opacity-40" />
+                  <p className="text-sm">Add trades to see your performance radar.</p>
+                </div>
+              )}
+            </Card>
+
+            <Card className={`${CARD} xl:col-span-3 p-4 sm:p-6`}>
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                    <LineChartIcon className="h-5 w-5" style={{ color: ac.hex }} />
+                    Equity Curve
+                  </h3>
+                  <p
+                    className={`text-sm font-semibold mt-1 ${
+                      equityNet >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                    }`}
+                  >
+                    {equityNet >= 0 ? "+" : "-"}${formatNumber(Math.abs(equityNet))}
+                    <span className="font-normal text-gray-500 dark:text-gray-400">
+                      {" "}
+                      · {equity.count} trades
+                    </span>
+                  </p>
+                </div>
+                <div className="flex rounded-xl bg-gray-100 dark:bg-gray-900/50 p-1 text-sm">
+                  {[
+                    ["month", "This month"],
+                    ["all", "All-time"],
+                  ].map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setCurveRange(key)}
+                      className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                        curveRange === key
+                          ? "text-white shadow"
+                          : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                      }`}
+                      style={curveRange === key ? { backgroundColor: ac.hex } : undefined}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {equity.count ? (
+                <div className="relative h-64 sm:h-80 xl:h-[22rem]">
+                  <Line data={equityChartData} options={equityOptions} />
+                </div>
+              ) : (
+                <div className="h-64 flex flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400 gap-2">
+                  <LineChartIcon size={40} className="opacity-40" />
+                  <p className="text-sm">No trades in this range yet.</p>
+                </div>
+              )}
             </Card>
           </div>
 
@@ -1217,7 +1580,8 @@ export default function Dashboard({ currentAccount }) {
           {/* Floating Quick Add Button */}
           <button
             onClick={() => navigate("/trades/new")}
-            className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-[1000] w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg transition-all duration-200 flex items-center justify-center transform hover:scale-110 active:scale-95"
+            style={{ backgroundColor: ac.hex }}
+            className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-[1000] w-14 h-14 rounded-full hover:brightness-110 text-white shadow-lg transition-all duration-200 flex items-center justify-center transform hover:scale-110 active:scale-95"
             aria-label="Add New Trade"
           >
             <span className="text-3xl font-bold leading-none">+</span>
