@@ -71,8 +71,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-xl p-8">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-3 sm:p-4">
+      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-xl p-5 sm:p-8">
         <h1 className="text-3xl font-bold text-center mb-8 text-gray-900 dark:text-white">
           Tradeass Login
         </h1>
