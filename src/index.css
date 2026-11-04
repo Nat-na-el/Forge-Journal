@@ -275,3 +275,12 @@ textarea {
 }
 
 /* Finished! */
+
+/* ─── Mobile polish ─────────────────────────────────────────── */
+html, body { max-width: 100%; overflow-x: hidden; }
+@media (max-width: 767px) {
+  /* 16px inputs stop iOS Safari from zooming in when a field is focused */
+  input, select, textarea { font-size: 16px !important; }
+  /* wide tables/charts scroll inside their own box instead of the page */
+  table { display: block; overflow-x: auto; white-space: nowrap; }
+}

@@ -1,3 +1,5 @@
+import useIsMobile from "./hooks/useIsMobile";
+import BottomNav from "./components/ui/BottomNav";
 import React, { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
@@ -316,7 +318,13 @@ function EditBalancePNL({ onSaved }) {
 // Main AppContent
 // ────────────────────────────────────────────────
 function AppContent() {
-  const [open, setOpen] = useState(true);
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(() => window.innerWidth >= 768);
+
+  // Close the drawer when switching to a phone-sized screen
+  useEffect(() => {
+    setOpen(!isMobile);
+  }, [isMobile]);
   const [currentAccount, setCurrentAccount] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [showManageModal, setShowManageModal] = useState(false);
@@ -479,7 +487,7 @@ function AppContent() {
       {isLoggedIn ? (
         <>
           <div className="fixed top-0 left-0 right-0 h-12 z-50">
-            <Topbar />
+            <Topbar onMenuClick={() => setOpen((o) => !o)} />
           </div>
           <div className="flex flex-1 pt-12">
             <Sidebar
@@ -493,23 +501,30 @@ function AppContent() {
             />
             <div
               className="flex-1 min-w-0 transition-all duration-300"
-              style={{
-                marginLeft: open ? "calc(12rem + 8px)" : "calc(6rem + 8px)",
-                maxWidth: open
-                  ? "calc(100vw - 12rem - 8px)"
-                  : "calc(100vw - 6rem - 8px)",
-              }}
+              style={
+                isMobile
+                  ? { marginLeft: 0, maxWidth: "100vw" }
+                  : {
+                      marginLeft: open ? "calc(12rem + 8px)" : "calc(6rem + 8px)",
+                      maxWidth: open
+                        ? "calc(100vw - 12rem - 8px)"
+                        : "calc(100vw - 6rem - 8px)",
+                    }
+              }
             >
               <main
                 className="overflow-y-auto overflow-x-hidden relative"
                 style={{
-                  height: "calc(100vh - 3rem)",
+                  height: "calc(100dvh - 3rem)",
                   paddingTop: "1.5rem",
                 }}
               >
                 <div
-                  className="bg-transparent border-none p-3 sm:p-3 mx-1 sm:mx-2 mb-0"
-                  style={{ minHeight: "calc(100vh - 4.5rem)" }}
+                  className="bg-transparent border-none p-1 sm:p-3 mx-0 sm:mx-2 mb-0"
+                  style={{
+                    minHeight: "calc(100dvh - 4.5rem)",
+                    paddingBottom: isMobile ? "calc(4.5rem + env(safe-area-inset-bottom))" : undefined,
+                  }}
                 >
                   <Routes>
                     <Route path="/dashboard" element={<Dashboard currentAccount={currentAccount} />} />
@@ -529,6 +544,8 @@ function AppContent() {
                 </div>
               </main>
             </div>
+
+            {isMobile && <BottomNav onMenuClick={() => setOpen((o) => !o)} />}
 
             {showManageModal && (
               <ManageAccountsModal
