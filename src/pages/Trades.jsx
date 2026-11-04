@@ -645,7 +645,7 @@ export default function Trades({ currentAccount }) {
                   </div>
 
                   <div className="flex items-center justify-between lg:justify-end w-full lg:w-auto gap-6">
-                    <div className="text-right min-w-[100px]">
+                    <div className="text-left sm:text-right sm:min-w-[100px]">
                       {trade.status === "pending" ? (
                         <div className="text-lg font-semibold text-amber-600 dark:text-amber-400">Pending</div>
                       ) : (
@@ -740,7 +740,7 @@ export default function Trades({ currentAccount }) {
                           : selectedTrade.status === "pending" ? "Pending" : "—"}
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <div className="text-sm opacity-70 mb-1">Entry</div>
                         <div className="text-lg font-medium">{selectedTrade.entry || "—"}</div>
@@ -752,7 +752,7 @@ export default function Trades({ currentAccount }) {
                         </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <div className="text-sm opacity-70 mb-1">Stop Loss</div>
                         <div className="text-lg">{selectedTrade.stopLoss || "—"}</div>
