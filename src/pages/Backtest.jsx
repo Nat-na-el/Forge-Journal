@@ -821,7 +821,7 @@ export default function Backtest({ currentAccount }) {
               </div>
 
               {/* Date Range */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="startDate" className="text-sm text-amber-800 dark:text-gray-300">Start Date</Label>
                   <input
