@@ -1,5 +1,20 @@
+// src/pages/DailyJournal.jsx
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Trash2, Plus, Loader2, Check, AlertCircle, FileText, X, Edit, Image, Tag, Upload, Link } from "lucide-react";
+import { Trash2, Plus, Loader2, Check, AlertCircle, FileText, X, Edit, Image, Tag, Upload, Link, ChevronLeft, ChevronRight, Palette, Target, BarChart3 } from "lucide-react";
+import { format, addDays, subDays, startOfWeek, endOfWeek, eachDayOfInterval, parseISO } from "date-fns";
+import {
+  Chart as ChartJS,
+  RadialLinearScale,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Filler,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Radar, Bar } from "react-chartjs-2";
 import { useTheme } from "../Theme-provider";
 import DeleteConfirmModal from "../components/ui/DeleteConfirmModal";
 import { Button } from "@/components/ui/button";
@@ -51,7 +66,60 @@ const compressImage = (file, maxWidth = 1200, quality = 0.8) => {
   });
 };
 
-const formatDateInput = (d = new Date()) => new Date(d).toISOString().slice(0, 10);
+ChartJS.register(
+  RadialLinearScale,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Filler,
+  Tooltip,
+  Legend
+);
+
+// Same accent palette + storage key as the Dashboard, so the theme follows you around
+const ACCENTS = {
+  indigo: { name: "Indigo", hex: "#6366f1", hex2: "#a855f7" },
+  emerald: { name: "Emerald", hex: "#10b981", hex2: "#06b6d4" },
+  cyan: { name: "Ocean", hex: "#06b6d4", hex2: "#3b82f6" },
+  amber: { name: "Amber", hex: "#f59e0b", hex2: "#ef4444" },
+  rose: { name: "Rose", hex: "#f43f5e", hex2: "#ec4899" },
+};
+
+const CARD =
+  "rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200";
+
+const dayKey = (d) => format(d, "yyyy-MM-dd");
+// Local calendar day of an entry (new entries use openDateTime, old ones used `date`)
+const entryDay = (e) => String(e.openDateTime || e.date || "").slice(0, 10);
+// Entries saved before the status field existed count as executed
+const isExec = (e) => e.status !== "pending";
+
+const SCORE_LABELS = ["Win Rate", "Notes", "Screenshots", "Confluences", "Risk Plan", "R:R ≥ 1.5"];
+
+// Scores a set of entries on six journalling-discipline axes (each 0–100)
+function scoreEntries(list) {
+  const n = list.length;
+  if (!n) return null;
+  const ex = list.filter(isExec);
+  const pct = (c, t) => (t ? (c / t) * 100 : 0);
+  const scores = [
+    pct(ex.filter((e) => Number(e.pnl) > 0).length, ex.length),
+    pct(list.filter((e) => (e.notes || "").trim().length > 0).length, n),
+    pct(list.filter((e) => e.screenshotUrl).length, n),
+    pct(list.filter((e) => Array.isArray(e.confluences) && e.confluences.length > 0).length, n),
+    pct(list.filter((e) => Number(e.stopLoss) > 0 && Number(e.takeProfit) > 0).length, n),
+    pct(ex.filter((e) => e.rr === "∞" || Number(e.rr) >= 1.5).length, ex.length),
+  ].map(Math.round);
+  return { scores, score: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) };
+}
+
+const formatDateTimeLocal = (d = new Date()) => {
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const formatNumber = (num) => {
   if (!num && num !== 0) return "";
   return Number(num).toLocaleString("en-US", {
@@ -137,8 +205,25 @@ export default function DailyJournal({ currentAccount }) {
   const [editingEntry, setEditingEntry] = useState(null);
   const [user, setUser] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => dayKey(new Date()));
+  const [accent, setAccent] = useState(() => {
+    try {
+      const saved = localStorage.getItem("forgexAccent");
+      return ACCENTS[saved] ? saved : "indigo";
+    } catch {
+      return "indigo";
+    }
+  });
+  const ac = ACCENTS[accent] || ACCENTS.indigo;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("forgexAccent", accent);
+    } catch {}
+  }, [accent]);
   const [form, setForm] = useState({
-    date: formatDateInput(),
+    openDateTime: formatDateTimeLocal(),
+    closeDateTime: formatDateTimeLocal(),
     pair: "",
     direction: "Long",
     entry: "",
@@ -154,6 +239,8 @@ export default function DailyJournal({ currentAccount }) {
     screenshotUrl: "",
   });
 
+  const modalContentRef = useRef(null);
+  const uploadRef = useRef(null);
   const accountLeverage = currentAccount?.leverage || 100;
   const isAccountReady = user && currentAccount;
 
@@ -176,6 +263,36 @@ export default function DailyJournal({ currentAccount }) {
       setUploadingImage(false);
     }
   };
+
+  uploadRef.current = handleImageUpload;
+
+  // ─── Handle paste (images only) on the modal ───────────────────────
+  useEffect(() => {
+    if (!modalOpen) return;
+    const handlePaste = (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.indexOf("image") !== -1) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            uploadRef.current?.(file);
+          }
+          break;
+        }
+      }
+    };
+    const currentModal = modalContentRef.current;
+    if (currentModal) {
+      currentModal.addEventListener('paste', handlePaste);
+    }
+    return () => {
+      if (currentModal) {
+        currentModal.removeEventListener('paste', handlePaste);
+      }
+    };
+  }, [modalOpen]);
 
   // ─── Fetch journal entries ────────────────────────────────────────
   const refreshEntries = async () => {
@@ -229,7 +346,7 @@ export default function DailyJournal({ currentAccount }) {
     }
   }, [currentAccount, user]);
 
-  // ─── Auto‑calculate PnL and R:R ────────────────────────────────────
+  // ─── Auto‑calculate PnL and R:R (only if executed and exit given) ─
   useEffect(() => {
     if (form.status === "pending" || !form.exit) {
       setForm(prev => ({ ...prev, pnl: "", rr: "" }));
@@ -265,36 +382,194 @@ export default function DailyJournal({ currentAccount }) {
     }));
   }, [form.entry, form.exit, form.stopLoss, form.takeProfit, form.lotSize, form.direction, form.status, accountLeverage]);
 
-  // ─── Today's entries ────────────────────────────────────────────────
-  const todayEntries = useMemo(() => {
-    const today = formatDateInput();
-    return entries.filter((e) => e.date === today);
-  }, [entries]);
+  // ─── Entries for the selected day (name kept: used by clear-day below) ──
+  const todayEntries = useMemo(
+    () =>
+      entries
+        .filter((e) => entryDay(e) === selectedDate)
+        .sort((x, y) =>
+          String(y.openDateTime || y.date).localeCompare(String(x.openDateTime || x.date))
+        ),
+    [entries, selectedDate]
+  );
+  const todayKey = dayKey(new Date());
+  const selectedIsToday = selectedDate === todayKey;
+  const selectedLabel = format(parseISO(selectedDate), "EEEE, d MMMM yyyy");
 
-  // ─── Metrics for today (only executed trades) ───────────────────────
+  // ─── Metrics for the selected day (executed trades only) ─────────────
   const metrics = useMemo(() => {
-    const executed = todayEntries.filter(e => e.status === "executed");
-    if (!executed.length) {
-      return { net: 0, wins: 0, losses: 0, winRate: 0, avgPnL: 0 };
-    }
-    const total = executed.length;
+    const ex = todayEntries.filter(isExec);
+    if (!ex.length) return { net: 0, wins: 0, losses: 0, winRate: 0, avgPnL: 0 };
     let net = 0;
     let wins = 0;
-    executed.forEach((e) => {
-      const pnl = Number(e.pnl || 0);
-      net += pnl;
-      if (pnl > 0) wins++;
+    ex.forEach((e) => {
+      const p = Number(e.pnl || 0);
+      net += p;
+      if (p > 0) wins++;
     });
-    const winRate = Math.round((wins / total) * 100);
-    const avgPnL = net / total;
     return {
-      net: net.toFixed(2),
+      net,
       wins,
-      losses: total - wins,
-      winRate,
-      avgPnL: avgPnL.toFixed(2),
+      losses: ex.length - wins,
+      winRate: Math.round((wins / ex.length) * 100),
+      avgPnL: net / ex.length,
     };
   }, [todayEntries]);
+
+  // ─── Per-day totals (week strip + 14-day chart) ──────────────────────
+  const byDay = useMemo(() => {
+    const m = {};
+    entries.forEach((e) => {
+      const k = entryDay(e);
+      if (!k) return;
+      const o = m[k] || (m[k] = { count: 0, pnl: 0, executed: 0 });
+      o.count++;
+      if (isExec(e)) {
+        o.pnl += Number(e.pnl) || 0;
+        o.executed++;
+      }
+    });
+    return m;
+  }, [entries]);
+
+  const weekDays = useMemo(() => {
+    const base = parseISO(selectedDate);
+    return eachDayOfInterval({
+      start: startOfWeek(base, { weekStartsOn: 1 }),
+      end: endOfWeek(base, { weekStartsOn: 1 }),
+    }).map((d) => ({ date: d, key: dayKey(d), ...(byDay[dayKey(d)] || { count: 0, pnl: 0, executed: 0 }) }));
+  }, [selectedDate, byDay]);
+
+  const last14 = useMemo(() => {
+    const end = new Date();
+    return Array.from({ length: 14 }, (_, i) => {
+      const d = subDays(end, 13 - i);
+      return { date: d, key: dayKey(d), pnl: (byDay[dayKey(d)] || {}).pnl || 0 };
+    });
+  }, [byDay]);
+  const last14Net = last14.reduce((s, d) => s + d.pnl, 0);
+
+  // ─── Spider-web scorecard: selected day vs last 30 days ──────────────
+  const scoreDay = useMemo(() => scoreEntries(todayEntries), [todayEntries]);
+  const score30 = useMemo(() => {
+    const from = dayKey(subDays(new Date(), 29));
+    return scoreEntries(entries.filter((e) => entryDay(e) >= from && entryDay(e) <= todayKey));
+  }, [entries, todayKey]);
+  const scoreMain = scoreDay || score30;
+
+  const chartText = isDark ? "#9ca3af" : "#4b5563";
+  const chartGrid = isDark ? "rgba(148,163,184,0.16)" : "rgba(100,116,139,0.2)";
+
+  const radarData = {
+    labels: SCORE_LABELS,
+    datasets: [
+      score30 && {
+        label: "Last 30 days",
+        data: score30.scores,
+        borderColor: isDark ? "rgba(156,163,175,0.9)" : "rgba(107,114,128,0.9)",
+        backgroundColor: "rgba(156,163,175,0.08)",
+        borderDash: [5, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+      },
+      scoreDay && {
+        label: selectedIsToday ? "Today" : format(parseISO(selectedDate), "d MMM"),
+        data: scoreDay.scores,
+        borderColor: ac.hex,
+        backgroundColor: ac.hex + "40",
+        borderWidth: 2.5,
+        pointBackgroundColor: ac.hex,
+        pointBorderColor: "#fff",
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      },
+    ].filter(Boolean),
+  };
+
+  const radarOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      r: {
+        min: 0,
+        max: 100,
+        ticks: { display: false, stepSize: 25 },
+        grid: { color: chartGrid },
+        angleLines: { color: chartGrid },
+        pointLabels: { color: chartText, font: { size: 11, weight: "600" } },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "bottom",
+        labels: { color: chartText, usePointStyle: true, boxWidth: 8, padding: 14 },
+      },
+      tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${Math.round(c.parsed.r)}%` } },
+    },
+  };
+
+  const barData = {
+    labels: last14.map((d) => format(d.date, "d MMM")),
+    datasets: [
+      {
+        data: last14.map((d) => Number(d.pnl.toFixed(2))),
+        backgroundColor: last14.map((d) => {
+          const base = d.pnl >= 0 ? "#10b981" : "#f43f5e";
+          return d.key === selectedDate ? base : base + "88";
+        }),
+        borderRadius: 6,
+        maxBarThickness: 28,
+      },
+    ],
+  };
+
+  const barOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    onClick: (_evt, els) => {
+      if (els.length) setSelectedDate(last14[els[0].index].key);
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (c) =>
+            ` ${c.parsed.y >= 0 ? "+" : "-"}$${Math.abs(c.parsed.y).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+        },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: chartText, maxRotation: 0, autoSkipPadding: 12 } },
+      y: { grid: { color: chartGrid }, ticks: { color: chartText, maxTicksLimit: 5 } },
+    },
+  };
+
+  const openNewEntry = () => {
+    if (!isAccountReady) return;
+    setEditingEntry(null);
+    setForm({
+      openDateTime: selectedIsToday
+        ? formatDateTimeLocal()
+        : `${selectedDate}T${formatDateTimeLocal().slice(11)}`,
+      closeDateTime: selectedIsToday
+        ? formatDateTimeLocal()
+        : `${selectedDate}T${formatDateTimeLocal().slice(11)}`,
+      pair: "",
+      direction: "Long",
+      entry: "",
+      exit: "",
+      stopLoss: "",
+      takeProfit: "",
+      notes: "",
+      pnl: "",
+      rr: "",
+      lotSize: "0.1",
+      status: "executed",
+      confluences: [],
+      screenshotUrl: "",
+    });
+    setModalOpen(true);
+  };
 
   // ─── Save entry ────────────────────────────────────────────────────
   const saveEntry = async (e) => {
@@ -307,8 +582,10 @@ export default function DailyJournal({ currentAccount }) {
       return;
     }
 
+    // Build payload with both open and close datetimes
     const payload = {
-      date: form.date || formatDateInput(),
+      openDateTime: form.openDateTime || formatDateTimeLocal(),
+      closeDateTime: form.status === "pending" ? null : (form.closeDateTime || null),
       pair: form.pair?.toUpperCase() || "",
       direction: form.direction || "Long",
       entry: Number(form.entry) || 0,
@@ -350,10 +627,12 @@ export default function DailyJournal({ currentAccount }) {
         );
         setSuccessMsg("Entry added successfully!");
       }
+      setSelectedDate(String(payload.openDateTime).slice(0, 10));
       setModalOpen(false);
       setEditingEntry(null);
       setForm({
-        date: formatDateInput(),
+        openDateTime: formatDateTimeLocal(),
+        closeDateTime: formatDateTimeLocal(),
         pair: "",
         direction: "Long",
         entry: "",
@@ -433,45 +712,129 @@ export default function DailyJournal({ currentAccount }) {
           ? "bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100"
           : "bg-gradient-to-br from-gray-50 via-white to-gray-100 text-gray-900"}`}
     >
-      <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
+      <div className="max-w-7xl mx-auto space-y-5 sm:space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-0 z-10 bg-inherit py-2">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
-              Daily Journal – {currentAccount.name}
+            <h1
+              className="text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-clip-text text-transparent"
+              style={{ backgroundImage: `linear-gradient(90deg, ${ac.hex}, ${ac.hex2})` }}
+            >
+              Daily Journal
             </h1>
-            <p className="text-sm sm:text-base mt-1 opacity-80">
-              Log trades with auto PnL (Leverage {accountLeverage}:1)
+            <p className="text-sm sm:text-base mt-1.5 opacity-70">
+              {currentAccount.name} · Auto P&L at {accountLeverage}:1 leverage
             </p>
           </div>
-          <Button
-            onClick={() => {
-              if (!isAccountReady) return;
-              setModalOpen(true);
-              setEditingEntry(null);
-              setForm({
-                date: formatDateInput(),
-                pair: "",
-                direction: "Long",
-                entry: "",
-                exit: "",
-                stopLoss: "",
-                takeProfit: "",
-                notes: "",
-                pnl: "",
-                rr: "",
-                lotSize: "0.1",
-                status: "executed",
-                confluences: [],
-                screenshotUrl: "",
-              });
-            }}
-            disabled={!isAccountReady}
-            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white shadow-md py-5 sm:py-4 text-base font-semibold border-2 border-indigo-400 dark:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus size={18} className="mr-2" /> Add Entry
-          </Button>
+
+          <div className="flex flex-col gap-3 lg:items-end">
+            {/* Accent theme picker */}
+            <div className="flex items-center gap-2" role="radiogroup" aria-label="Accent theme">
+              <Palette size={16} className="opacity-60" />
+              {Object.entries(ACCENTS).map(([key, a]) => (
+                <button
+                  key={key}
+                  onClick={() => setAccent(key)}
+                  title={a.name}
+                  aria-label={`${a.name} theme`}
+                  aria-pressed={accent === key}
+                  className={`h-6 w-6 rounded-full transition-transform ${
+                    accent === key
+                      ? "ring-2 ring-offset-2 ring-offset-transparent ring-gray-500 dark:ring-white/70 scale-110"
+                      : "opacity-80 hover:scale-110"
+                  }`}
+                  style={{ backgroundImage: `linear-gradient(135deg, ${a.hex}, ${a.hex2})` }}
+                />
+              ))}
+            </div>
+            <Button
+              onClick={openNewEntry}
+              disabled={!isAccountReady}
+              style={{ backgroundColor: ac.hex }}
+              className="hidden md:inline-flex hover:brightness-110 text-white shadow-md px-6 py-5 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Plus size={18} className="mr-2" /> Add Entry
+            </Button>
+          </div>
         </div>
+
+        {/* Day navigator + week strip */}
+        <Card className={`${CARD} p-3 sm:p-5`}>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={() => setSelectedDate(dayKey(subDays(parseISO(selectedDate), 1)))}
+              className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-gray-100 dark:bg-gray-900/50 hover:brightness-95 dark:hover:brightness-125"
+              aria-label="Previous day"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <div className="text-center min-w-0">
+              <div className="text-base sm:text-xl font-bold truncate">{selectedLabel}</div>
+              <div className="text-xs opacity-60 mt-0.5">
+                {selectedIsToday ? "Today · " : ""}
+                {todayEntries.length} {todayEntries.length === 1 ? "entry" : "entries"}
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedDate(dayKey(addDays(parseISO(selectedDate), 1)))}
+              className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-gray-100 dark:bg-gray-900/50 hover:brightness-95 dark:hover:brightness-125"
+              aria-label="Next day"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mt-4">
+            {weekDays.map((d) => {
+              const active = d.key === selectedDate;
+              const tone =
+                d.executed === 0
+                  ? d.count > 0
+                    ? "bg-amber-500"
+                    : "bg-transparent"
+                  : d.pnl >= 0
+                  ? "bg-emerald-500"
+                  : "bg-rose-500";
+              return (
+                <button
+                  key={d.key}
+                  onClick={() => setSelectedDate(d.key)}
+                  className={`rounded-xl py-2 flex flex-col items-center gap-1 transition-all ${
+                    active ? "text-white shadow-md" : "bg-gray-100/80 dark:bg-gray-900/40 hover:brightness-95 dark:hover:brightness-125"
+                  }`}
+                  style={active ? { backgroundColor: ac.hex } : undefined}
+                >
+                  <span className="text-[10px] sm:text-xs uppercase tracking-wide opacity-80">{format(d.date, "EEE")}</span>
+                  <span className="text-base sm:text-lg font-bold leading-none">{format(d.date, "d")}</span>
+                  <span className={`h-1.5 w-1.5 rounded-full ${active && d.count ? "bg-white" : tone}`} />
+                  <span className={`hidden sm:block text-[11px] font-semibold ${d.count ? "" : "opacity-0"} ${active ? "" : d.pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                    {d.pnl >= 0 ? "+" : "-"}{Math.abs(d.pnl).toFixed(0)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2 mt-4">
+            {!selectedIsToday && (
+              <button
+                onClick={() => setSelectedDate(todayKey)}
+                className="px-3 py-2 rounded-xl text-sm font-semibold text-white hover:brightness-110"
+                style={{ backgroundColor: ac.hex }}
+              >
+                Back to today
+              </button>
+            )}
+            <input
+              type="date"
+              value={selectedDate}
+              max="2100-12-31"
+              onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+              className="ml-auto px-3 py-2 rounded-xl text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
+              aria-label="Jump to date"
+            />
+          </div>
+        </Card>
 
         {/* Feedback */}
         {error && (
@@ -488,37 +851,87 @@ export default function DailyJournal({ currentAccount }) {
         )}
 
         {/* Metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card className="p-4 rounded-xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md">
-            <div className="text-xs font-medium opacity-70 mb-1">Net P&L Today</div>
-            <div
-              className={`text-xl sm:text-2xl font-bold ${
-                metrics.net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-              }`}
-            >
-              {metrics.net >= 0 ? "+" : "-"}${formatNumber(Math.abs(metrics.net))}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          {[
+            {
+              label: "Net P&L",
+              value: `${metrics.net >= 0 ? "+" : "-"}$${formatNumber(Math.abs(metrics.net))}`,
+              cls: metrics.net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+            },
+            { label: "Win Rate", value: `${metrics.winRate}%`, style: { color: ac.hex } },
+            { label: "Wins / Losses", value: `${metrics.wins} / ${metrics.losses}`, cls: "text-violet-600 dark:text-violet-400" },
+            {
+              label: "Avg P&L",
+              value: `${metrics.avgPnL >= 0 ? "+" : "-"}$${formatNumber(Math.abs(metrics.avgPnL))}`,
+              cls: metrics.avgPnL >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+            },
+          ].map((m) => (
+            <Card key={m.label} className={`${CARD} p-3 sm:p-4`}>
+              <div className="text-xs font-medium opacity-70 mb-1">{m.label}</div>
+              <div className={`text-xl sm:text-2xl font-bold ${m.cls || ""}`} style={m.style}>
+                {m.value}
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        {/* Scorecard radar + last 14 days */}
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 lg:gap-6">
+          <Card className={`${CARD} xl:col-span-2 p-4 sm:p-6`}>
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Target className="h-5 w-5" style={{ color: ac.hex }} />
+                  Journal Scorecard
+                </h3>
+                <p className="text-xs opacity-60 mt-1">
+                  {scoreDay ? `${selectedIsToday ? "Today" : format(parseISO(selectedDate), "d MMM")} vs last 30 days` : "Last 30 days (no entries on this day)"}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-xs opacity-60">Discipline</div>
+                <div className="text-3xl font-extrabold leading-none mt-1" style={{ color: ac.hex }}>
+                  {scoreMain ? scoreMain.score : "—"}
+                  <span className="text-sm font-semibold opacity-50">/100</span>
+                </div>
+              </div>
             </div>
+
+            {scoreMain ? (
+              <>
+                <div className="relative h-72 sm:h-80">
+                  <Radar data={radarData} options={radarOptions} />
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-4">
+                  {SCORE_LABELS.map((label, i) => (
+                    <div key={label} className="rounded-xl bg-gray-100/70 dark:bg-gray-900/40 px-2 py-2 text-center">
+                      <div className="text-[10px] sm:text-xs opacity-60 truncate">{label}</div>
+                      <div className="text-sm sm:text-base font-bold">{scoreMain.scores[i]}%</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="h-72 flex flex-col items-center justify-center text-center opacity-60 gap-2">
+                <Target size={40} className="opacity-60" />
+                <p className="text-sm">Log entries to see your scorecard.</p>
+              </div>
+            )}
           </Card>
-          <Card className="p-4 rounded-xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md">
-            <div className="text-xs font-medium opacity-70 mb-1">Win Rate</div>
-            <div className="text-xl sm:text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-              {metrics.winRate}%
+
+          <Card className={`${CARD} xl:col-span-3 p-4 sm:p-6`}>
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" style={{ color: ac.hex }} />
+                Last 14 Days
+              </h3>
+              <p className={`text-sm font-semibold mt-1 ${last14Net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                {last14Net >= 0 ? "+" : "-"}${formatNumber(Math.abs(last14Net))}
+                <span className="font-normal opacity-60"> · tap a bar to open that day</span>
+              </p>
             </div>
-          </Card>
-          <Card className="p-4 rounded-xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md">
-            <div className="text-xs font-medium opacity-70 mb-1">Wins / Losses</div>
-            <div className="text-xl sm:text-2xl font-bold text-violet-600 dark:text-violet-400">
-              {metrics.wins} / {metrics.losses}
-            </div>
-          </Card>
-          <Card className="p-4 rounded-xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md">
-            <div className="text-xs font-medium opacity-70 mb-1">Avg P&L</div>
-            <div
-              className={`text-xl sm:text-2xl font-bold ${
-                metrics.avgPnL >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-              }`}
-            >
-              {metrics.avgPnL >= 0 ? "+" : "-"}${formatNumber(Math.abs(metrics.avgPnL))}
+            <div className="relative h-64 sm:h-80 xl:h-[22rem]">
+              <Bar data={barData} options={barOptions} />
             </div>
           </Card>
         </div>
@@ -542,17 +955,15 @@ export default function DailyJournal({ currentAccount }) {
         ) : todayEntries.length === 0 ? (
           <Card className="p-6 sm:p-8 text-center bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-2xl">
             <p className="text-lg sm:text-xl font-medium opacity-70 mb-3">
-              No entries logged today
+              {selectedIsToday ? "No entries logged today" : "No entries on this day"}
             </p>
             <p className="text-sm opacity-60 mb-5">
               Add your first journal entry to start tracking
             </p>
             <Button
-              onClick={() => {
-                setModalOpen(true);
-                setEditingEntry(null);
-              }}
-              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-semibold border-2 border-indigo-400"
+              onClick={openNewEntry}
+              style={{ backgroundColor: ac.hex }}
+              className="w-full sm:w-auto hover:brightness-110 text-white font-semibold"
             >
               <Plus size={18} className="mr-2" /> Log First Entry
             </Button>
@@ -562,8 +973,13 @@ export default function DailyJournal({ currentAccount }) {
             {todayEntries.map((entry) => (
               <Card
                 key={entry.id}
-                className="p-4 sm:p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-md hover:shadow-xl transition-all duration-200 group"
+                className={`${CARD} relative overflow-hidden p-4 sm:p-5 pl-5 sm:pl-6 group`}
               >
+                <span
+                  className={`absolute left-0 top-0 bottom-0 w-1.5 ${
+                    entry.status === "pending" ? "bg-amber-500" : Number(entry.pnl || 0) >= 0 ? "bg-emerald-500" : "bg-rose-500"
+                  }`}
+                />
                 <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-3">
@@ -590,11 +1006,12 @@ export default function DailyJournal({ currentAccount }) {
                           )}
                         </div>
                         <div className="text-sm opacity-70 flex flex-wrap gap-3 mt-1">
-                          <span>
-                            {entry.date ? formatDateInput(new Date(entry.date)) : "—"}
-                          </span>
+                          <span>Open: {entry.openDateTime || entry.date ? new Date(entry.openDateTime || entry.date).toLocaleString() : "—"}</span>
+                          {isExec(entry) && entry.closeDateTime && (
+                            <span>Close: {new Date(entry.closeDateTime).toLocaleString()}</span>
+                          )}
                           <span>Lot: {entry.lotSize || "—"}</span>
-                          {entry.status === "executed" && entry.rr && <span>R:R {entry.rr}</span>}
+                          {isExec(entry) && entry.rr && <span>R:R {entry.rr}</span>}
                         </div>
                       </div>
                     </div>
@@ -665,7 +1082,8 @@ export default function DailyJournal({ currentAccount }) {
                         onClick={() => {
                           setEditingEntry(entry);
                           setForm({
-                            date: entry.date || formatDateInput(),
+                            openDateTime: entry.openDateTime || (entry.date ? `${String(entry.date).slice(0, 10)}T00:00` : formatDateTimeLocal()),
+                            closeDateTime: entry.closeDateTime || formatDateTimeLocal(),
                             pair: entry.pair || "",
                             direction: entry.direction || "Long",
                             entry: entry.entry?.toString() || "",
@@ -707,14 +1125,18 @@ export default function DailyJournal({ currentAccount }) {
 
         {/* Add / Edit Entry Modal */}
         {modalOpen && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-[1000] p-0 sm:p-4 overflow-y-auto">
             <div
-              className={`w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden border backdrop-blur-md
+              ref={modalContentRef}
+              className={`w-full max-w-2xl rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden border backdrop-blur-md
                 ${isDark ? "bg-gray-900/95 border-gray-700/60" : "bg-white/95 border-gray-200/60"}`}
             >
-              <div className="p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+              <div className="p-5 sm:p-6 max-h-[92dvh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-5 sticky top-0 bg-inherit z-10">
-                  <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
+                  <h2
+                    className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent"
+                    style={{ backgroundImage: `linear-gradient(90deg, ${ac.hex}, ${ac.hex2})` }}
+                  >
                     {editingEntry ? "Edit Entry" : "Add New Entry"}
                   </h2>
                   <Button variant="ghost" size="icon" onClick={() => setModalOpen(false)}>
@@ -722,15 +1144,28 @@ export default function DailyJournal({ currentAccount }) {
                   </Button>
                 </div>
                 <form onSubmit={saveEntry} className="space-y-4 sm:space-y-5">
+                  {/* Date/Time row */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label className="block text-sm font-medium mb-1.5">Date</Label>
+                      <Label className="block text-sm font-medium mb-1.5">Open Date & Time</Label>
                       <Input
-                        type="date"
-                        value={form.date}
-                        onChange={(e) => setForm({ ...form, date: e.target.value })}
+                        type="datetime-local"
+                        value={form.openDateTime}
+                        onChange={(e) => setForm({ ...form, openDateTime: e.target.value })}
                       />
                     </div>
+                    <div>
+                      <Label className="block text-sm font-medium mb-1.5">Close Date & Time</Label>
+                      <Input
+                        type="datetime-local"
+                        value={form.closeDateTime}
+                        onChange={(e) => setForm({ ...form, closeDateTime: e.target.value })}
+                        disabled={form.status === "pending"}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="block text-sm font-medium mb-1.5">Pair / Asset</Label>
                       <Input
@@ -745,9 +1180,6 @@ export default function DailyJournal({ currentAccount }) {
                         ))}
                       </datalist>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <Label className="block text-sm font-medium mb-1.5">Direction</Label>
                       <select
@@ -761,6 +1193,9 @@ export default function DailyJournal({ currentAccount }) {
                         <option value="Short">Short</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <Label className="block text-sm font-medium mb-1.5">Lot Size</Label>
                       <Input
@@ -870,49 +1305,53 @@ export default function DailyJournal({ currentAccount }) {
                     />
                   </div>
 
-                  {/* Screenshot – simplified: URL input only, file upload as fallback */}
+                  {/* Screenshot – URL input + file upload */}
                   <div>
                     <Label className="block text-sm font-medium mb-1.5">Chart Screenshot</Label>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center gap-2">
-                        <Link size={18} className="text-gray-400" />
-                        <Input
-                          type="url"
-                          value={form.screenshotUrl}
-                          onChange={(e) => setForm({ ...form, screenshotUrl: e.target.value })}
-                          placeholder="Paste image URL here (e.g., from TradingView)"
-                          className="flex-1"
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => document.getElementById("image-upload").click()}
+                            disabled={uploadingImage}
+                            className="relative border-2 flex-1"
+                          >
+                            {uploadingImage ? (
+                              <Loader2 className="animate-spin h-5 w-5" />
+                            ) : (
+                              <>
+                                <Upload size={18} className="mr-2" />
+                                Upload Image
+                              </>
+                            )}
+                          </Button>
+                          <span className="text-xs opacity-60">or paste</span>
+                        </div>
+                        <input
+                          id="image-upload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImageUpload(file);
+                          }}
                         />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => document.getElementById("image-upload").click()}
-                          disabled={uploadingImage}
-                          className="border-2"
-                        >
-                          {uploadingImage ? (
-                            <Loader2 className="animate-spin mr-2 h-5 w-5" />
-                          ) : (
-                            <>
-                              <Upload size={18} className="mr-2" />
-                              Upload Image File
-                            </>
-                          )}
-                        </Button>
-                        <span className="text-xs opacity-60">(optional)</span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Link size={18} className="text-gray-400" />
+                          <Input
+                            type="url"
+                            value={form.screenshotUrl}
+                            onChange={(e) => setForm({ ...form, screenshotUrl: e.target.value })}
+                            placeholder="https://i.imgur.com/your-image.png"
+                            className="flex-1"
+                          />
+                        </div>
                       </div>
-                      <input
-                        id="image-upload"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleImageUpload(file);
-                        }}
-                      />
                     </div>
                     {form.screenshotUrl && (
                       <div className="mt-2 relative inline-block">
@@ -946,12 +1385,13 @@ export default function DailyJournal({ currentAccount }) {
                     />
                   </div>
 
-                  {/* Action buttons – darker and more visible */}
+                  {/* Action buttons */}
                   <div className="flex flex-col sm:flex-row gap-4 pt-4">
                     <Button
                       type="submit"
                       disabled={uploadingImage}
-                      className="flex-1 bg-indigo-700 hover:bg-indigo-800 text-white py-6 sm:py-4 text-base font-bold border-2 border-indigo-500 shadow-lg disabled:opacity-50"
+                      style={{ backgroundColor: ac.hex }}
+                      className="flex-1 hover:brightness-110 text-white py-6 sm:py-4 text-base font-bold shadow-lg disabled:opacity-50"
                     >
                       {uploadingImage ? (
                         <Loader2 className="animate-spin mr-2 h-5 w-5" />
@@ -973,6 +1413,17 @@ export default function DailyJournal({ currentAccount }) {
           </div>
         )}
 
+        {/* Floating add button (phones – sits above the bottom tab bar) */}
+        <button
+          onClick={openNewEntry}
+          disabled={!isAccountReady}
+          aria-label="Add entry"
+          style={{ backgroundColor: ac.hex }}
+          className="md:hidden fixed bottom-24 right-4 z-[950] w-14 h-14 rounded-full text-white shadow-lg flex items-center justify-center active:scale-95 hover:brightness-110 disabled:opacity-50"
+        >
+          <Plus size={28} />
+        </button>
+
         {/* Delete Confirmation */}
         {deleteModalOpen && (
           <DeleteConfirmModal
@@ -982,11 +1433,11 @@ export default function DailyJournal({ currentAccount }) {
               setEntryToDelete(null);
             }}
             onConfirm={entryToDelete ? () => deleteEntry(entryToDelete) : clearTodayEntries}
-            title={entryToDelete ? "Delete Entry" : "Clear Today's Entries"}
+            title={entryToDelete ? "Delete Entry" : "Clear Day's Entries"}
             message={
               entryToDelete
                 ? "Are you sure you want to delete this journal entry? This action cannot be undone."
-                : `Are you sure you want to delete all ${todayEntries.length} entries from today?`
+                : `Are you sure you want to delete all ${todayEntries.length} entries from this day?`
             }
           />
         )}
