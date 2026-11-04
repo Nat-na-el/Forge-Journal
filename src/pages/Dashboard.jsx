@@ -717,12 +717,12 @@ export default function Dashboard({ currentAccount }) {
   }
 
   return (
-    <div className={`relative min-h-screen w-full p-4 sm:p-6 lg:p-8 text-gray-100 ${isDark ? "bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950" : "bg-gradient-to-br from-gray-50 via-white to-gray-100"}`}>
+    <div className={`relative min-h-screen w-full p-2 sm:p-6 lg:p-8 text-gray-100 ${isDark ? "bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950" : "bg-gradient-to-br from-gray-50 via-white to-gray-100"}`}>
       {/* Header + Account Details */}
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
-            <h1 className="text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl sm:text-5xl font-extrabold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
               Forgex Dashboard
             </h1>
             <p className="mt-1.5 text-gray-400">
@@ -735,11 +735,11 @@ export default function Dashboard({ currentAccount }) {
             </p>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={syncFromMT5}
               disabled={syncing}
-              className={`flex items-center gap-2.5 px-6 py-3.5 rounded-xl shadow-md transition-all duration-200 ${
+              className={`flex flex-1 sm:flex-none justify-center items-center gap-2 px-3 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base rounded-xl shadow-md transition-all duration-200 ${
                 syncing 
                   ? 'bg-gray-500 cursor-not-allowed' 
                   : currentAccount.mt5Connected
@@ -754,7 +754,7 @@ export default function Dashboard({ currentAccount }) {
 
             <button
               onClick={() => setShowQuickAnalysis(true)}
-              className="flex items-center gap-2.5 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all duration-200"
+              className="flex flex-1 sm:flex-none justify-center items-center gap-2 px-3 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all duration-200"
             >
               <Zap size={18} />
               Quick Analysis
@@ -774,7 +774,7 @@ export default function Dashboard({ currentAccount }) {
         )}
 
         {/* Account Overview Card */}
-        <Card className="p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg">
+        <Card className="p-4 sm:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg">
           <h3 className="text-lg font-semibold mb-5 flex items-center gap-2 text-gray-900 dark:text-gray-100">
             <DollarSign className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
             Account Overview
@@ -970,7 +970,7 @@ export default function Dashboard({ currentAccount }) {
 
           {/* Recent Trades + Weekly Breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-            <Card className="lg:col-span-2 p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
+            <Card className="lg:col-span-2 p-3 sm:p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
                   <Activity className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
@@ -1029,7 +1029,7 @@ export default function Dashboard({ currentAccount }) {
             </Card>
 
             {/* Weekly Breakdown Card */}
-            <Card className="p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
+            <Card className="p-3 sm:p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
               <h3 className="text-lg font-semibold mb-5 flex items-center gap-2 text-gray-900 dark:text-gray-100">
                 <BarChart3 className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
                 Weekly Performance
@@ -1074,7 +1074,7 @@ export default function Dashboard({ currentAccount }) {
           </div>
 
           {/* Calendar (unchanged) */}
-          <Card className="p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg">
+          <Card className="p-3 sm:p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
               <div className="flex items-center gap-3">
                 <button
@@ -1113,14 +1113,14 @@ export default function Dashboard({ currentAccount }) {
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <div className="grid grid-cols-8 min-w-[640px] gap-1.5 sm:gap-2">
+            <div className="sm:overflow-x-auto">
+              <div className="grid grid-cols-7 sm:grid-cols-8 sm:min-w-[640px] gap-1 sm:gap-2">
                 {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Wk"].map((d) => (
                   <div
                     key={d}
-                    className={`text-xs font-medium text-center py-3 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                    className={`text-[10px] sm:text-xs font-medium text-center py-2 sm:py-3 ${d === "Wk" ? "hidden sm:block" : ""} ${isDark ? "text-gray-400" : "text-gray-600"}`}
                   >
-                    {d}
+                    {d === "Wk" ? d : d.slice(0, 1)}<span className="hidden sm:inline">{d === "Wk" ? "" : d.slice(1)}</span>
                   </div>
                 ))}
 
@@ -1139,7 +1139,7 @@ export default function Dashboard({ currentAccount }) {
                             key={di}
                             onClick={() => openDay(dayObj)}
                             className={`
-                              cursor-pointer aspect-square rounded-xl p-1.5 sm:p-2 flex flex-col justify-between border transition-all duration-300
+                              cursor-pointer aspect-square rounded-lg sm:rounded-xl p-0.5 sm:p-2 flex flex-col justify-between border transition-all duration-300
                               ${isCur
                                 ? isDark
                                   ? "bg-gray-900/70 border-indigo-500/30"
@@ -1164,15 +1164,16 @@ export default function Dashboard({ currentAccount }) {
                               {ds ? (
                                 <>
                                   <div
-                                    className={`font-bold text-xs sm:text-sm ${
+                                    className={`font-bold text-[10px] sm:text-sm leading-tight ${
                                       pnl >= 0
                                         ? "text-emerald-400"
                                         : "text-rose-400"
                                     }`}
                                   >
-                                    {pnl >= 0 ? "+" : ""}${Math.abs(pnl).toFixed(2)}
+                                    <span className="sm:hidden">{pnl >= 0 ? "+" : "-"}{Math.abs(pnl).toFixed(0)}</span>
+                                    <span className="hidden sm:inline">{pnl >= 0 ? "+" : ""}${Math.abs(pnl).toFixed(2)}</span>
                                   </div>
-                                  <div className={`text-[10px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                  <div className={`hidden sm:block text-[10px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                                     {ds.count}t • {ds.winRate}%
                                   </div>
                                 </>
@@ -1186,7 +1187,7 @@ export default function Dashboard({ currentAccount }) {
 
                       {/* Weekly Summary */}
                       <div
-                        className={`aspect-square rounded-xl p-1.5 sm:p-2 flex flex-col justify-center items-center border ${
+                        className={`hidden sm:flex aspect-square rounded-xl p-1.5 sm:p-2 flex-col justify-center items-center border ${
                           isDark ? "bg-gray-800/50 border-gray-700" : "bg-gray-100/50 border-gray-200"
                         }`}
                       >
@@ -1216,7 +1217,7 @@ export default function Dashboard({ currentAccount }) {
           {/* Floating Quick Add Button */}
           <button
             onClick={() => navigate("/trades/new")}
-            className="fixed bottom-6 right-6 z-[1000] w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg transition-all duration-200 flex items-center justify-center transform hover:scale-110 active:scale-95"
+            className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-[1000] w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg transition-all duration-200 flex items-center justify-center transform hover:scale-110 active:scale-95"
             aria-label="Add New Trade"
           >
             <span className="text-3xl font-bold leading-none">+</span>
