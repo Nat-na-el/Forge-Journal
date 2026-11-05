@@ -46,6 +46,3 @@ For Netlify:
 - [React Documentation](https://reactjs.org/)
 - [Create React App Documentation](https://facebook.github.io/create-react-app/docs/getting-started)
 - [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-=======
-# Forge Journal
->>>>>>> 4cd90778e1ec83726c8a8454fb687a7846e25102

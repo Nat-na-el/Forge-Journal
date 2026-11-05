@@ -1,0 +1,21 @@
+# dependencies
+node_modules
+
+# production build
+build
+
+# local databases
+*.db
+
+# environment variables
+.env
+.env.local
+.env.*.local
+
+# logs
+npm-debug.log*
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode
