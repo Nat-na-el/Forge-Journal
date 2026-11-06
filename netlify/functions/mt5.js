@@ -1,18 +1,18 @@
 // netlify/functions/mt5.js
-// "Sign in with MetaTrader 5" backend. Uses MetaApi (metaapi.cloud) to read a trader's
-// history with their INVESTOR (read-only) password, then signs them into Firebase.
+// "Connect MetaTrader 5" backend. A signed-in journal user connects an MT5 account with its INVESTOR
+// (read-only) password; MetaApi (metaapi.cloud) reads the history and the browser imports it as a journal account.
 //
-// Netlify environment variables (all required):
-//   (MetaApi token is stored in Firestore: collection mt5Config, document secrets, field metaapiToken)
-//   FIREBASE_SERVICE_ACCOUNT – the whole service-account JSON (Firebase console → Project settings →
-//                              Service accounts → Generate new private key), pasted as one value
+// Environment variable (Netlify):
+//   FIREBASE_SERVICE_ACCOUNT – service-account JSON (project_id, client_email, private_key)
+// Firestore (server-only, client rules deny it):
+//   mt5Config/secrets { metaapiToken }   – MetaApi API token (kept out of env: Netlify caps function env at 4 KB)
+//   mt5Credentials/{uid}_{login}          – bookkeeping for each connected account (no passwords stored)
 //
-// Actions (POST JSON { action, ... }). Every call is short so it fits Netlify's 10 s limit;
-// the browser polls "status" while MetaApi connects to the broker (usually 30–120 s, first login only).
-//   login  { server, login, password } -> { status:"ready", token } | { status:"pending", ticket }
-//   status { ticket }                   -> { status:"pending" } | { status:"ready", token }
-//   cancel { ticket }                   -> { ok:true }
-//   sync   { idToken, since? }          -> { status:"warming" } | { status:"ok", account, trades, deposits }
+// Actions (POST JSON, all need idToken = the user's Firebase ID token):
+//   connect { server, login, password } -> { status:"creating" } | { status:"pending", ticket }
+//   status  { ticket }                  -> { status:"pending" } | { status:"ready" }
+//   cancel  { ticket }                  -> { ok:true }
+//   sync    { login, since? }           -> { status:"warming" } | { status:"ok", account, trades, deposits }
 
 const crypto = require("crypto");
 const admin = require("firebase-admin");
@@ -88,16 +88,6 @@ const accountUrl = (id) => `${PROVISIONING}/users/current/accounts/${id}`;
 const clientBase = (acct) => `https://mt-client-api-v1.${acct.region || "vint-hill"}.agiliumtrade.ai`;
 
 const norm = (s) => String(s || "").trim();
-const uidFor = (server, login) =>
-  "mt5_" + crypto.createHash("sha256").update(`${norm(server).toLowerCase()}|${norm(login)}`).digest("hex").slice(0, 28);
-
-const hashPw = (pw, salt) => crypto.scryptSync(pw, salt, 32).toString("hex");
-const safeEq = (a, b) => {
-  const x = Buffer.from(a, "hex");
-  const y = Buffer.from(b, "hex");
-  return x.length === y.length && crypto.timingSafeEqual(x, y);
-};
-
 // Short-lived signed ticket so the browser can poll without re-sending the password.
 const ticketKey = () => crypto.createHash("sha256").update("mt5-ticket|" + process.env.FIREBASE_SERVICE_ACCOUNT).digest();
 function signTicket(payload) {
@@ -213,37 +203,57 @@ async function pageAll(url) {
 }
 
 // ── actions ─────────────────────────────────────────────────────────────────
-async function actionLogin(body, ip) {
+async function authUser(idToken) {
+  if (!idToken) throw new HttpError(401, "Please sign in again.");
+  try {
+    return (await admin.auth().verifyIdToken(idToken)).uid;
+  } catch {
+    throw new HttpError(401, "Session expired. Please sign in again.");
+  }
+}
+const credRef = (uid, login) => admin.firestore().collection(CREDS).doc(`${uid}_${login}`);
+const metaName = (uid, login) => `forge-${uid.slice(0, 8)}-${login}`;
+
+async function actionConnect(body, ip) {
+  const uid = await authUser(body.idToken);
   const server = norm(body.server);
   const login = norm(body.login);
   const password = String(body.password || "");
   if (!server || !/^\d{3,12}$/.test(login) || !password) throw new HttpError(400, "Enter your server, account number and investor password.");
+  if (rateLimited(`${ip}|${uid}`, 20)) throw new HttpError(429, "Too many attempts. Wait a few minutes and try again.");
 
-  const uid = uidFor(server, login);
-  if (rateLimited(`${ip}|${uid}`, 8)) throw new HttpError(429, "Too many attempts. Wait a few minutes and try again.");
-
-  const db = admin.firestore();
-  const ref = db.collection(CREDS).doc(uid);
+  const ref = credRef(uid, login);
   const snap = await withTimeout(ref.get(), 8000, "Database");
   const saved = snap.exists ? snap.data() : null;
 
-  // Known account + same password → instant sign-in
-  if (saved && saved.verified && saved.salt && safeEq(saved.hash, hashPw(password, saved.salt))) {
-    const token = await admin.auth().createCustomToken(uid, { mt5: true });
-    return { status: "ready", token, uid };
+  // A fixed transaction id per (user, account, password) makes retries safe: MetaApi treats them as one
+  // request, so slow broker-server lookups can finish across several short calls instead of timing out.
+  const txId = crypto.createHash("sha256").update(`${uid}|${login}|${server}|${password}`).digest("hex").slice(0, 32);
+  const resuming = !!(saved && !saved.verified && saved.txId === txId);
+
+  if (resuming && saved.accountId) {
+    return { status: "pending", ticket: signTicket({ uid, login, accountId: saved.accountId }) };
   }
 
-  // First time (or password changed): connect through MetaApi to prove the password is real.
-  if (saved && saved.accountId) await deleteMetaAccount(saved.accountId);
+  if (!resuming) {
+    // clear leftovers from earlier attempts so we never pile up duplicate MetaApi accounts
+    if (saved && saved.accountId) await deleteMetaAccount(saved.accountId);
+    try {
+      const { data } = await meta(`${PROVISIONING}/users/current/accounts?query=${encodeURIComponent(metaName(uid, login))}`);
+      const list = Array.isArray(data) ? data : (data && data.items) || [];
+      for (const a of list) {
+        if (a && a.name === metaName(uid, login)) await deleteMetaAccount(a._id || a.id);
+      }
+    } catch (_) { /* best effort */ }
+  }
 
-  const transactionId = crypto.randomUUID().replace(/-/g, "");
   let created;
-  for (let i = 0; i < 4; i++) {
+  try {
     created = await meta(`${PROVISIONING}/users/current/accounts`, {
       method: "POST",
-      headers: { "transaction-id": transactionId },
+      headers: { "transaction-id": txId },
       body: {
-        name: `forge-${login}`,
+        name: metaName(uid, login),
         type: "cloud-g2",
         login,
         password,
@@ -254,26 +264,29 @@ async function actionLogin(body, ip) {
         reliability: "regular",
       },
     });
-    if (created.status !== 202) break;
-    await new Promise((r) => setTimeout(r, 1500));
+  } catch (e) {
+    if (e.status !== 504) throw e;
+    created = { status: 202, data: null }; // still being set up on MetaApi's side
   }
-  const accountId = created && created.data && created.data.id;
-  if (!accountId) throw new HttpError(502, "MetaApi is still preparing the account. Please try again in a moment.");
+  const accountId = (created.data && created.data.id) || null;
 
-  const salt = crypto.randomBytes(16).toString("hex");
-  await ref.set({ server, login, salt, hash: hashPw(password, salt), accountId, verified: false, updatedAt: Date.now() });
-  return { status: "pending", ticket: signTicket({ uid, accountId }) };
+  await ref.set({ uid, server, login, txId, accountId, verified: false, updatedAt: Date.now() });
+  if (!accountId) return { status: "creating" };
+  return { status: "pending", ticket: signTicket({ uid, login, accountId }) };
 }
 
 async function actionStatus(body) {
-  const { uid, accountId } = readTicket(body.ticket);
-  const ref = admin.firestore().collection(CREDS).doc(uid);
+  const uid = await authUser(body.idToken);
+  const t = readTicket(body.ticket);
+  if (t.uid !== uid) throw new HttpError(403, "Not allowed.");
+  const { login, accountId } = t;
+  const ref = credRef(uid, login);
 
   let acct;
   try {
     acct = (await meta(accountUrl(accountId))).data;
   } catch (e) {
-    if (e.status === 404) throw new HttpError(410, "Connection was cancelled. Please sign in again.");
+    if (e.status === 404) throw new HttpError(410, "Connection was cancelled. Please try again.");
     throw e;
   }
   if (acct.state === "DEPLOY_FAILED") {
@@ -290,34 +303,33 @@ async function actionStatus(body) {
   if (info.investorMode === false) {
     await deleteMetaAccount(accountId);
     await ref.delete();
-    throw new HttpError(422, "That looks like your MASTER (trading) password. For safety, sign in with your INVESTOR (read-only) password.");
+    throw new HttpError(422, "That looks like your MASTER (trading) password. For safety, use your INVESTOR (read-only) password.");
   }
 
   await ref.update({ verified: true, updatedAt: Date.now() });
-  const token = await admin.auth().createCustomToken(uid, { mt5: true });
-  return { status: "ready", token, uid };
+  return { status: "ready" };
 }
 
 async function actionCancel(body) {
-  const { uid, accountId } = readTicket(body.ticket);
-  const ref = admin.firestore().collection(CREDS).doc(uid);
+  const uid = await authUser(body.idToken);
+  const t = readTicket(body.ticket);
+  if (t.uid !== uid) throw new HttpError(403, "Not allowed.");
+  const ref = credRef(uid, t.login);
   const snap = await ref.get();
   if (snap.exists && !snap.data().verified) {
-    await deleteMetaAccount(accountId);
+    await deleteMetaAccount(t.accountId);
     await ref.delete();
   }
   return { ok: true };
 }
 
 async function actionSync(body) {
-  if (!body.idToken) throw new HttpError(401, "Not signed in.");
-  let decoded;
-  try { decoded = await admin.auth().verifyIdToken(body.idToken); } catch { throw new HttpError(401, "Session expired. Sign in again."); }
-  const uid = decoded.uid;
-  if (!uid.startsWith("mt5_")) throw new HttpError(403, "This sign-in is not linked to MetaTrader.");
+  const uid = await authUser(body.idToken);
+  const login = norm(body.login);
+  if (!/^\d{3,12}$/.test(login)) throw new HttpError(400, "Missing MT5 account number.");
 
-  const snap = await admin.firestore().collection(CREDS).doc(uid).get();
-  if (!snap.exists || !snap.data().verified) throw new HttpError(403, "MetaTrader account is not verified.");
+  const snap = await withTimeout(credRef(uid, login).get(), 8000, "Database");
+  if (!snap.exists || !snap.data().verified) throw new HttpError(403, "This MetaTrader account is not connected yet.");
   const { accountId } = snap.data();
 
   const acct = (await meta(accountUrl(accountId))).data;
@@ -364,7 +376,7 @@ exports.handler = async (event) => {
     const body = JSON.parse(event.body || "{}");
     const ip = (event.headers["x-nf-client-connection-ip"] || event.headers["x-forwarded-for"] || "ip").split(",")[0];
     switch (body.action) {
-      case "login": return json(200, await actionLogin(body, ip));
+      case "connect": return json(200, await actionConnect(body, ip));
       case "status": return json(200, await actionStatus(body));
       case "cancel": return json(200, await actionCancel(body));
       case "sync": return json(200, await actionSync(body));
