@@ -41,3 +41,34 @@
     "start": "react-app-rewired start",
     "build": "react-app-rewired build",
     "test": "react-app-rewired test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "description": "Tradeass is a program designed to help users journal while backtesting trading strategies.",
+  "main": "config-overrides.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nat-na-el/Tradeas.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Nat-na-el/Tradeas/issues"
+  },
+  "license": "ISC"
+}
