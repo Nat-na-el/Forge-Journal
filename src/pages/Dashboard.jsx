@@ -13,6 +13,7 @@ import {
 } from "date-fns";
 import { Card } from "../components/ui/card";
 import { useNavigate } from "react-router-dom";
+import { syncMT5Account } from "../lib/mt5client";
 import { useTheme } from "../Theme-provider";
 import {
   TrendingUp,
@@ -284,7 +285,7 @@ export default function Dashboard({ currentAccount }) {
     // Check if MT5 is connected
     if (!currentAccount.mt5Connected) {
       setSyncMessage({ 
-        text: "Please connect your MT5 account first (click 'Connect MT5' in sidebar)", 
+        text: "Please connect your MT5 account first (open the account menu and tap 'Connect MT5 account')", 
         type: "error" 
       });
       setTimeout(() => setSyncMessage({ text: "", type: "" }), 5000);
@@ -302,65 +303,17 @@ export default function Dashboard({ currentAccount }) {
     setSyncMessage({ text: "Syncing trades from MT5...", type: "info" });
 
     try {
-      // Get last 30 days of trades
-      const toDate = new Date().toISOString().split('T')[0];
-      const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      // Use your Fly.io backend with the stored credentials
-      const response = await fetch(`https://mt-nodejs.fly.dev/api/sync-trades`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await user.getIdToken()}`
-        },
-        body: JSON.stringify({
-          accountId: currentAccount.id,
-          fromDate,
-          toDate
-        })
+      // New MetaApi-based sync (read-only investor connection). Never creates duplicates.
+      const r = await syncMT5Account({ login: currentAccount.mt5Login, server: currentAccount.mt5Server });
+
+      setSyncMessage({
+        text: `Synced from MT5: ${r.added} new trade${r.added === 1 ? "" : "s"}, ${r.updated} updated.`,
+        type: "success"
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Sync failed: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Format trades to match your app's structure
-      const formattedTrades = data.trades.map(trade => ({
-        pair: trade.symbol,
-        direction: trade.type === 'BUY' ? 'Long' : 'Short',
-        entry: trade.entry,
-        exit: trade.exit,
-        pnl: trade.profit,
-        date: trade.date.split('T')[0],
-        lotSize: trade.volume,
-        stopLoss: trade.sl || 0,
-        takeProfit: trade.tp || 0,
-        rr: trade.profit && trade.entry ? 
-          (trade.profit / (trade.entry * trade.volume)).toFixed(2) : "",
-      }));
-      
-      // Save to Firestore
-      const batch = writeBatch(db);
-      formattedTrades.forEach(trade => {
-        const docRef = doc(collection(db, 'users', user.uid, 'accounts', currentAccount.id, 'trades'));
-        batch.set(docRef, {
-          ...trade,
-          createdAt: serverTimestamp(),
-        });
-      });
-      await batch.commit();
-      
-      setSyncMessage({ 
-        text: `Successfully synced ${formattedTrades.length} trades from MT5!`, 
-        type: "success" 
-      });
-      
+
       // Refresh the trades display
       await refreshTrades();
-      
+
     } catch (error) {
       console.error('Sync failed:', error);
       setSyncMessage({ 
