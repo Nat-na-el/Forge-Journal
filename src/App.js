@@ -362,7 +362,8 @@ function AppContent() {
         ...doc.data(),
       }));
 
-      if (loaded.length === 0) {
+      // MetaTrader users get their account created by the sync, not a blank default
+      if (loaded.length === 0 && !user.uid.startsWith("mt5_")) {
         const defaultData = {
           name: "Main Account",
           starting_balance: 10000,
