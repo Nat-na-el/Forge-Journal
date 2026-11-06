@@ -38,7 +38,15 @@ function initAdmin() {
   if (admin.apps.length) return;
   if (!process.env.FIREBASE_SERVICE_ACCOUNT) throw new HttpError(500, "Server is missing FIREBASE_SERVICE_ACCOUNT.");
   admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
+  // gRPC connections can hang inside serverless functions; REST is reliable.
+  try { admin.firestore().settings({ preferRest: true }); } catch (_) { /* already configured */ }
 }
+
+const withTimeout = (promise, ms, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new HttpError(504, `${label} did not respond in time. Please try again.`)), ms)),
+  ]);
 
 // The MetaApi token is long, and Netlify limits all function env vars to 4 KB in total.
 // So it lives in Firestore at mt5Config/secrets { metaapiToken } (server-only; client rules deny it).
@@ -47,7 +55,7 @@ let cachedToken = null;
 async function getMetaToken() {
   if (process.env.METAAPI_TOKEN) return process.env.METAAPI_TOKEN;
   if (cachedToken) return cachedToken;
-  const snap = await admin.firestore().collection("mt5Config").doc("secrets").get();
+  const snap = await withTimeout(admin.firestore().collection("mt5Config").doc("secrets").get(), 8000, "Database");
   const t = snap.exists && snap.data().metaapiToken;
   if (!t) throw new HttpError(500, "MetaApi token is not set (Firestore mt5Config/secrets.metaapiToken).");
   cachedToken = String(t).trim();
@@ -56,11 +64,17 @@ async function getMetaToken() {
 
 async function meta(url, { method = "GET", body, headers = {} } = {}) {
   const token = await getMetaToken();
-  const res = await fetch(url, {
-    method,
-    headers: { "auth-token": token, "Content-Type": "application/json", ...headers },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: { "auth-token": token, "Content-Type": "application/json", ...headers },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(9000),
+    });
+  } catch (e) {
+    throw new HttpError(504, "MetaApi did not respond in time. Please try again.");
+  }
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
@@ -210,7 +224,7 @@ async function actionLogin(body, ip) {
 
   const db = admin.firestore();
   const ref = db.collection(CREDS).doc(uid);
-  const snap = await ref.get();
+  const snap = await withTimeout(ref.get(), 8000, "Database");
   const saved = snap.exists ? snap.data() : null;
 
   // Known account + same password → instant sign-in
