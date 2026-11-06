@@ -102,4 +102,51 @@ export async function syncMT5(onProgress = () => {}) {
     },
   };
   if (!accSnap.exists()) {
-    await setDoc(accR
+    await setDoc(accRef, {
+      name: `MT5 ${login}`,
+      starting_balance: deposits > 0 ? deposits : Math.round(((account.balance ?? 0) - totalPnl) * 100) / 100,
+      createdAt: serverTimestamp(),
+      createdBy: user.uid,
+      ...base,
+    });
+  } else {
+    await updateDoc(accRef, base);
+  }
+
+  // Import trades
+  const tradesCol = collection(db, "users", user.uid, "accounts", accountId, "trades");
+  const existing = new Map((await getDocs(tradesCol)).docs.map((d) => [d.id, d.data()]));
+  let added = 0;
+  let updated = 0;
+  let batch = writeBatch(db);
+  let ops = 0;
+  const flush = async () => { if (ops) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
+
+  for (const t of trades) {
+    const { id, partial, ...fields } = t;
+    const prev = existing.get(id);
+    if (!prev) {
+      if (partial) continue; // can't build a full trade without its entry
+      batch.set(doc(tradesCol, id), {
+        ...fields,
+        notes: "",
+        confluences: [],
+        screenshotUrl: "",
+        createdAt: serverTimestamp(),
+      });
+      added++; ops++;
+    } else if (prev.status === "pending" && fields.status === "executed") {
+      // an open trade got closed since the last sync – fill in the result, keep the user's notes
+      batch.update(doc(tradesCol, id), {
+        exit: fields.exit, pnl: fields.pnl, status: "executed", closeDateTime: fields.closeDateTime,
+        commission: fields.commission, swap: fields.swap, rr: prev.rr || fields.rr,
+      });
+      updated++; ops++;
+    }
+    if (ops >= 400) await flush();
+  }
+  await flush();
+
+  localStorage.setItem("currentAccountId", accountId);
+  return { added, updated, accountId };
+}
