@@ -6,34 +6,13 @@ import { auth, googleProvider } from '../firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { loginWithMT5, syncMT5 } from '../lib/mt5';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState('email'); // 'email' | 'mt5'
-  const [mt5, setMt5] = useState({ server: '', login: '', password: '' });
-  const [progress, setProgress] = useState('');
   const navigate = useNavigate();
-
-  const handleMT5Login = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      await loginWithMT5(mt5, setProgress);
-      setProgress('Importing your trades…');
-      await syncMT5(setProgress);
-      navigate('/dashboard', { replace: true });
-    } catch (err) {
-      setError(err.message || 'MetaTrader sign-in failed.');
-    } finally {
-      setLoading(false);
-      setProgress('');
-    }
-  };
 
   // Sync Firebase user → local account system
   const syncFirebaseUserToLocalAccount = (user) => {
@@ -104,52 +83,6 @@ export default function Login() {
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-1 p-1 mb-6 rounded-lg bg-gray-100 dark:bg-gray-900">
-          {[['email', 'Email'], ['mt5', 'MetaTrader 5']].map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => { setMode(key); setError(''); }}
-              disabled={loading}
-              className={`py-2 text-sm font-medium rounded-md transition-colors ${
-                mode === key
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow'
-                  : 'text-gray-500 dark:text-gray-400'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {mode === 'mt5' ? (
-          <form onSubmit={handleMT5Login} className="space-y-5">
-            <div>
-              <Label htmlFor="mt5-server" className="text-gray-700 dark:text-gray-300">Server</Label>
-              <Input id="mt5-server" value={mt5.server} onChange={(e) => setMt5({ ...mt5, server: e.target.value })}
-                placeholder="e.g. GoatFunded-Server" required className="mt-1" disabled={loading} autoComplete="off" />
-            </div>
-            <div>
-              <Label htmlFor="mt5-login" className="text-gray-700 dark:text-gray-300">Login</Label>
-              <Input id="mt5-login" inputMode="numeric" value={mt5.login}
-                onChange={(e) => setMt5({ ...mt5, login: e.target.value.replace(/\D/g, '') })}
-                placeholder="MT5 account number" required className="mt-1" disabled={loading} autoComplete="off" />
-            </div>
-            <div>
-              <Label htmlFor="mt5-pass" className="text-gray-700 dark:text-gray-300">Investor password</Label>
-              <Input id="mt5-pass" type="password" value={mt5.password}
-                onChange={(e) => setMt5({ ...mt5, password: e.target.value })}
-                placeholder="Read-only investor password" required className="mt-1" disabled={loading} autoComplete="off" />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Use the read-only investor password, not your trading password. It can view trades but never place or move money.
-              </p>
-            </div>
-            <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white mt-2" disabled={loading}>
-              {loading ? (progress || 'Connecting…') : 'Sign in & import trades'}
-            </Button>
-          </form>
-        ) : (
-        <>
         <form onSubmit={handleEmailLogin} className="space-y-5">
           <div>
             <Label htmlFor="email" className="text-gray-700 dark:text-gray-300">
@@ -208,8 +141,6 @@ export default function Login() {
           </svg>
           {loading ? "Signing in..." : "Continue with Google"}
         </Button>
-        </>
-        )}
 
         <p className="mt-8 text-center text-sm text-gray-600 dark:text-gray-400">
           Don't have an account?{' '}
