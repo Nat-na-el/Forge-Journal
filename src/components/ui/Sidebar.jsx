@@ -20,6 +20,7 @@ import { useTheme } from "../../Theme-provider";
 import { db, auth } from "../../firebase";
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 import ConnectMT5Modal from "./ConnectMT5Modal";
+import { syncMT5 } from "../../lib/mt5";
 import useIsMobile from "../../hooks/useIsMobile";
 
 export default function Sidebar({
@@ -44,6 +45,21 @@ export default function Sidebar({
   const [newAccountLeverage, setNewAccountLeverage] = useState("100");
   const [createError, setCreateError] = useState("");
   const [connectSuccess, setConnectSuccess] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const isMt5User = !!auth.currentUser?.uid?.startsWith("mt5_");
+
+  const handleSyncMT5 = async () => {
+    setSyncing(true);
+    try {
+      const r = await syncMT5();
+      alert(`MetaTrader synced: ${r.added} new, ${r.updated} updated.`);
+      window.location.reload();
+    } catch (err) {
+      alert(err.message || "Sync failed.");
+    } finally {
+      setSyncing(false);
+    }
+  };
   const hasAutoCreated = useRef(false);
 
   // ─── Automatically create a default account if none exist ─────────
@@ -285,7 +301,17 @@ export default function Sidebar({
                   </button>
                   
                   {/* Connect MT5 Button - Only show if an account is selected */}
-                  {currentAccount && (
+                  {isMt5User && (
+                    <button
+                      onClick={handleSyncMT5}
+                      disabled={syncing}
+                      className="w-full p-2 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded flex items-center justify-center gap-1 mt-2"
+                    >
+                      <Plug size={12} />
+                      {syncing ? "Syncing…" : "Sync MT5 trades"}
+                    </button>
+                  )}
+                  {currentAccount && !isMt5User && (
                     <button
                       onClick={() => {
                         setShowConnectModal(true);
