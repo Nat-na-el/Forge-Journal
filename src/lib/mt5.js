@@ -41,3 +41,65 @@ export async function loginWithMT5({ server, login, password }, onProgress = () 
     onProgress("Connecting to your broker… this can take a minute the first time.");
     try {
       while (r.status === "pending") {
+        if (Date.now() - startedAt > 4 * 60 * 1000) {
+          throw new Error("Couldn't connect. Check the server name, account number and investor password.");
+        }
+        await sleep(4000);
+        r = await call({ action: "status", ticket });
+      }
+    } catch (e) {
+      call({ action: "cancel", ticket }).catch(() => {});
+      throw e;
+    }
+  }
+
+  const cred = await signInWithCustomToken(auth, r.token);
+  localStorage.setItem("mt5Session", JSON.stringify({ server: server.trim(), login: String(login).trim() }));
+  return cred.user;
+}
+
+/**
+ * Pull trades from MetaTrader (via MetaApi) into Firestore for the signed-in MT5 user.
+ * Safe to run repeatedly: trades are keyed by MT5 position id; notes you wrote are never overwritten.
+ * Resolves with { added, updated, accountId }.
+ */
+export async function syncMT5(onProgress = () => {}) {
+  const user = auth.currentUser;
+  if (!user || !user.uid.startsWith("mt5_")) throw new Error("Sign in with MetaTrader to sync.");
+  const session = JSON.parse(localStorage.getItem("mt5Session") || "{}");
+
+  let result;
+  const startedAt = Date.now();
+  for (;;) {
+    onProgress("Fetching trades from MetaTrader…");
+    const idToken = await user.getIdToken();
+    result = await call({ action: "sync", idToken });
+    if (result.status === "ok") break;
+    if (Date.now() - startedAt > 2 * 60 * 1000) throw new Error("MetaTrader is taking too long to respond. Try again shortly.");
+    onProgress("Waking up your MetaTrader connection…");
+    await sleep(4000);
+  }
+
+  const { account, trades, deposits } = result;
+  const login = account.login || session.login || "account";
+  const accountId = mt5AccountId(login);
+  const accRef = doc(db, "users", user.uid, "accounts", accountId);
+  const accSnap = await getDoc(accRef);
+
+  const totalPnl = trades.reduce((s, t) => s + (t.status === "executed" ? t.pnl : 0), 0);
+  const base = {
+    current_balance: account.balance ?? 0,
+    leverage: account.leverage || 100,
+    mt5Server: account.server || session.server || "",
+    mt5Login: Number(login) || login,
+    mt5Connected: true,
+    mt5LastSync: new Date().toISOString(),
+    mt5AccountInfo: {
+      balance: account.balance ?? 0,
+      equity: account.equity ?? 0,
+      currency: account.currency || "USD",
+      broker: account.broker || "",
+    },
+  };
+  if (!accSnap.exists()) {
+    await setDoc(accR
