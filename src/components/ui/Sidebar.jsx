@@ -20,7 +20,7 @@ import { useTheme } from "../../Theme-provider";
 import { db, auth } from "../../firebase";
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 import ConnectMT5Modal from "./ConnectMT5Modal";
-import { syncMT5 } from "../../lib/mt5";
+import { syncMT5Account } from "../../lib/mt5client";
 import useIsMobile from "../../hooks/useIsMobile";
 
 export default function Sidebar({
@@ -46,12 +46,12 @@ export default function Sidebar({
   const [createError, setCreateError] = useState("");
   const [connectSuccess, setConnectSuccess] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const isMt5User = !!auth.currentUser?.uid?.startsWith("mt5_");
 
   const handleSyncMT5 = async () => {
+    if (!currentAccount?.mt5Login) return;
     setSyncing(true);
     try {
-      const r = await syncMT5();
+      const r = await syncMT5Account({ login: currentAccount.mt5Login, server: currentAccount.mt5Server });
       alert(`MetaTrader synced: ${r.added} new, ${r.updated} updated.`);
       window.location.reload();
     } catch (err) {
@@ -300,27 +300,25 @@ export default function Sidebar({
                     Manage Accounts
                   </button>
                   
-                  {/* Connect MT5 Button - Only show if an account is selected */}
-                  {isMt5User && (
+                  {/* MetaTrader 5: connect a new MT5 account (becomes its own journal account) */}
+                  <button
+                    onClick={() => {
+                      setShowConnectModal(true);
+                      setIsAccountDropdownOpen(false);
+                    }}
+                    className="w-full p-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center gap-1 mt-2"
+                  >
+                    <Plug size={12} />
+                    Connect MT5 account
+                  </button>
+                  {currentAccount?.mt5Connected && (
                     <button
                       onClick={handleSyncMT5}
                       disabled={syncing}
-                      className="w-full p-2 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded flex items-center justify-center gap-1 mt-2"
+                      className="w-full p-2 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded flex items-center justify-center gap-1 mt-2"
                     >
                       <Plug size={12} />
                       {syncing ? "Syncing…" : "Sync MT5 trades"}
-                    </button>
-                  )}
-                  {currentAccount && !isMt5User && (
-                    <button
-                      onClick={() => {
-                        setShowConnectModal(true);
-                        setIsAccountDropdownOpen(false);
-                      }}
-                      className="w-full p-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center gap-1 mt-2"
-                    >
-                      <Plug size={12} />
-                      {currentAccount.mt5Connected ? 'Update MT5 Connection' : 'Connect MT5'}
                     </button>
                   )}
                 </div>
@@ -434,21 +432,17 @@ export default function Sidebar({
       )}
 
       {/* CONNECT MT5 MODAL */}
-      {showConnectModal && currentAccount && (
+      {showConnectModal && (
         <ConnectMT5Modal
           isOpen={showConnectModal}
-          onClose={(success) => {
+          onClose={(success, result) => {
             setShowConnectModal(false);
-            if (success) {
+            if (success && result?.accountId) {
+              localStorage.setItem("currentAccountId", result.accountId);
               setConnectSuccess(true);
-              setTimeout(() => setConnectSuccess(false), 3000);
-              // Refresh current account data
-              if (onSwitchAccount) {
-                onSwitchAccount(currentAccount.id);
-              }
+              setTimeout(() => window.location.reload(), 600);
             }
           }}
-          account={currentAccount}
         />
       )}
 
