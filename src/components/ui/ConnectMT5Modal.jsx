@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, AlertCircle, Check, Loader2, Plug } from 'lucide-react';
 import { connectMT5Account } from '../../lib/mt5client';
+import { CARD, HEAD, MUTED, DIVIDER, FIELD, POS_T } from '../../lib/uiTokens';
 
 // Connect a MetaTrader 5 account (read-only investor password) and import its trades
 // as a separate journal account. onClose(success, { accountId, added }) is called when finished.
@@ -36,119 +37,122 @@ export default function ConnectMT5Modal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[2000] p-4">
-      <div className="bg-gray-900 rounded-2xl w-full max-w-md border border-gray-700 shadow-2xl max-h-[95vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold text-gray-100 flex items-center gap-2">
-              <Plug size={20} className="text-blue-400" />
-              Connect MT5 Account
-            </h3>
-            <button
-              onClick={() => !connecting && onClose(false)}
-              className="text-gray-400 hover:text-gray-200"
-              aria-label="Close"
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className={`${CARD} max-h-[95vh] w-full max-w-md overflow-y-auto p-6`}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className={`flex items-center gap-2 text-lg font-bold ${HEAD}`}>
+            <span
+              className="flex h-8 w-8 items-center justify-center rounded-lg"
+              style={{ backgroundColor: '#6C47FF14', color: '#6C47FF' }}
             >
-              <X size={24} />
+              <Plug size={16} />
+            </span>
+            Connect MT5 account
+          </h3>
+          <button
+            onClick={() => !connecting && onClose(false)}
+            className={`rounded-lg p-1 transition-colors hover:bg-[#f7f8fc] dark:hover:bg-[#101024] ${MUTED}`}
+            aria-label="Close"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <p className={`mb-4 text-sm leading-relaxed ${MUTED}`}>
+          Import your MetaTrader 5 trades into a new journal account. Use your <b>investor (read-only)
+          password</b>, never your trading password. It can only view trades, not place them or move money.
+        </p>
+
+        <form onSubmit={handleConnect} className="space-y-4">
+          <div>
+            <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Server</label>
+            <input
+              type="text"
+              value={form.server}
+              onChange={(e) => setForm({ ...form, server: e.target.value })}
+              placeholder="e.g., Exness-MT5Real9"
+              className={FIELD}
+              disabled={connecting}
+              autoComplete="off"
+              required
+            />
+          </div>
+
+          <div>
+            <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Login</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={form.login}
+              onChange={(e) => setForm({ ...form, login: e.target.value.replace(/\D/g, '') })}
+              placeholder="Your MT5 account number"
+              className={FIELD}
+              disabled={connecting}
+              autoComplete="off"
+              required
+            />
+          </div>
+
+          <div>
+            <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Investor password</label>
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              placeholder="Read-only investor password"
+              className={FIELD}
+              disabled={connecting}
+              autoComplete="off"
+              required
+            />
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-[#f2556e]/30 bg-[#f2556e]/10 p-3 text-sm text-[#d93a57] dark:text-[#ff6b86]">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {success && (
+            <div className={`flex items-center gap-2 rounded-lg border border-[#22c493]/30 bg-[#22c493]/10 p-3 text-sm ${POS_T}`}>
+              <Check size={16} />
+              {success}
+            </div>
+          )}
+
+          {connecting && progress && (
+            <div className={`text-center text-xs ${MUTED}`}>{progress}</div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={connecting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-[#6C47FF] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+            >
+              {connecting ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Connecting…
+                </>
+              ) : (
+                'Connect & import'
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => onClose(false)}
+              disabled={connecting}
+              className={`flex-1 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${DIVIDER} ${HEAD} hover:bg-[#f7f8fc] dark:hover:bg-[#101024]`}
+            >
+              Cancel
             </button>
           </div>
+        </form>
 
-          <p className="text-sm text-gray-400 mb-4">
-            Import your MetaTrader 5 trades into a new journal account. Use your <b>investor (read-only)
-            password</b>, never your trading password. It can only view trades, not place them or move money.
-          </p>
-
-          <form onSubmit={handleConnect} className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Server</label>
-              <input
-                type="text"
-                value={form.server}
-                onChange={(e) => setForm({ ...form, server: e.target.value })}
-                placeholder="e.g., Exness-MT5Real9"
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                disabled={connecting}
-                autoComplete="off"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Login</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={form.login}
-                onChange={(e) => setForm({ ...form, login: e.target.value.replace(/\D/g, '') })}
-                placeholder="Your MT5 account number"
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                disabled={connecting}
-                autoComplete="off"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Investor password</label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder="Read-only investor password"
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                disabled={connecting}
-                autoComplete="off"
-                required
-              />
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm flex items-start gap-2">
-                <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {success && (
-              <div className="p-3 bg-green-900/30 border border-green-700 rounded-lg text-green-300 text-sm flex items-center gap-2">
-                <Check size={16} />
-                {success}
-              </div>
-            )}
-
-            {connecting && progress && (
-              <div className="text-xs text-gray-400 text-center">{progress}</div>
-            )}
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={connecting}
-                className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {connecting ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  'Connect & import'
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => onClose(false)}
-                disabled={connecting}
-                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-
-          <div className="mt-4 text-xs text-gray-500 text-center">
-            The first connection can take 1–2 minutes. Keep this window open.
-          </div>
+        <div className={`mt-4 text-center text-xs ${MUTED}`}>
+          The first connection can take 1–2 minutes. Keep this window open.
         </div>
       </div>
     </div>

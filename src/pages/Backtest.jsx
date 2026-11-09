@@ -20,6 +20,15 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useTheme } from '../Theme-provider';
+import {
+  POS_T,
+  NEG_T,
+  MUTED,
+  HEAD,
+  DIVIDER,
+  CARD,
+  FIELD,
+} from '../lib/uiTokens';
 
 // Chart.js setup
 import {
@@ -658,9 +667,12 @@ export default function Backtest({ currentAccount }) {
     datasets: [{
       label: 'Equity Curve',
       data: results.equityCurve.map(e => e.equity),
-      borderColor: theme === 'dark' ? '#60a5fa' : '#3b82f6',
-      backgroundColor: theme === 'dark' ? 'rgba(96, 165, 250, 0.1)' : 'rgba(59, 130, 246, 0.1)',
-      tension: 0.1,
+      borderColor: ac.hex,
+      backgroundColor: `${ac.hex}1a`,
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.25,
       fill: true,
     }]
   } : null;
@@ -669,22 +681,27 @@ export default function Backtest({ currentAccount }) {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { display: true, position: 'top' },
-      title: { display: true, text: 'Equity Curve' },
+      legend: { display: false },
     },
     scales: {
-      x: { title: { display: true, text: 'Date/Time' }, ticks: { maxTicksLimit: 10 } },
-      y: { title: { display: true, text: 'Equity ($)' } },
+      x: {
+        grid: { display: false },
+        ticks: { color: theme === 'dark' ? '#8a8fb5' : '#6b7090', maxTicksLimit: 8 },
+      },
+      y: {
+        grid: { color: theme === 'dark' ? 'rgba(148,163,184,0.12)' : 'rgba(100,116,139,0.15)' },
+        ticks: { color: theme === 'dark' ? '#8a8fb5' : '#6b7090', callback: (v) => `$${v}` },
+      },
     },
   };
 
   if (!currentAccount) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-        <Card className="p-8 max-w-md text-center">
-          <AlertCircle size={48} className="mx-auto text-gray-400 mb-4" />
-          <h2 className="text-2xl font-bold mb-2">No Account Selected</h2>
-          <p className="text-gray-600 dark:text-gray-400">
+      <div className="flex min-h-screen items-center justify-center bg-[#f4f5fa] p-8 dark:bg-[#0b0b19]">
+        <Card className={`${CARD} max-w-md p-8 text-center`}>
+          <AlertCircle size={40} className="mx-auto mb-4 text-amber-500" />
+          <h2 className={`mb-2 text-xl font-bold ${HEAD}`}>No account selected</h2>
+          <p className={`text-sm ${MUTED}`}>
             Please select an account from the sidebar to use its starting balance.
           </p>
         </Card>
@@ -694,55 +711,54 @@ export default function Backtest({ currentAccount }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      <div className="flex min-h-screen items-center justify-center bg-[#f4f5fa] dark:bg-[#0b0b19]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto"></div>
-          <p className="mt-4 text-gray-800 dark:text-gray-300">Generating {symbol} data...</p>
+          <div
+            className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#262645]"
+            style={{ borderTopColor: ac.hex }}
+            role="progressbar"
+            aria-label="Loading backtest data"
+          />
+          <p className={`mt-4 text-sm font-medium ${MUTED}`}>Generating {symbol} data…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 text-gray-900 dark:text-gray-100 p-3 sm:p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-[#f4f5fa] p-3 text-[#14142b] dark:bg-[#0b0b19] dark:text-[#e8e9f7] sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-[1600px]">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <div>
-            <h1
-              className="text-3xl md:text-4xl font-extrabold bg-clip-text text-transparent"
-              style={{ backgroundImage: `linear-gradient(90deg, ${ac.hex}, ${ac.hex2})` }}
-            >
-              Strategy Backtester
-            </h1>
-            <p className="opacity-70 mt-1">
-              Test and optimize your trading strategies
-            </p>
+        <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div className="min-w-0">
+            <h1 className={`text-2xl font-bold tracking-tight sm:text-3xl ${HEAD}`}>Backtest</h1>
+            <p className={`mt-1 text-sm ${MUTED}`}>Test and optimize your trading strategies</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <AccentPicker accent={accent} setAccent={setAccent} className="mr-1" />
-            <Button 
+            <Button
               onClick={runBacktestHandler}
               disabled={running || !currentStrategy}
-              className="bg-green-600 hover:bg-green-700 text-white min-w-[140px]"
+              style={{ backgroundColor: ac.hex }}
+              className="min-w-[140px] font-semibold text-white hover:brightness-110 disabled:opacity-50"
             >
               {running ? (
                 <>
-                  <Pause className="mr-2 h-4 w-4" /> Running...
+                  <Pause className="mr-2 h-4 w-4" /> Running…
                 </>
               ) : (
                 <>
-                  <Play className="mr-2 h-4 w-4" /> Run Backtest
+                  <Play className="mr-2 h-4 w-4" /> Run backtest
                 </>
               )}
             </Button>
 
-            <Button 
+            <Button
               onClick={runOptimization}
               disabled={optimizationRunning || !currentStrategy}
-              style={{ backgroundColor: ac.hex }}
-              className="hover:brightness-110 text-white min-w-[160px]"
+              variant="outline"
+              className={`min-w-[160px] border font-semibold ${DIVIDER}`}
             >
               {optimizationRunning ? (
                 <>
@@ -750,16 +766,16 @@ export default function Backtest({ currentAccount }) {
                 </>
               ) : (
                 <>
-                  <Zap className="mr-2 h-4 w-4" /> Find Best Parameters
+                  <Zap className="mr-2 h-4 w-4" /> Find best parameters
                 </>
               )}
             </Button>
 
             {results && (
-              <Button 
+              <Button
                 onClick={exportToCSV}
                 variant="outline"
-                className="border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
+                className={`border font-semibold ${DIVIDER}`}
               >
                 <Download className="mr-2 h-4 w-4" /> Export CSV
               </Button>
@@ -768,25 +784,23 @@ export default function Backtest({ currentAccount }) {
         </div>
 
         {/* Main content */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
           {/* Parameters Panel */}
-          <Card className="lg:col-span-1 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-md">
-            <div className="p-5 border-b border-gray-200 dark:border-gray-800">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Settings className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-                Strategy Settings
-              </h2>
+          <Card className={`${CARD} p-0 lg:col-span-1`}>
+            <div className={`flex items-center gap-2 border-b px-4 py-3 ${DIVIDER}`}>
+              <Settings className="h-4 w-4" style={{ color: ac.hex }} />
+              <h2 className={`text-[15px] font-semibold ${HEAD}`}>Strategy settings</h2>
             </div>
 
-            <div className="p-5 space-y-5">
+            <div className="space-y-4 p-4">
               {/* Symbol Selector */}
               <div>
-                <Label htmlFor="symbol" className="text-sm text-gray-700 dark:text-gray-300">Symbol</Label>
+                <Label htmlFor="symbol" className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Symbol</Label>
                 <Select value={symbol} onValueChange={setSymbol}>
-                  <SelectTrigger id="symbol" className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                  <SelectTrigger id="symbol" className={`${FIELD} justify-between`}>
                     <SelectValue placeholder="Select symbol" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-gray-800">
+                  <SelectContent className="border border-[#e6e8f2] bg-white dark:border-[#262645] dark:bg-[#15152b]">
                     <SelectItem value="UK100">UK100</SelectItem>
                     <SelectItem value="NAS100">NAS100</SelectItem>
                     <SelectItem value="JAP225">JAP225</SelectItem>
@@ -797,64 +811,64 @@ export default function Backtest({ currentAccount }) {
               {/* Strategy Selector */}
               {strategies[symbol] && (
                 <div>
-                  <Label htmlFor="strategy" className="text-sm text-gray-700 dark:text-gray-300">Strategy</Label>
+                  <Label htmlFor="strategy" className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Strategy</Label>
                   <Select value={strategyId} onValueChange={setStrategyId}>
-                    <SelectTrigger id="strategy" className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                    <SelectTrigger id="strategy" className={`${FIELD} justify-between`}>
                       <SelectValue placeholder="Select strategy" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white dark:bg-gray-800">
+                    <SelectContent className="border border-[#e6e8f2] bg-white dark:border-[#262645] dark:bg-[#15152b]">
                       {strategies[symbol].map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   {currentStrategy?.description && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{currentStrategy.description}</p>
+                    <p className={`mt-1.5 text-xs ${MUTED}`}>{currentStrategy.description}</p>
                   )}
                 </div>
               )}
 
               {/* CSV Upload */}
               <div>
-                <Label htmlFor="csvUpload" className="text-sm text-gray-700 dark:text-gray-300">
-                  Upload UK100 5‑min CSV
+                <Label htmlFor="csvUpload" className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>
+                  Upload UK100 5-min CSV
                 </Label>
                 <input
                   id="csvUpload"
                   type="file"
                   accept=".csv"
                   onChange={handleFileUpload}
-                  className="mt-1.5 block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-gray-700 dark:file:text-indigo-300"
+                  className={`block w-full text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-[#6C47FF]/10 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#6C47FF] hover:file:bg-[#6C47FF]/20 ${MUTED}`}
                 />
-                {fileName && <p className="text-xs mt-1 text-green-600">Loaded: {fileName}</p>}
+                {fileName && <p className={`mt-1 text-xs font-medium ${POS_T}`}>Loaded: {fileName}</p>}
               </div>
 
               {/* Date Range */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="startDate" className="text-sm text-gray-700 dark:text-gray-300">Start Date</Label>
+                  <Label htmlFor="startDate" className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Start date</Label>
                   <input
                     id="startDate"
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="mt-1.5 w-full p-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+                    className={FIELD}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="endDate" className="text-sm text-gray-700 dark:text-gray-300">End Date</Label>
+                  <Label htmlFor="endDate" className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>End date</Label>
                   <input
                     id="endDate"
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="mt-1.5 w-full p-2 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+                    className={FIELD}
                   />
                 </div>
               </div>
 
-              <Button onClick={generateSyntheticData} variant="outline" className="w-full">
-                Use Synthetic Data
+              <Button onClick={generateSyntheticData} variant="outline" className={`w-full border font-semibold ${DIVIDER}`}>
+                Use synthetic data
               </Button>
 
               {/* Dynamic Parameters */}
@@ -865,15 +879,15 @@ export default function Backtest({ currentAccount }) {
                 if (field.type === 'select') {
                   return (
                     <div key={field.name}>
-                      <Label htmlFor={field.name} className="text-sm text-gray-700 dark:text-gray-300">{field.label}</Label>
-                      <Select 
-                        value={params[field.name] || ''} 
+                      <Label htmlFor={field.name} className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>{field.label}</Label>
+                      <Select
+                        value={params[field.name] || ''}
                         onValueChange={(v) => handleParamChange(field.name, v)}
                       >
-                        <SelectTrigger id={field.name} className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
+                        <SelectTrigger id={field.name} className={`${FIELD} justify-between`}>
                           <SelectValue placeholder="Select" />
                         </SelectTrigger>
-                        <SelectContent className="bg-white dark:bg-gray-800">
+                        <SelectContent className="border border-[#e6e8f2] bg-white dark:border-[#262645] dark:bg-[#15152b]">
                           {field.options.map(opt => (
                             <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                           ))}
@@ -885,7 +899,7 @@ export default function Backtest({ currentAccount }) {
 
                 return (
                   <div key={field.name}>
-                    <Label htmlFor={field.name} className="text-sm text-gray-700 dark:text-gray-300">{field.label}</Label>
+                    <Label htmlFor={field.name} className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>{field.label}</Label>
                     <Input
                       id={field.name}
                       type={field.type}
@@ -894,54 +908,58 @@ export default function Backtest({ currentAccount }) {
                       step={field.step}
                       value={params[field.name] || ''}
                       onChange={(e) => handleParamChange(field.name, field.type === 'number' ? Number(e.target.value) : e.target.value)}
-                      className="mt-1.5 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+                      className={FIELD}
                     />
                   </div>
                 );
               })}
 
-              <div className="pt-2 text-sm text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700">
-                <p>Initial Capital: ${currentAccount?.starting_balance?.toLocaleString() || '10,000'}</p>
+              <div className={`border-t pt-3 text-xs ${DIVIDER} ${MUTED}`}>
+                <p>Initial capital: ${currentAccount?.starting_balance?.toLocaleString() || '10,000'}</p>
               </div>
             </div>
           </Card>
 
           {/* Results Area */}
-          <div className="lg:col-span-3 space-y-6">
+          <div className="space-y-4 lg:col-span-3">
             {/* Optimization Results Table (if any) */}
             {optimizationResults.length > 0 && (
-              <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-gray-500" />
-                  Top 10 Parameter Combinations (by Return %)
-                </h3>
+              <Card className={`${CARD} p-0`}>
+                <div className={`flex items-center gap-2 border-b px-4 py-3 ${DIVIDER}`}>
+                  <Zap className="h-4 w-4" style={{ color: ac.hex }} />
+                  <h2 className={`text-[15px] font-semibold ${HEAD}`}>Top 10 parameter combinations</h2>
+                  <span className={`ml-auto text-xs ${MUTED}`}>by return %</span>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-100/50 dark:bg-gray-800">
-                      <tr>
-                        <th className="px-2 py-2">Buffer</th>
-                        <th className="px-2 py-2">RR</th>
-                        <th className="px-2 py-2">Direction</th>
-                        <th className="px-2 py-2">Stop Type</th>
-                        <th className="px-2 py-2">Stop Value</th>
-                        <th className="px-2 py-2">Return %</th>
-                        <th className="px-2 py-2">PnL ($)</th>
-                        <th className="px-2 py-2">Trades</th>
-                        <th className="px-2 py-2">Load</th>
+                    <thead>
+                      <tr className={`border-b text-left text-[11px] font-semibold uppercase tracking-wide ${DIVIDER} ${MUTED}`}>
+                        <th className="px-4 py-2.5">Buffer</th>
+                        <th className="px-4 py-2.5">RR</th>
+                        <th className="px-4 py-2.5">Direction</th>
+                        <th className="px-4 py-2.5">Stop type</th>
+                        <th className="px-4 py-2.5">Stop value</th>
+                        <th className="px-4 py-2.5">Return %</th>
+                        <th className="px-4 py-2.5">PnL ($)</th>
+                        <th className="px-4 py-2.5">Trades</th>
+                        <th className="px-4 py-2.5" />
                       </tr>
                     </thead>
                     <tbody>
                       {optimizationResults.map((res, idx) => (
-                        <tr key={idx} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
-                          <td className="px-2 py-2">{res.params.breakoutBuffer}</td>
-                          <td className="px-2 py-2">{res.params.riskReward}</td>
-                          <td className="px-2 py-2">{res.params.direction}</td>
-                          <td className="px-2 py-2">{res.params.stopType}</td>
-                          <td className="px-2 py-2">{res.params.stopValue.toFixed(1)}</td>
-                          <td className="px-2 py-2 font-bold text-green-600">{res.returnPercent}%</td>
-                          <td className="px-2 py-2">${res.totalPnL.toFixed(2)}</td>
-                          <td className="px-2 py-2">{res.totalTrades}</td>
-                          <td className="px-2 py-2">
+                        <tr
+                          key={idx}
+                          className={`border-b transition-colors last:border-0 hover:bg-[#f7f8fc] dark:hover:bg-[#101024] ${DIVIDER}`}
+                        >
+                          <td className="px-4 py-2.5 tabular-nums">{res.params.breakoutBuffer}</td>
+                          <td className="px-4 py-2.5 tabular-nums">{res.params.riskReward}</td>
+                          <td className="px-4 py-2.5">{res.params.direction}</td>
+                          <td className="px-4 py-2.5">{res.params.stopType}</td>
+                          <td className="px-4 py-2.5 tabular-nums">{res.params.stopValue.toFixed(1)}</td>
+                          <td className={`px-4 py-2.5 font-semibold tabular-nums ${POS_T}`}>{res.returnPercent}%</td>
+                          <td className="px-4 py-2.5 tabular-nums">${res.totalPnL.toFixed(2)}</td>
+                          <td className="px-4 py-2.5 tabular-nums">{res.totalTrades}</td>
+                          <td className="px-4 py-2.5 text-right">
                             <Button size="sm" onClick={() => loadOptimizationResult(res.params)}>Load</Button>
                           </td>
                         </tr>
@@ -956,38 +974,48 @@ export default function Backtest({ currentAccount }) {
             {results ? (
               <>
                 {/* Summary Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                  <Card className="p-4 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Final Capital</p>
-                    <p className="text-xl font-bold text-gray-800 dark:text-white mt-1">${results.stats.finalCapital}</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                  <Card className={`${CARD} p-4`}>
+                    <p className={`text-[11px] font-medium ${MUTED}`}>Final capital</p>
+                    <p className={`mt-1 text-xl font-bold tabular-nums ${HEAD}`}>${results.stats.finalCapital}</p>
                   </Card>
-                  <Card className="p-4 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Total Return</p>
-                    <p className={`text-xl font-bold mt-1 ${results.stats.returnPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <Card className={`${CARD} p-4`}>
+                    <p className={`text-[11px] font-medium ${MUTED}`}>Total return</p>
+                    <p className={`mt-1 text-xl font-bold tabular-nums ${results.stats.returnPercent >= 0 ? POS_T : NEG_T}`}>
                       {results.stats.returnPercent}%
                     </p>
                   </Card>
-                  <Card className="p-4 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Total Trades</p>
-                    <p className="text-xl font-bold text-gray-800 dark:text-white mt-1">{results.stats.totalTrades}</p>
+                  <Card className={`${CARD} p-4`}>
+                    <p className={`text-[11px] font-medium ${MUTED}`}>Total trades</p>
+                    <p className={`mt-1 text-xl font-bold tabular-nums ${HEAD}`}>{results.stats.totalTrades}</p>
                   </Card>
-                  <Card className="p-4 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Win Rate</p>
-                    <p className="text-xl font-bold text-gray-800 dark:text-white mt-1">{results.stats.winRate}%</p>
+                  <Card className={`${CARD} p-4`}>
+                    <p className={`text-[11px] font-medium ${MUTED}`}>Win rate</p>
+                    <p className={`mt-1 text-xl font-bold tabular-nums ${HEAD}`}>{results.stats.winRate}%</p>
                   </Card>
-                  <Card className="p-4 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Max DD</p>
-                    <p className="text-xl font-bold text-gray-800 dark:text-white mt-1">{results.stats.maxDrawdown}%</p>
+                  <Card className={`${CARD} p-4`}>
+                    <p className={`text-[11px] font-medium ${MUTED}`}>Max DD</p>
+                    <p className={`mt-1 text-xl font-bold tabular-nums ${HEAD}`}>{results.stats.maxDrawdown}%</p>
                   </Card>
                 </div>
 
                 {/* Chart & Trades */}
-                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+                <Card className={`${CARD} p-0`}>
                   <Tabs defaultValue="chart">
-                    <div className="border-b border-gray-200 dark:border-gray-800 px-5 pt-4">
-                      <TabsList className="bg-gray-100/50 dark:bg-gray-800">
-                        <TabsTrigger value="chart"><LineChart className="h-4 w-4 mr-2" />Equity Curve</TabsTrigger>
-                        <TabsTrigger value="trades"><Table className="h-4 w-4 mr-2" />Trade List</TabsTrigger>
+                    <div className={`border-b px-4 pt-3 ${DIVIDER}`}>
+                      <TabsList className={`h-9 bg-[#f7f8fc] p-1 dark:bg-[#101024] ${DIVIDER}`}>
+                        <TabsTrigger
+                          value="chart"
+                          className="gap-2 rounded-md px-3 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-[#15152b]"
+                        >
+                          <LineChart className="h-4 w-4" /> Equity curve
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="trades"
+                          className="gap-2 rounded-md px-3 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-[#15152b]"
+                        >
+                          <Table className="h-4 w-4" /> Trade list
+                        </TabsTrigger>
                       </TabsList>
                     </div>
                     <TabsContent value="chart" className="p-5">
@@ -995,67 +1023,97 @@ export default function Backtest({ currentAccount }) {
                     </TabsContent>
                     <TabsContent value="trades" className="p-5">
                       {results.trades.length > 0 ? (
-                        <div className="overflow-x-auto max-h-96">
+                        <div className="max-h-96 overflow-x-auto">
                           <table className="w-full text-sm">
-                            <thead className="bg-gray-100/50 dark:bg-gray-800 sticky top-0">
-                              <tr>
-                                <th className="px-2 py-2">Type</th>
-                                <th className="px-2 py-2">Entry</th>
-                                <th className="px-2 py-2">Stop</th>
-                                <th className="px-2 py-2">Target</th>
-                                <th className="px-2 py-2">Exit</th>
-                                <th className="px-2 py-2">PnL</th>
-                                <th className="px-2 py-2">Reason</th>
+                            <thead className="sticky top-0">
+                              <tr className={`border-b bg-white text-left text-[11px] font-semibold uppercase tracking-wide dark:bg-[#15152b] ${DIVIDER} ${MUTED}`}>
+                                <th className="px-2 py-2.5">Type</th>
+                                <th className="px-2 py-2.5">Entry</th>
+                                <th className="px-2 py-2.5">Stop</th>
+                                <th className="px-2 py-2.5">Target</th>
+                                <th className="px-2 py-2.5">Exit</th>
+                                <th className="px-2 py-2.5">PnL</th>
+                                <th className="px-2 py-2.5">Reason</th>
                               </tr>
                             </thead>
                             <tbody>
                               {results.trades.map((t, i) => (
-                                <tr key={i} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
-                                  <td className="px-2 py-2 font-medium">{t.type}</td>
-                                  <td className="px-2 py-2">{t.entryDate?.slice(5,16)}<br/>{t.entryPrice.toFixed(2)}</td>
-                                  <td className="px-2 py-2">{t.stopLoss.toFixed(2)}</td>
-                                  <td className="px-2 py-2">{t.takeProfit.toFixed(2)}</td>
-                                  <td className="px-2 py-2">{t.exitDate?.slice(5,16)}<br/>{t.exitPrice?.toFixed(2)}</td>
-                                  <td className={`px-2 py-2 font-medium ${t.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                <tr
+                                  key={i}
+                                  className={`border-b transition-colors last:border-0 hover:bg-[#f7f8fc] dark:hover:bg-[#101024] ${DIVIDER}`}
+                                >
+                                  <td className="px-2 py-2.5 font-medium">{t.type}</td>
+                                  <td className="px-2 py-2.5 tabular-nums">{t.entryDate?.slice(5, 16)}<br/>{t.entryPrice.toFixed(2)}</td>
+                                  <td className="px-2 py-2.5 tabular-nums">{t.stopLoss.toFixed(2)}</td>
+                                  <td className="px-2 py-2.5 tabular-nums">{t.takeProfit.toFixed(2)}</td>
+                                  <td className="px-2 py-2.5 tabular-nums">{t.exitDate?.slice(5, 16)}<br/>{t.exitPrice?.toFixed(2)}</td>
+                                  <td className={`px-2 py-2.5 font-semibold tabular-nums ${t.pnl >= 0 ? POS_T : NEG_T}`}>
                                     {t.pnl >= 0 ? '+' : ''}{t.pnl?.toFixed(2)}
                                   </td>
-                                  <td className="px-2 py-2">{t.reason}</td>
+                                  <td className={`px-2 py-2.5 ${MUTED}`}>{t.reason}</td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
                       ) : (
-                        <div className="h-64 flex items-center justify-center">No trades generated</div>
+                        <div className={`flex h-64 items-center justify-center text-sm ${MUTED}`}>No trades generated</div>
                       )}
                     </TabsContent>
                   </Tabs>
                 </Card>
 
                 {/* Detailed Stats */}
-                <Card className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 p-5">
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><BarChart3 className="h-5 w-5 text-gray-500" /> Performance</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div><p className="text-xs text-gray-600 dark:text-gray-400">Total Trades</p><p className="text-xl font-bold">{results.stats.totalTrades}</p></div>
-                    <div><p className="text-xs text-gray-600 dark:text-gray-400">Winning / Losing</p><p className="text-xl font-bold">{results.stats.winningTrades} / {results.stats.losingTrades}</p></div>
-                    <div><p className="text-xs text-gray-600 dark:text-gray-400">Win Rate</p><p className="text-xl font-bold">{results.stats.winRate}%</p></div>
-                    <div><p className="text-xs text-gray-600 dark:text-gray-400">Max DD</p><p className="text-xl font-bold">{results.stats.maxDrawdown}%</p></div>
-                    <div><p className="text-xs text-gray-600 dark:text-gray-400">Net Profit</p><p className={`text-xl font-bold ${results.stats.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>${results.stats.totalPnL}</p></div>
-                    <div><p className="text-xs text-gray-600 dark:text-gray-400">Return %</p><p className={`text-xl font-bold ${results.stats.returnPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>{results.stats.returnPercent}%</p></div>
+                <Card className={`${CARD} p-0`}>
+                  <div className={`flex items-center gap-2 border-b px-4 py-3 ${DIVIDER}`}>
+                    <BarChart3 className="h-4 w-4" style={{ color: ac.hex }} />
+                    <h2 className={`text-[15px] font-semibold ${HEAD}`}>Performance</h2>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-4">
+                    <div>
+                      <p className={`text-[11px] font-medium ${MUTED}`}>Total trades</p>
+                      <p className={`mt-1 text-lg font-bold tabular-nums ${HEAD}`}>{results.stats.totalTrades}</p>
+                    </div>
+                    <div>
+                      <p className={`text-[11px] font-medium ${MUTED}`}>Winning / losing</p>
+                      <p className={`mt-1 text-lg font-bold tabular-nums ${HEAD}`}>{results.stats.winningTrades} / {results.stats.losingTrades}</p>
+                    </div>
+                    <div>
+                      <p className={`text-[11px] font-medium ${MUTED}`}>Win rate</p>
+                      <p className={`mt-1 text-lg font-bold tabular-nums ${HEAD}`}>{results.stats.winRate}%</p>
+                    </div>
+                    <div>
+                      <p className={`text-[11px] font-medium ${MUTED}`}>Max DD</p>
+                      <p className={`mt-1 text-lg font-bold tabular-nums ${HEAD}`}>{results.stats.maxDrawdown}%</p>
+                    </div>
+                    <div>
+                      <p className={`text-[11px] font-medium ${MUTED}`}>Net profit</p>
+                      <p className={`mt-1 text-lg font-bold tabular-nums ${results.stats.totalPnL >= 0 ? POS_T : NEG_T}`}>${results.stats.totalPnL}</p>
+                    </div>
+                    <div>
+                      <p className={`text-[11px] font-medium ${MUTED}`}>Return %</p>
+                      <p className={`mt-1 text-lg font-bold tabular-nums ${results.stats.returnPercent >= 0 ? POS_T : NEG_T}`}>{results.stats.returnPercent}%</p>
+                    </div>
                   </div>
                 </Card>
               </>
             ) : (
-              <Card className="h-96 flex items-center justify-center bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
-                <p className="text-gray-500 dark:text-gray-400">Configure strategy and run a backtest or optimization</p>
+              <Card className={`${CARD} flex h-96 flex-col items-center justify-center gap-3 p-8 text-center`}>
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: `${ac.hex}14`, color: ac.hex }}
+                >
+                  <BarChart3 className="h-6 w-6" />
+                </div>
+                <p className={`max-w-xs text-sm ${MUTED}`}>Configure a strategy and run a backtest or optimization to see results here.</p>
               </Card>
             )}
           </div>
         </div>
 
-        <div className="mt-6 text-xs text-gray-500 dark:text-gray-400 text-center">
+        <p className={`mt-6 text-center text-xs ${MUTED}`}>
           * Synthetic data – replace with real CSV for accurate backtesting.
-        </div>
+        </p>
       </div>
     </div>
   );

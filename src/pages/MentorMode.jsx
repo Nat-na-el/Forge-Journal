@@ -4,10 +4,17 @@ import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { format } from "date-fns";
 import { Send, Loader2, Trash2, Sparkles, AlertCircle, Database } from "lucide-react";
 import { Card } from "../components/ui/card";
-import { useTheme } from "../Theme-provider";
 import { db, auth } from "../firebase";
 import AccentPicker from "../components/ui/AccentPicker";
-import useAccent, { CARD } from "../hooks/useAccent";
+import useAccent from "../hooks/useAccent";
+import {
+  MUTED,
+  HEAD,
+  DIVIDER,
+  CARD,
+  FIELD,
+  FOCUS,
+} from "../lib/uiTokens";
 
 const ENDPOINT = "/.netlify/functions/mentor";
 
@@ -157,8 +164,6 @@ function Markdown({ text }) {
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 export default function MentorMode({ currentAccount }) {
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
   const { accent, setAccent, ac } = useAccent();
 
   const storeKey = `forgexMentor:${currentAccount?.id || "none"}`;
@@ -268,25 +273,14 @@ export default function MentorMode({ currentAccount }) {
     : [{ id: "hello", role: "assistant", content: GREETING, ts: new Date().toISOString() }];
 
   return (
-    <div
-      className={`min-h-screen w-full p-4 sm:p-6 lg:p-8 transition-colors duration-300 ${
-        isDark
-          ? "bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100"
-          : "bg-gradient-to-br from-gray-50 via-white to-gray-100 text-gray-900"
-      }`}
-    >
-      <div className="max-w-4xl mx-auto space-y-4">
+    <div className="min-h-screen w-full bg-[#f4f5fa] p-3 text-[#14142b] dark:bg-[#0b0b19] dark:text-[#e8e9f7] sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-4xl space-y-4">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
-            <h1
-              className="text-3xl sm:text-4xl font-extrabold bg-clip-text text-transparent flex items-center gap-2"
-              style={{ backgroundImage: `linear-gradient(90deg, ${ac.hex}, ${ac.hex2})` }}
-            >
-              Mentor Mode
-            </h1>
-            <p className="text-sm sm:text-base mt-1 opacity-70">
-              Your AI trading coach — honest feedback based on your own journal
+            <h1 className={`text-2xl font-bold tracking-tight sm:text-3xl ${HEAD}`}>Mentor Mode</h1>
+            <p className={`mt-1 text-sm ${MUTED}`}>
+              Your AI trading coach — honest feedback from your own journal
             </p>
           </div>
           <AccentPicker accent={accent} setAccent={setAccent} />
@@ -296,8 +290,8 @@ export default function MentorMode({ currentAccount }) {
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <button
             onClick={() => setShareData((v) => !v)}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors ${
-              shareData ? "text-white border-transparent" : "border-gray-400/50 opacity-70"
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${FOCUS} ${
+              shareData ? "border-transparent text-white" : `${DIVIDER} ${MUTED}`
             }`}
             style={shareData ? { backgroundColor: ac.hex } : undefined}
             aria-pressed={shareData}
@@ -306,91 +300,99 @@ export default function MentorMode({ currentAccount }) {
             {shareData ? "Using my journal data" : "Journal data off"}
           </button>
           {shareData && (
-            <span className="opacity-60 text-xs sm:text-sm">
+            <span className={`text-xs ${MUTED}`}>
               {context.sampleSize
                 ? `${context.sampleSize} trades · ${context.winRatePct}% win rate`
                 : "No trades logged yet"}
             </span>
           )}
           {messages.length > 0 && (
-            <button onClick={clearChat} className="ml-auto inline-flex items-center gap-1.5 text-xs opacity-60 hover:opacity-100">
+            <button
+              onClick={clearChat}
+              className={`ml-auto inline-flex items-center gap-1.5 text-xs font-medium ${MUTED} hover:text-[#14142b] dark:hover:text-white`}
+            >
               <Trash2 size={14} /> Clear chat
             </button>
           )}
         </div>
 
         {/* Chat */}
-        <Card className={`${CARD} flex flex-col overflow-hidden h-[calc(100dvh-17rem)] md:h-[calc(100dvh-15rem)] min-h-[380px]`}>
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        <Card
+          className={`${CARD} flex h-[calc(100dvh-15rem)] min-h-[420px] flex-col overflow-hidden md:h-[calc(100dvh-13.5rem)]`}
+        >
+          <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
             {shown.map((m) => (
               <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[92%] sm:max-w-[80%] rounded-2xl px-4 py-3 text-sm sm:text-[15px] shadow-sm ${
+                  className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm shadow-sm sm:max-w-[80%] sm:text-[15px] ${
                     m.role === "user"
-                      ? "text-white rounded-br-md"
-                      : "bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-bl-md"
+                      ? "rounded-br-md text-white"
+                      : `rounded-bl-md border bg-[#f7f8fc] dark:bg-[#101024] ${DIVIDER} ${HEAD}`
                   }`}
                   style={m.role === "user" ? { backgroundColor: ac.hex } : undefined}
                 >
                   {m.role === "assistant" && (
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="mb-2 flex items-center gap-2">
                       <div
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-white"
-                        style={{ backgroundImage: `linear-gradient(135deg, ${ac.hex}, ${ac.hex2})` }}
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-white"
+                        style={{ backgroundColor: ac.hex }}
                       >
                         <Sparkles size={14} />
                       </div>
-                      <span className="font-semibold text-xs opacity-80">Forgex Mentor</span>
+                      <span className={`text-xs font-semibold ${MUTED}`}>Forgex Mentor</span>
                     </div>
                   )}
                   {m.role === "assistant" ? <Markdown text={m.content} /> : <p className="whitespace-pre-wrap">{m.content}</p>}
-                  <div className="text-[10px] opacity-60 mt-2 text-right">{format(new Date(m.ts), "HH:mm")}</div>
+                  <div className={`mt-2 text-right text-[10px] ${m.role === "user" ? "text-white/70" : MUTED}`}>
+                    {format(new Date(m.ts), "HH:mm")}
+                  </div>
                 </div>
               </div>
             ))}
 
             {sending && (
               <div className="flex justify-start">
-                <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center gap-2 text-sm opacity-80">
-                  <Loader2 className="animate-spin h-4 w-4" /> Thinking…
+                <div
+                  className={`flex items-center gap-2 rounded-2xl rounded-bl-md border px-4 py-3 text-sm ${DIVIDER} bg-[#f7f8fc] dark:bg-[#101024] ${MUTED}`}
+                >
+                  <Loader2 className="h-4 w-4 animate-spin" /> Thinking…
                 </div>
               </div>
             )}
 
             {error && (
-              <div className="p-3 rounded-xl bg-rose-100/80 dark:bg-rose-900/30 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-700 text-sm flex items-start gap-2">
-                <AlertCircle size={18} className="shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2 rounded-lg border border-[#f2556e]/30 bg-[#f2556e]/10 px-4 py-3 text-sm font-medium text-[#d93a57] dark:text-[#ff6b86]">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
             <div ref={endRef} />
           </div>
 
-          {/* Quick prompts + input */}
-          <div className="border-t border-gray-200 dark:border-gray-700 p-3 sm:p-4 space-y-3">
+          {/* Composer */}
+          <div className={`space-y-3 border-t p-3 sm:p-4 ${DIVIDER}`}>
             {messages.length < 2 && (
-              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                 {QUICK_PROMPTS.map((p) => (
                   <button
                     key={p}
                     onClick={() => send(p)}
                     disabled={sending}
-                    className="shrink-0 px-3 py-1.5 rounded-full text-xs sm:text-sm border hover:brightness-110 disabled:opacity-50"
-                    style={{ borderColor: ac.hex + "88", color: ac.hex }}
+                    className="shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors hover:brightness-110 disabled:opacity-50"
+                    style={{ borderColor: `${ac.hex}66`, color: ac.hex }}
                   >
                     {p}
                   </button>
                 ))}
               </div>
             )}
-            <div className="flex gap-2 items-end">
+            <div className="flex items-end gap-2">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 rows={1}
                 placeholder="Ask about a trade, risk, psychology, your plan…"
-                className="flex-1 p-3 rounded-xl border resize-none max-h-32 min-h-[48px] text-sm outline-none focus:ring-2 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700"
-                style={{ "--tw-ring-color": ac.hex }}
+                className={`${FIELD} max-h-32 min-h-[46px] flex-1 resize-none py-3`}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -402,13 +404,13 @@ export default function MentorMode({ currentAccount }) {
                 onClick={() => send()}
                 disabled={!input.trim() || sending}
                 aria-label="Send"
-                className="h-12 w-12 shrink-0 rounded-xl text-white flex items-center justify-center hover:brightness-110 disabled:opacity-40"
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white transition hover:brightness-110 disabled:opacity-40 ${FOCUS}`}
                 style={{ backgroundColor: ac.hex }}
               >
-                <Send size={20} />
+                <Send size={19} />
               </button>
             </div>
-            <p className="text-[11px] opacity-50 text-center">
+            <p className={`text-center text-[11px] ${MUTED}`}>
               AI coaching for education only — not financial advice. Replies can be wrong, so double-check important decisions.
             </p>
           </div>

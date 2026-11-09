@@ -26,6 +26,17 @@ import DeleteConfirmModal from "../components/ui/DeleteConfirmModal";
 import useAccent from "../hooks/useAccent";
 import AccentPicker from "../components/ui/AccentPicker";
 import {
+  POS_T,
+  NEG_T,
+  MUTED,
+  HEAD,
+  DIVIDER,
+  CARD,
+  PANEL,
+  FIELD,
+  FOCUS,
+} from "../lib/uiTokens";
+import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
@@ -69,40 +80,36 @@ const hexA = (hex, a) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
-const PANEL =
-  "rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm";
-const POS = "text-emerald-600 dark:text-emerald-400";
-const NEG = "text-rose-600 dark:text-rose-400";
-const toneOf = (n) => (n > 0 ? POS : n < 0 ? NEG : "text-slate-900 dark:text-slate-100");
+const POS = POS_T;
+const NEG = NEG_T;
+const toneOf = (n) => (n > 0 ? POS : n < 0 ? NEG : HEAD);
 
 const Panel = ({ title, action, children, className = "" }) => (
-  <div className={`${PANEL} ${className}`}>
+  <div className={`${CARD} ${className}`}>
     {title && (
-      <div className="flex items-center justify-between px-5 pt-4">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
+      <div className={`flex items-center justify-between border-b px-4 py-3 ${DIVIDER}`}>
+        <h3 className={`text-[15px] font-semibold ${HEAD}`}>{title}</h3>
         {action}
       </div>
     )}
-    <div className="px-5 pb-5 pt-3">{children}</div>
+    <div className="p-4">{children}</div>
   </div>
 );
 
 const Kpi = ({ label, value, sub, tone }) => (
-  <div className={`${PANEL} p-4`}>
-    <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-      {label}
-    </div>
-    <div className={`mt-2 text-2xl font-semibold tabular-nums ${tone || "text-slate-900 dark:text-slate-100"}`}>
+  <div className={`${CARD} p-4`}>
+    <div className={`text-[11px] font-medium ${MUTED}`}>{label}</div>
+    <div className={`mt-1 text-xl font-bold tabular-nums sm:text-2xl ${tone || HEAD}`}>
       {value}
     </div>
-    {sub && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{sub}</div>}
+    {sub && <div className={`mt-1 text-xs ${MUTED}`}>{sub}</div>}
   </div>
 );
 
 const StatRow = ({ label, value, tone }) => (
-  <div className="flex items-center justify-between py-2 text-sm border-b border-slate-100 dark:border-slate-800 last:border-0">
-    <span className="text-slate-500 dark:text-slate-400">{label}</span>
-    <span className={`font-medium tabular-nums ${tone || "text-slate-900 dark:text-slate-100"}`}>{value}</span>
+  <div className={`flex items-center justify-between border-b py-2 text-sm last:border-0 ${DIVIDER}`}>
+    <span className={MUTED}>{label}</span>
+    <span className={`font-semibold tabular-nums ${tone || HEAD}`}>{value}</span>
   </div>
 );
 
@@ -112,13 +119,13 @@ const Donut = ({ wins, losses, be }) => {
   const c = 2 * Math.PI * r;
   let offset = 0;
   const segs = [
-    { v: wins, col: "#10b981" },
+    { v: wins, col: "#22c493" },
     { v: be, col: "#94a3b8" },
-    { v: losses, col: "#f43f5e" },
+    { v: losses, col: "#f2556e" },
   ];
   return (
     <svg viewBox="0 0 100 100" className="h-32 w-32 -rotate-90 shrink-0">
-      <circle cx="50" cy="50" r={r} fill="none" strokeWidth="10" stroke="currentColor" className="text-slate-100 dark:text-slate-800" />
+      <circle cx="50" cy="50" r={r} fill="none" strokeWidth="10" stroke="currentColor" className="text-[#e6e8f2] dark:text-[#262645]" />
       {total > 0 &&
         segs.map((sg, i) => {
           if (!sg.v) return null;
@@ -147,23 +154,23 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected }) => {
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   const keyOf = (d) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   const monthTotal = cells.reduce((sum, d) => sum + (d ? daily[keyOf(d)]?.pnl || 0 : 0), 0);
-  const nav = "p-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800";
+  const nav = `rounded-lg border p-1.5 ${DIVIDER} ${MUTED} transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`;
 
   return (
     <Panel
       title={`${month.toLocaleString("en-US", { month: "long", year: "numeric" })} · ${money(monthTotal, true)}`}
       action={
         <div className="flex gap-1.5">
-          <button type="button" className={nav} onClick={() => onMonth(new Date(y, m - 1, 1))}>
+          <button type="button" className={nav} onClick={() => onMonth(new Date(y, m - 1, 1))} aria-label="Previous month">
             <ChevronLeft size={16} />
           </button>
-          <button type="button" className={nav} onClick={() => onMonth(new Date(y, m + 1, 1))}>
+          <button type="button" className={nav} onClick={() => onMonth(new Date(y, m + 1, 1))} aria-label="Next month">
             <ChevronRight size={16} />
           </button>
         </div>
       }
     >
-      <div className="grid grid-cols-8 gap-1.5 text-center text-[11px] font-medium uppercase tracking-wider text-slate-400 mb-1.5">
+      <div className={`mb-1.5 grid grid-cols-8 gap-1.5 text-center text-[10px] font-semibold uppercase tracking-wider ${MUTED}`}>
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Week"].map((d) => (
           <div key={d}>{d}</div>
         ))}
@@ -178,28 +185,28 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected }) => {
                 if (!d) return <div key={di} />;
                 const rec = daily[keyOf(d)];
                 const tone = !rec
-                  ? "border-slate-100 dark:border-slate-800 text-slate-400"
+                  ? `${DIVIDER} ${MUTED} opacity-70`
                   : rec.pnl > 0
-                  ? "border-emerald-500/30 bg-emerald-500/10"
+                  ? "border-[#22c493]/30 bg-[#22c493]/10"
                   : rec.pnl < 0
-                  ? "border-rose-500/30 bg-rose-500/10"
-                  : "border-slate-300 dark:border-slate-700 bg-slate-500/10";
+                  ? "border-[#f2556e]/30 bg-[#f2556e]/10"
+                  : "border-amber-500/30 bg-amber-500/10";
                 return (
                   <button
                     key={di}
                     type="button"
                     onClick={() => rec && onPick(keyOf(d))}
-                    className={`min-h-[62px] rounded-lg border p-1.5 text-left transition ${tone} ${
-                      selected === keyOf(d) ? "ring-2 ring-offset-0 ring-slate-400" : ""
+                    className={`min-h-[60px] rounded-lg border p-1.5 text-left transition ${tone} ${
+                      selected === keyOf(d) ? "ring-2 ring-[#6C47FF]" : ""
                     } ${rec ? "cursor-pointer hover:brightness-110" : "cursor-default"}`}
                   >
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400">{d}</div>
+                    <div className={`text-[11px] ${MUTED}`}>{d}</div>
                     {rec && (
                       <>
                         <div className={`text-xs font-semibold tabular-nums ${toneOf(rec.pnl)}`}>
                           {money(rec.pnl, true)}
                         </div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                        <div className={`text-[10px] ${MUTED}`}>
                           {rec.count} trade{rec.count > 1 ? "s" : ""}
                         </div>
                       </>
@@ -207,14 +214,14 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected }) => {
                   </button>
                 );
               })}
-              <div className="min-h-[62px] rounded-lg border border-slate-100 dark:border-slate-800 p-1.5 flex flex-col justify-center text-center">
+              <div className={`flex min-h-[60px] flex-col justify-center rounded-lg border p-1.5 text-center ${DIVIDER}`}>
                 {weekCount > 0 ? (
                   <>
                     <div className={`text-xs font-semibold tabular-nums ${toneOf(weekTotal)}`}>{money(weekTotal, true)}</div>
-                    <div className="text-[10px] text-slate-500 dark:text-slate-400">{weekCount} trades</div>
+                    <div className={`text-[10px] ${MUTED}`}>{weekCount} trades</div>
                   </>
                 ) : (
-                  <div className="text-[11px] text-slate-400">—</div>
+                  <div className={`text-[11px] ${MUTED}`}>—</div>
                 )}
               </div>
             </div>
@@ -226,7 +233,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected }) => {
 };
 
 // Tag input component for confluences (if editing, but we can keep simple display)
-const ConfluenceTags = ({ tags, onChange }) => {
+const ConfluenceTags = ({ tags, onChange, accent = "#6C47FF" }) => {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef(null);
 
@@ -247,20 +254,22 @@ const ConfluenceTags = ({ tags, onChange }) => {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2 p-2 border rounded-xl min-h-[60px] items-center bg-white dark:bg-gray-800">
+      <div className={`flex min-h-[48px] flex-wrap items-center gap-2 rounded-lg border p-2 ${DIVIDER} bg-white dark:bg-[#101024]`}>
         {tags.map((tag, idx) => (
           <span
             key={idx}
-            className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold"
+            style={{ backgroundColor: `${accent}22`, color: accent }}
           >
-            <Tag size={12} />
+            <Tag size={11} />
             {tag}
             <button
               type="button"
               onClick={() => removeTag(tag)}
-              className="ml-1 hover:text-indigo-900 dark:hover:text-indigo-100"
+              className="ml-0.5 opacity-70 hover:opacity-100"
+              aria-label={`Remove ${tag}`}
             >
-              <X size={14} />
+              <X size={13} />
             </button>
           </span>
         ))}
@@ -270,11 +279,11 @@ const ConfluenceTags = ({ tags, onChange }) => {
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={tags.length === 0 ? "Type a confluence and press Enter..." : ""}
-          className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm p-1"
+          placeholder={tags.length === 0 ? "Type a confluence and press Enter" : ""}
+          className="min-w-[120px] flex-1 border-none bg-transparent p-1 text-sm outline-none"
         />
       </div>
-      <p className="text-xs opacity-60">Press Enter or comma to add a tag</p>
+      <p className={`text-xs ${MUTED}`}>Press Enter or comma to add a tag</p>
     </div>
   );
 };
@@ -639,11 +648,11 @@ export default function Trades({ currentAccount }) {
 
   if (!currentAccount) {
     return (
-      <div className={`min-h-screen w-full p-8 flex items-center justify-center ${isDark ? "bg-slate-950" : "bg-slate-50"}`}>
-        <Card className="p-8 max-w-md text-center bg-white/80 dark:bg-gray-800/60 backdrop-blur-md">
-          <AlertCircle size={48} className="mx-auto text-amber-500 mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Account Selected</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
+      <div className="flex min-h-screen w-full items-center justify-center bg-[#f4f5fa] p-8 dark:bg-[#0b0b19]">
+        <Card className={`${CARD} max-w-md p-8 text-center`}>
+          <AlertCircle size={40} className="mx-auto mb-4 text-amber-500" />
+          <h2 className={`mb-2 text-xl font-bold ${HEAD}`}>No account selected</h2>
+          <p className={`text-sm ${MUTED}`}>
             Please create or select an account from the sidebar to view your trades.
           </p>
         </Card>
@@ -652,28 +661,25 @@ export default function Trades({ currentAccount }) {
   }
 
   const grid = isDark ? "rgba(148,163,184,0.12)" : "rgba(100,116,139,0.15)";
-  const tick = isDark ? "#94a3b8" : "#64748b";
+  const tick = isDark ? "#8a8fb5" : "#6b7090";
   const pfText = analytics.profitFactor === Infinity ? "∞" : analytics.profitFactor.toFixed(2);
   const payoffText = analytics.payoff === Infinity ? "∞" : analytics.payoff.toFixed(2);
   const dailyKeys = Object.keys(analytics.daily).sort().slice(-30);
-  const inputCls =
-    "h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-slate-400/40";
+  const inputCls = `h-10 rounded-lg border ${DIVIDER} bg-white dark:bg-[#101024] px-3 text-sm outline-none focus:ring-2 focus:ring-[#6C47FF] text-[#14142b] dark:text-[#e8e9f7]`;
 
   return (
-    <div className="min-h-screen w-full p-4 sm:p-6 lg:p-8 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
-      <div className="max-w-7xl mx-auto space-y-5">
+    <div className="min-h-screen w-full bg-[#f4f5fa] p-3 text-[#14142b] transition-colors dark:bg-[#0b0b19] dark:text-[#e8e9f7] sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-[1600px] space-y-4">
         {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-xs font-medium uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              Performance Dashboard
-            </div>
-            <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight">{currentAccount.name}</h1>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className={`text-2xl font-bold tracking-tight sm:text-3xl ${HEAD}`}>{currentAccount.name}</h1>
+            <p className={`mt-1 text-sm ${MUTED}`}>Performance dashboard · trade log · analytics</p>
             {selectedDate && (
               <button
                 type="button"
                 onClick={() => setSearchParams({})}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-slate-300 dark:border-slate-700 px-3 py-1 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className={`mt-2 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-medium ${DIVIDER} ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
               >
                 Showing {selectedDate} <X size={12} />
               </button>
@@ -684,22 +690,22 @@ export default function Trades({ currentAccount }) {
             <Button
               onClick={() => navigate("/trades/new")}
               style={{ backgroundColor: ac.hex }}
-              className="text-white hover:brightness-110 shadow-sm"
+              className="font-semibold text-white hover:brightness-110"
             >
-              <PlusCircle size={16} className="mr-2" /> Add Trade
+              <PlusCircle size={16} className="mr-2" /> Add trade
             </Button>
             <Button
               onClick={exportCSV}
               disabled={!filteredTrades.length || loading}
               variant="outline"
-              className="border border-slate-300 dark:border-slate-700 disabled:opacity-50"
+              className={`border ${DIVIDER} font-semibold disabled:opacity-50`}
             >
               <Download size={16} className="mr-2" /> Export
             </Button>
             <Button
               onClick={migrateOldTrades}
               variant="outline"
-              className="border border-slate-300 dark:border-slate-700"
+              className={`border ${DIVIDER} font-semibold`}
             >
               Migrate
             </Button>
@@ -709,19 +715,20 @@ export default function Trades({ currentAccount }) {
         {/* Feedback */}
         {message.text && (
           <div
-            className={`px-4 py-3 rounded-lg flex items-center gap-3 text-sm border ${
+            role={message.type === "error" ? "alert" : "status"}
+            className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium ${
               message.type === "success"
-                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900"
-                : "bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200 border-rose-200 dark:border-rose-900"
+                ? "border-[#22c493]/30 bg-[#22c493]/10 text-[#0e9f77] dark:text-[#2dd4a0]"
+                : "border-[#f2556e]/30 bg-[#f2556e]/10 text-[#d93a57] dark:text-[#ff6b86]"
             }`}
           >
-            {message.type === "success" ? <Check size={18} /> : <AlertCircle size={18} />}
+            {message.type === "success" ? <Check size={16} /> : <AlertCircle size={16} />}
             {message.text}
           </div>
         )}
 
         {/* KPI row */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <Kpi label="Net P&L" value={money(analytics.net, true)} tone={toneOf(analytics.net)}
             sub={`${analytics.total} closed${analytics.pending ? ` · ${analytics.pending} pending` : ""}`} />
           <Kpi label="Win rate" value={`${analytics.winRate.toFixed(1)}%`}
@@ -777,7 +784,7 @@ export default function Trades({ currentAccount }) {
                 />
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-sm text-slate-400">
+              <div className={`flex h-64 items-center justify-center text-sm ${MUTED}`}>
                 Close a trade to start your equity curve
               </div>
             )}
@@ -788,22 +795,22 @@ export default function Trades({ currentAccount }) {
               <div className="relative">
                 <Donut wins={analytics.wins} losses={analytics.losses} be={analytics.be} />
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <div className="text-xl font-semibold tabular-nums">{analytics.winRate.toFixed(0)}%</div>
-                  <div className="text-[10px] uppercase tracking-wider text-slate-400">win rate</div>
+                  <div className={`text-xl font-semibold tabular-nums ${HEAD}`}>{analytics.winRate.toFixed(0)}%</div>
+                  <div className={`text-[10px] uppercase tracking-wider ${MUTED}`}>win rate</div>
                 </div>
               </div>
               <div className="flex-1 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-slate-500">Wins</span><span className={POS}>{analytics.wins}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Break-even</span><span>{analytics.be}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Losses</span><span className={NEG}>{analytics.losses}</span></div>
+                <div className="flex justify-between"><span className={MUTED}>Wins</span><span className={POS}>{analytics.wins}</span></div>
+                <div className="flex justify-between"><span className={MUTED}>Break-even</span><span className={HEAD}>{analytics.be}</span></div>
+                <div className="flex justify-between"><span className={MUTED}>Losses</span><span className={NEG}>{analytics.losses}</span></div>
               </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3">
               {[["Long", analytics.long], ["Short", analytics.short]].map(([name, sd]) => (
-                <div key={name} className="rounded-lg border border-slate-200 dark:border-slate-800 p-3">
-                  <div className="text-[11px] uppercase tracking-wider text-slate-500">{name}</div>
-                  <div className={`mt-1 text-base font-semibold tabular-nums ${toneOf(sd.pnl)}`}>{money(sd.pnl, true)}</div>
-                  <div className="text-xs text-slate-500">{sd.count} trades · {sd.winRate.toFixed(0)}% win</div>
+                <div key={name} className={`rounded-lg border p-3 ${DIVIDER}`}>
+                  <div className={`text-[11px] font-medium ${MUTED}`}>{name}</div>
+                  <div className={`mt-1 text-base font-bold tabular-nums ${toneOf(sd.pnl)}`}>{money(sd.pnl, true)}</div>
+                  <div className={`text-xs ${MUTED}`}>{sd.count} trades · {sd.winRate.toFixed(0)}% win</div>
                 </div>
               ))}
             </div>
@@ -845,7 +852,7 @@ export default function Trades({ currentAccount }) {
                     datasets: [
                       {
                         data: dailyKeys.map((k) => Number(analytics.daily[k].pnl.toFixed(2))),
-                        backgroundColor: dailyKeys.map((k) => (analytics.daily[k].pnl >= 0 ? "#10b981" : "#f43f5e")),
+                        backgroundColor: dailyKeys.map((k) => (analytics.daily[k].pnl >= 0 ? "#22c493" : "#f2556e")),
                         borderRadius: 4,
                         maxBarThickness: 18,
                       },
@@ -874,7 +881,7 @@ export default function Trades({ currentAccount }) {
                     datasets: [
                       {
                         data: pairPnL.map((x) => x.pnl),
-                        backgroundColor: pairPnL.map((x) => (x.pnl >= 0 ? "#10b981" : "#f43f5e")),
+                        backgroundColor: pairPnL.map((x) => (x.pnl >= 0 ? "#22c493" : "#f2556e")),
                         borderRadius: 4,
                         maxBarThickness: 20,
                       },
@@ -902,18 +909,18 @@ export default function Trades({ currentAccount }) {
         {/* Trade log toolbar */}
         <div className="flex flex-col gap-3 pt-2 md:flex-row md:items-center md:justify-between">
           <div className="flex items-baseline gap-2">
-            <h2 className="text-lg font-semibold">Trade log</h2>
-            <span className="text-sm text-slate-500">{filteredTrades.length} trades</span>
+            <h2 className={`text-[15px] font-semibold ${HEAD}`}>Trade log</h2>
+            <span className={`text-xs ${MUTED}`}>{filteredTrades.length} trades</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className={`relative flex items-center gap-2 rounded-lg border px-3 py-2 ${DIVIDER} bg-white dark:bg-[#15152b]`}>
+              <Search size={15} className={MUTED} />
               <input
                 type="text"
                 placeholder="Search pair, notes, tags…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className={`${inputCls} pl-9 w-60`}
+                className="w-48 bg-transparent text-sm outline-none sm:w-60"
               />
             </div>
             <input
@@ -921,8 +928,9 @@ export default function Trades({ currentAccount }) {
               value={selectedDate || ""}
               onChange={(e) => setSearchParams(e.target.value ? { date: e.target.value } : {})}
               className={inputCls}
+              aria-label="Filter by date"
             />
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={inputCls}>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={inputCls} aria-label="Sort trades">
               <option value="date-desc">Newest first</option>
               <option value="date-asc">Oldest first</option>
               <option value="pnl-desc">Highest P&L</option>
@@ -934,287 +942,242 @@ export default function Trades({ currentAccount }) {
 
         {/* Trades List */}
         {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+          <div className="flex h-72 items-center justify-center">
+            <div
+              className="h-10 w-10 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#262645]"
+              style={{ borderTopColor: ac.hex }}
+              role="progressbar"
+              aria-label="Loading trades"
+            />
           </div>
         ) : error ? (
-          <div className="text-center py-16 text-rose-400 text-xl font-medium">{error}</div>
+          <Card className={`${CARD} p-8 text-center`}>
+            <AlertCircle size={32} className="mx-auto mb-3 text-amber-500 opacity-80" />
+            <p className={`text-sm font-medium ${MUTED}`}>{error}</p>
+          </Card>
         ) : filteredTrades.length === 0 ? (
-          <Card className="p-12 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm max-w-2xl mx-auto">
-            <AlertCircle size={72} className="mx-auto text-amber-500 mb-6 opacity-90" />
-            <h2 className="text-3xl font-bold mb-4 text-gray-900 dark:text-gray-100">
-              No trades yet in {currentAccount.name}
-            </h2>
-            <p className="text-lg opacity-80 mb-10 leading-relaxed">
-              Start building your performance history.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center gap-6">
+          <Card className={`${CARD} p-10 text-center`}>
+            <AlertCircle size={36} className="mx-auto mb-3 text-amber-500 opacity-80" />
+            <p className={`text-lg font-semibold ${HEAD}`}>No trades yet in {currentAccount.name}</p>
+            <p className={`mb-5 mt-1 text-sm ${MUTED}`}>Start building your performance history.</p>
+            <div className="flex flex-col justify-center gap-2.5 sm:flex-row">
               <Button
-                size="lg"
                 style={{ backgroundColor: ac.hex }}
-                className="hover:brightness-110 text-white shadow-lg px-6 py-3 text-base font-medium"
+                className="font-semibold text-white hover:brightness-110"
                 onClick={() => navigate("/trades/new")}
               >
-                <PlusCircle size={24} className="mr-3" />
-                Add New Trade
+                <PlusCircle size={16} className="mr-2" />
+                Add new trade
               </Button>
               <Button
-                size="lg"
                 variant="outline"
-                style={{ borderColor: ac.hex, color: ac.hex }}
-                className="border-2 hover:bg-black/5 dark:hover:bg-white/5 px-6 py-3 text-base font-medium"
+                className={`border ${DIVIDER} font-semibold`}
                 onClick={() => navigate("/journal")}
               >
-                <BookOpen size={24} className="mr-3" />
-                Journal Today
+                <BookOpen size={16} className="mr-2" />
+                Journal today
               </Button>
             </div>
           </Card>
         ) : (
-          <div className="space-y-4">
-            {filteredTrades.map((trade) => (
-              <Card
-                key={trade.id}
-                className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-colors group"
-              >
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`w-12 h-12 rounded-xl flex items-center justify-center text-base font-bold shadow-sm ${
-                          trade.status === "pending"
-                            ? "bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-                            : Number(trade.pnl || 0) >= 0
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                            : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
-                        }`}
-                      >
-                        {trade.pair?.slice(0, 2) || "?"}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-lg">
-                            {trade.pair || "—"} • {trade.direction || "—"}
-                          </span>
-                          {trade.status === "pending" && (
-                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                              Pending
+          <div className="space-y-3">
+            {filteredTrades.map((trade) => {
+              const pending = trade.status === "pending";
+              const pnl = Number(trade.pnl || 0);
+              return (
+                <Card key={trade.id} className={`${CARD} overflow-hidden p-0`}>
+                  <div className="flex flex-col justify-between gap-4 p-4 lg:flex-row lg:items-start">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+                          style={{
+                            backgroundColor: pending
+                              ? "rgba(245,158,11,0.14)"
+                              : pnl >= 0
+                              ? "rgba(34,196,147,0.14)"
+                              : "rgba(242,85,110,0.14)",
+                            color: pending ? "#b45309" : pnl >= 0 ? "#0e9f77" : "#d93a57",
+                          }}
+                        >
+                          {trade.pair?.slice(0, 2) || "?"}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-[15px] font-semibold ${HEAD}`}>
+                              {trade.pair || "—"} · {trade.direction || "—"}
                             </span>
-                          )}
-                        </div>
-                        <div className="text-sm opacity-70 flex flex-wrap gap-3 mt-1">
-                          <span>Open: {trade.openDateTime ? new Date(trade.openDateTime).toLocaleString() : "—"}</span>
-                          {trade.status === "executed" && trade.closeDateTime && (
-                            <span>Close: {new Date(trade.closeDateTime).toLocaleString()}</span>
-                          )}
-                          <span>Lot: {trade.lotSize || "—"}</span>
-                          {trade.status === "executed" && trade.rr && <span>R:R {trade.rr}</span>}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Confluences */}
-                    {trade.confluences?.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {trade.confluences.map((conf, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20"
-                          >
-                            <Tag size={12} />
-                            {conf}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Notes */}
-                    {trade.notes && (
-                      <div className="text-sm opacity-80 line-clamp-2 mt-2">
-                        <FileText size={14} className="inline mr-1" />
-                        {trade.notes}
-                      </div>
-                    )}
-
-                    {/* Screenshot */}
-                    {trade.screenshotUrl && (
-                      <a
-                        href={trade.screenshotUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block mt-2"
-                      >
-                        <img
-                          src={trade.screenshotUrl}
-                          alt="Chart"
-                          className="h-16 w-16 object-cover rounded-lg border border-gray-300 dark:border-gray-600 hover:opacity-80 transition"
-                        />
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between lg:justify-end w-full lg:w-auto gap-6">
-                    <div className="text-left sm:text-right sm:min-w-[100px]">
-                      {trade.status === "pending" ? (
-                        <div className="text-lg font-semibold text-amber-600 dark:text-amber-400">Pending</div>
-                      ) : (
-                        <>
-                          <div
-                            className={`text-xl font-bold ${
-                              Number(trade.pnl || 0) >= 0
-                                ? "text-emerald-700 dark:text-emerald-500"
-                                : "text-rose-700 dark:text-rose-500"
-                            }`}
-                          >
-                            {Number(trade.pnl || 0) >= 0 ? "+" : ""}$
-                            {Math.abs(Number(trade.pnl || 0)).toFixed(2)}
+                            {pending && (
+                              <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-[#b45309] dark:text-[#fbbf24]">
+                                Pending
+                              </span>
+                            )}
                           </div>
-                          {trade.rr && <div className="text-xs opacity-70">R:R {trade.rr}</div>}
-                        </>
+                          <div className={`mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs ${MUTED}`}>
+                            <span>Open: {trade.openDateTime ? new Date(trade.openDateTime).toLocaleString() : "—"}</span>
+                            {!pending && trade.closeDateTime && (
+                              <span>Close: {new Date(trade.closeDateTime).toLocaleString()}</span>
+                            )}
+                            <span>Lot: {trade.lotSize || "—"}</span>
+                            {!pending && trade.rr && <span>R:R {trade.rr}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {trade.confluences?.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {trade.confluences.map((conf, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold"
+                              style={{ backgroundColor: `${ac.hex}1f`, color: ac.hex }}
+                            >
+                              <Tag size={11} />
+                              {conf}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {trade.notes && (
+                        <div className={`mt-2 line-clamp-2 text-sm ${MUTED}`}>
+                          <FileText size={13} className="mr-1 inline" />
+                          {trade.notes}
+                        </div>
+                      )}
+
+                      {trade.screenshotUrl && (
+                        <a
+                          href={trade.screenshotUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-block"
+                        >
+                          <img
+                            src={trade.screenshotUrl}
+                            alt="Chart"
+                            className={`h-16 w-16 rounded-lg border object-cover transition hover:opacity-80 ${DIVIDER}`}
+                          />
+                        </a>
                       )}
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => setSelectedTrade(trade)}
-                        className="h-10 w-10 rounded-lg border-2 hover:bg-indigo-100 dark:hover:bg-indigo-900"
-                      >
-                        <Eye size={18} />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => openEdit(trade)}
-                        className="h-10 w-10 rounded-lg border-2 hover:bg-indigo-100 dark:hover:bg-indigo-900"
-                      >
-                        <Edit size={18} />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="destructive"
-                        onClick={() => {
-                          setTradeToDelete(trade.id);
-                          setDeleteModalOpen(true);
-                        }}
-                        className="h-10 w-10 rounded-lg border-2 border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900"
-                      >
-                        <Trash2 size={18} />
-                      </Button>
+
+                    <div className="flex w-full items-center justify-between gap-6 lg:w-auto lg:justify-end">
+                      <div className="text-left sm:min-w-[100px] sm:text-right">
+                        {pending ? (
+                          <div className="text-lg font-bold text-[#b45309] dark:text-[#fbbf24]">Pending</div>
+                        ) : (
+                          <>
+                            <div className={`text-xl font-bold tabular-nums ${pnl >= 0 ? POS : NEG}`}>
+                              {money(pnl, true)}
+                            </div>
+                            {trade.rr && <div className={`text-xs ${MUTED}`}>R:R {trade.rr}</div>}
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => setSelectedTrade(trade)}
+                          aria-label="View trade"
+                          className={`rounded-lg border p-2 ${DIVIDER} ${MUTED} transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          onClick={() => openEdit(trade)}
+                          aria-label="Edit trade"
+                          className={`rounded-lg border p-2 ${DIVIDER} ${MUTED} transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setTradeToDelete(trade.id);
+                            setDeleteModalOpen(true);
+                          }}
+                          aria-label="Delete trade"
+                          className={`rounded-lg border border-[#f2556e]/40 p-2 text-[#d93a57] transition-colors hover:bg-[#f2556e]/10 dark:text-[#ff6b86] ${FOCUS}`}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
 
         {/* View Details Modal */}
         {selectedTrade && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4">
-            <div
-              className={`w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden border
-                ${isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
-            >
-              <div className="p-6 max-h-[80vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-6">
-                  <h2
-                    className="text-2xl font-bold bg-clip-text text-transparent"
-                    style={{ backgroundImage: `linear-gradient(90deg, ${ac.hex}, ${ac.hex2})` }}
-                  >
-                    Trade Details
-                  </h2>
-                  <Button variant="ghost" size="icon" onClick={() => setSelectedTrade(null)}>
-                    <X size={24} />
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[#e6e8f2] bg-white text-[#14142b] shadow-2xl dark:border-[#262645] dark:bg-[#15152b] dark:text-white">
+              <div className={`flex items-center justify-between border-b px-4 py-3 ${DIVIDER}`}>
+                <h2 className={`text-[15px] font-semibold ${HEAD}`}>Trade details</h2>
+                <button
+                  onClick={() => setSelectedTrade(null)}
+                  aria-label="Close"
+                  className={`rounded-md p-1.5 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="max-h-[75vh] overflow-y-auto p-4 sm:p-5">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-3.5">
+                    {[
+                      ["Pair & direction", `${selectedTrade.pair || "—"} · ${selectedTrade.direction || "—"}`],
+                      ["Open date & time", selectedTrade.openDateTime ? new Date(selectedTrade.openDateTime).toLocaleString() : "—"],
+                      ["Close date & time", selectedTrade.closeDateTime ? new Date(selectedTrade.closeDateTime).toLocaleString() : selectedTrade.status === "pending" ? "Pending" : "—"],
+                      ["Entry", selectedTrade.entry || "—"],
+                      ["Exit", selectedTrade.status === "pending" ? "Pending" : selectedTrade.exit || "—"],
+                      ["Stop loss", selectedTrade.stopLoss || "—"],
+                      ["Take profit", selectedTrade.takeProfit || "—"],
+                      ["Risk : reward", selectedTrade.status === "pending" ? "—" : selectedTrade.rr || "—"],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <div className={`text-[11px] font-medium ${MUTED}`}>{label}</div>
+                        <div className={`mt-0.5 text-sm font-semibold ${HEAD}`}>{value}</div>
+                      </div>
+                    ))}
+
                     <div>
-                      <div className="text-sm opacity-70 mb-1">Pair & Direction</div>
-                      <div className="text-xl font-semibold">
-                        {selectedTrade.pair || "—"} • {selectedTrade.direction || "—"}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm opacity-70 mb-1">Open Date & Time</div>
-                      <div className="text-lg">
-                        {selectedTrade.openDateTime
-                          ? new Date(selectedTrade.openDateTime).toLocaleString()
-                          : "—"}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm opacity-70 mb-1">Close Date & Time</div>
-                      <div className="text-lg">
-                        {selectedTrade.closeDateTime
-                          ? new Date(selectedTrade.closeDateTime).toLocaleString()
-                          : selectedTrade.status === "pending" ? "Pending" : "—"}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-sm opacity-70 mb-1">Entry</div>
-                        <div className="text-lg font-medium">{selectedTrade.entry || "—"}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm opacity-70 mb-1">Exit</div>
-                        <div className="text-lg font-medium">
-                          {selectedTrade.status === "pending" ? "Pending" : (selectedTrade.exit || "—")}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-sm opacity-70 mb-1">Stop Loss</div>
-                        <div className="text-lg">{selectedTrade.stopLoss || "—"}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm opacity-70 mb-1">Take Profit</div>
-                        <div className="text-lg">{selectedTrade.takeProfit || "—"}</div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm opacity-70 mb-1">Risk:Reward</div>
-                      <div className="text-xl font-bold text-violet-600 dark:text-violet-400">
-                        {selectedTrade.status === "pending" ? "—" : (selectedTrade.rr || "—")}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm opacity-70 mb-1">Status</div>
-                      <div className={`text-lg font-semibold ${
-                        selectedTrade.status === "pending" ? "text-amber-600" : "text-emerald-600"
-                      }`}>
-                        {selectedTrade.status === "pending" ? "⏳ Pending" : "✅ Executed"}
+                      <div className={`text-[11px] font-medium ${MUTED}`}>Status</div>
+                      <div className={`mt-0.5 text-sm font-semibold ${selectedTrade.status === "pending" ? "text-[#b45309] dark:text-[#fbbf24]" : POS}`}>
+                        {selectedTrade.status === "pending" ? "Pending" : "Executed"}
                       </div>
                     </div>
                   </div>
+
                   <div className="space-y-4">
-                    <div>
-                      <div className="text-sm opacity-70 mb-1">Profit & Loss</div>
+                    <div className={`rounded-xl border p-4 ${DIVIDER}`}>
+                      <div className={`text-[11px] font-medium ${MUTED}`}>Profit & loss</div>
                       <div
-                        className={`text-3xl font-bold ${
+                        className={`mt-1 text-3xl font-bold tabular-nums ${
                           selectedTrade.status === "pending"
-                            ? "text-gray-500"
+                            ? MUTED
                             : Number(selectedTrade.pnl || 0) >= 0
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-rose-600 dark:text-rose-400"
+                            ? POS
+                            : NEG
                         }`}
                       >
-                        {selectedTrade.status === "pending"
-                          ? "Pending"
-                          : `${Number(selectedTrade.pnl || 0) >= 0 ? "+" : ""}$${Math.abs(Number(selectedTrade.pnl || 0)).toFixed(2)}`
-                        }
+                        {selectedTrade.status === "pending" ? "Pending" : money(Number(selectedTrade.pnl || 0), true)}
                       </div>
                     </div>
+
                     {selectedTrade.confluences?.length > 0 && (
                       <div>
-                        <div className="text-sm opacity-70 mb-2">Confluences</div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className={`mb-2 text-[11px] font-medium ${MUTED}`}>Confluences</div>
+                        <div className="flex flex-wrap gap-1.5">
                           {selectedTrade.confluences.map((conf, idx) => (
                             <span
                               key={idx}
-                              className="inline-flex items-center gap-1 px-3 py-1 text-xs rounded-full bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30"
+                              className="inline-flex items-center rounded-md px-2 py-1 text-[11px] font-semibold"
+                              style={{ backgroundColor: `${ac.hex}1f`, color: ac.hex }}
                             >
                               {conf}
                             </span>
@@ -1222,24 +1185,26 @@ export default function Trades({ currentAccount }) {
                         </div>
                       </div>
                     )}
+
                     {selectedTrade.notes && (
                       <div>
-                        <div className="text-sm opacity-70 mb-2 flex items-center gap-2">
-                          <FileText size={16} /> Notes
+                        <div className={`mb-2 flex items-center gap-1.5 text-[11px] font-medium ${MUTED}`}>
+                          <FileText size={13} /> Notes
                         </div>
-                        <div className="p-4 rounded-xl bg-gray-50/80 dark:bg-gray-800/50 border border-gray-200/50 dark:border-gray-700/50 whitespace-pre-wrap text-sm">
+                        <div className={`whitespace-pre-wrap rounded-xl border p-3 text-sm ${DIVIDER} ${PANEL}`}>
                           {selectedTrade.notes}
                         </div>
                       </div>
                     )}
+
                     {selectedTrade.screenshotUrl && (
                       <div>
-                        <div className="text-sm opacity-70 mb-2">Chart</div>
+                        <div className={`mb-2 text-[11px] font-medium ${MUTED}`}>Chart</div>
                         <a href={selectedTrade.screenshotUrl} target="_blank" rel="noopener noreferrer">
                           <img
                             src={selectedTrade.screenshotUrl}
                             alt="Chart"
-                            className="max-h-48 rounded-lg border border-gray-300 dark:border-gray-600"
+                            className={`max-h-48 rounded-lg border ${DIVIDER}`}
                           />
                         </a>
                       </div>
@@ -1247,11 +1212,12 @@ export default function Trades({ currentAccount }) {
                   </div>
                 </div>
               </div>
-              <div className="p-5 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-4">
-                <Button variant="outline" onClick={() => openEdit(selectedTrade)}>
-                  <Edit size={16} className="mr-2" /> Edit Trade
+
+              <div className={`flex justify-end gap-2 border-t px-4 py-3 ${DIVIDER}`}>
+                <Button variant="outline" onClick={() => openEdit(selectedTrade)} className={`border ${DIVIDER} font-semibold`}>
+                  <Edit size={15} className="mr-2" /> Edit trade
                 </Button>
-                <Button variant="outline" onClick={() => setSelectedTrade(null)}>
+                <Button variant="outline" onClick={() => setSelectedTrade(null)} className={`border ${DIVIDER} font-semibold`}>
                   Close
                 </Button>
               </div>
@@ -1261,233 +1227,193 @@ export default function Trades({ currentAccount }) {
 
         {/* Edit Modal */}
         {editModalOpen && editingTrade && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] p-4">
-            <div
-              className={`w-full max-w-lg rounded-xl shadow-2xl overflow-hidden border
-                ${isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
-            >
-              <div className="p-6 max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-6">
-                  <h2
-                    className="text-2xl font-bold bg-clip-text text-transparent"
-                    style={{ backgroundImage: `linear-gradient(90deg, ${ac.hex}, ${ac.hex2})` }}
-                  >
-                    Edit Trade
-                  </h2>
-                  <Button variant="ghost" size="icon" onClick={() => setEditModalOpen(false)}>
-                    <X size={24} />
-                  </Button>
-                </div>
-                <form onSubmit={saveEdit} className="space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Pair</label>
-                      <input
-                        value={editForm.pair}
-                        onChange={(e) => setEditForm({ ...editForm, pair: e.target.value })}
-                        className={`w-full p-3 rounded-xl border ${
-                          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Direction</label>
-                      <select
-                        value={editForm.direction}
-                        onChange={(e) => setEditForm({ ...editForm, direction: e.target.value })}
-                        className={`w-full p-3 rounded-xl border ${
-                          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      >
-                        <option value="Long">Long</option>
-                        <option value="Short">Short</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Open Date/Time</label>
-                      <input
-                        type="datetime-local"
-                        value={editForm.openDateTime}
-                        onChange={(e) => setEditForm({ ...editForm, openDateTime: e.target.value })}
-                        className={`w-full p-3 rounded-xl border ${
-                          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Close Date/Time</label>
-                      <input
-                        type="datetime-local"
-                        value={editForm.closeDateTime}
-                        onChange={(e) => setEditForm({ ...editForm, closeDateTime: e.target.value })}
-                        disabled={editForm.status === "pending"}
-                        className={`w-full p-3 rounded-xl border ${
-                          editForm.status === "pending"
-                            ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed"
-                            : isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Entry</label>
-                      <input
-                        type="number"
-                        step="0.00001"
-                        value={editForm.entry}
-                        onChange={(e) => setEditForm({ ...editForm, entry: e.target.value })}
-                        className={`w-full p-3 rounded-xl border ${
-                          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Exit</label>
-                      <input
-                        type="number"
-                        step="0.00001"
-                        value={editForm.exit}
-                        onChange={(e) => setEditForm({ ...editForm, exit: e.target.value })}
-                        disabled={editForm.status === "pending"}
-                        className={`w-full p-3 rounded-xl border ${
-                          editForm.status === "pending"
-                            ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed"
-                            : isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">PnL</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={editForm.pnl}
-                        onChange={(e) => setEditForm({ ...editForm, pnl: e.target.value })}
-                        disabled={editForm.status === "pending"}
-                        className={`w-full p-3 rounded-xl border ${
-                          editForm.status === "pending"
-                            ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed"
-                            : isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Stop Loss</label>
-                      <input
-                        type="number"
-                        step="0.00001"
-                        value={editForm.stopLoss}
-                        onChange={(e) => setEditForm({ ...editForm, stopLoss: e.target.value })}
-                        className={`w-full p-3 rounded-xl border ${
-                          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Take Profit</label>
-                      <input
-                        type="number"
-                        step="0.00001"
-                        value={editForm.takeProfit}
-                        onChange={(e) => setEditForm({ ...editForm, takeProfit: e.target.value })}
-                        className={`w-full p-3 rounded-xl border ${
-                          isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">R:R</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={editForm.rr}
-                        onChange={(e) => setEditForm({ ...editForm, rr: e.target.value })}
-                        disabled={editForm.status === "pending"}
-                        className={`w-full p-3 rounded-xl border ${
-                          editForm.status === "pending"
-                            ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed"
-                            : isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      />
-                    </div>
-                  </div>
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#e6e8f2] bg-white text-[#14142b] shadow-2xl dark:border-[#262645] dark:bg-[#15152b] dark:text-white">
+              <div className={`flex items-center justify-between border-b px-4 py-3 ${DIVIDER}`}>
+                <h2 className={`text-[15px] font-semibold ${HEAD}`}>Edit trade</h2>
+                <button
+                  onClick={() => setEditModalOpen(false)}
+                  aria-label="Close"
+                  className={`rounded-md p-1.5 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-                  {/* Status */}
+              <form onSubmit={saveEdit} className="max-h-[80vh] space-y-4 overflow-y-auto p-4 sm:p-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium mb-1.5">Status</label>
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Pair</label>
+                    <input
+                      value={editForm.pair}
+                      onChange={(e) => setEditForm({ ...editForm, pair: e.target.value })}
+                      className={FIELD}
+                    />
+                  </div>
+                  <div>
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Direction</label>
                     <select
-                      value={editForm.status}
-                      onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                      className={`w-full p-3 rounded-xl border ${
-                        isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                      } focus:ring-2 focus:ring-indigo-500 outline-none`}
+                      value={editForm.direction}
+                      onChange={(e) => setEditForm({ ...editForm, direction: e.target.value })}
+                      className={FIELD}
                     >
-                      <option value="executed">Executed</option>
-                      <option value="pending">Pending</option>
+                      <option value="Long">Long</option>
+                      <option value="Short">Short</option>
                     </select>
                   </div>
+                </div>
 
-                  {/* Confluences */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium mb-1.5">Confluences</label>
-                    <ConfluenceTags
-                      tags={editForm.confluences}
-                      onChange={(newTags) => setEditForm({ ...editForm, confluences: newTags })}
-                    />
-                  </div>
-
-                  {/* Screenshot URL */}
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">Screenshot URL</label>
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Open date / time</label>
                     <input
-                      type="url"
-                      value={editForm.screenshotUrl}
-                      onChange={(e) => setEditForm({ ...editForm, screenshotUrl: e.target.value })}
-                      placeholder="https://i.imgur.com/your-image.png"
-                      className={`w-full p-3 rounded-xl border ${
-                        isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                      } focus:ring-2 focus:ring-indigo-500 outline-none`}
+                      type="datetime-local"
+                      value={editForm.openDateTime}
+                      onChange={(e) => setEditForm({ ...editForm, openDateTime: e.target.value })}
+                      className={FIELD}
                     />
                   </div>
-
-                  {/* Notes */}
                   <div>
-                    <label className="block text-sm font-medium mb-1.5">Notes</label>
-                    <textarea
-                      value={editForm.notes}
-                      onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                      className={`w-full p-3 rounded-xl border min-h-[80px] ${
-                        isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                      } focus:ring-2 focus:ring-indigo-500 outline-none`}
-                      placeholder="What did you learn from this trade?"
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Close date / time</label>
+                    <input
+                      type="datetime-local"
+                      value={editForm.closeDateTime}
+                      onChange={(e) => setEditForm({ ...editForm, closeDateTime: e.target.value })}
+                      disabled={editForm.status === "pending"}
+                      className={`${FIELD} disabled:cursor-not-allowed disabled:opacity-60`}
                     />
                   </div>
+                </div>
 
-                  {/* Action buttons */}
-                  <div className="flex gap-4 pt-4">
-                    <Button
-                      type="submit"
-                      style={{ backgroundColor: ac.hex }}
-                      className="flex-1 hover:brightness-110 text-white"
-                    >
-                      Save Changes
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setEditModalOpen(false)}
-                      className="flex-1"
-                    >
-                      Cancel
-                    </Button>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Entry</label>
+                    <input
+                      type="number"
+                      step="0.00001"
+                      value={editForm.entry}
+                      onChange={(e) => setEditForm({ ...editForm, entry: e.target.value })}
+                      className={FIELD}
+                    />
                   </div>
-                </form>
-              </div>
+                  <div>
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Exit</label>
+                    <input
+                      type="number"
+                      step="0.00001"
+                      value={editForm.exit}
+                      onChange={(e) => setEditForm({ ...editForm, exit: e.target.value })}
+                      disabled={editForm.status === "pending"}
+                      className={`${FIELD} disabled:cursor-not-allowed disabled:opacity-60`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>PnL</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editForm.pnl}
+                      onChange={(e) => setEditForm({ ...editForm, pnl: e.target.value })}
+                      disabled={editForm.status === "pending"}
+                      className={`${FIELD} disabled:cursor-not-allowed disabled:opacity-60`}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Stop loss</label>
+                    <input
+                      type="number"
+                      step="0.00001"
+                      value={editForm.stopLoss}
+                      onChange={(e) => setEditForm({ ...editForm, stopLoss: e.target.value })}
+                      className={FIELD}
+                    />
+                  </div>
+                  <div>
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Take profit</label>
+                    <input
+                      type="number"
+                      step="0.00001"
+                      value={editForm.takeProfit}
+                      onChange={(e) => setEditForm({ ...editForm, takeProfit: e.target.value })}
+                      className={FIELD}
+                    />
+                  </div>
+                  <div>
+                    <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>R:R</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={editForm.rr}
+                      onChange={(e) => setEditForm({ ...editForm, rr: e.target.value })}
+                      disabled={editForm.status === "pending"}
+                      className={`${FIELD} disabled:cursor-not-allowed disabled:opacity-60`}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Status</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className={FIELD}
+                  >
+                    <option value="executed">Executed</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Confluences</label>
+                  <ConfluenceTags
+                    tags={editForm.confluences}
+                    accent={ac.hex}
+                    onChange={(newTags) => setEditForm({ ...editForm, confluences: newTags })}
+                  />
+                </div>
+
+                <div>
+                  <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Screenshot URL</label>
+                  <input
+                    type="url"
+                    value={editForm.screenshotUrl}
+                    onChange={(e) => setEditForm({ ...editForm, screenshotUrl: e.target.value })}
+                    placeholder="https://i.imgur.com/your-image.png"
+                    className={FIELD}
+                  />
+                </div>
+
+                <div>
+                  <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Notes</label>
+                  <textarea
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                    className={`${FIELD} min-h-[80px] resize-y py-3`}
+                    placeholder="What did you learn from this trade?"
+                  />
+                </div>
+
+                <div className={`flex gap-2.5 border-t pt-4 ${DIVIDER}`}>
+                  <Button
+                    type="submit"
+                    style={{ backgroundColor: ac.hex }}
+                    className="flex-1 font-semibold text-white hover:brightness-110"
+                  >
+                    Save changes
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEditModalOpen(false)}
+                    className={`flex-1 border ${DIVIDER} font-semibold`}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
             </div>
           </div>
         )}

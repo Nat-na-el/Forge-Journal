@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from "react";
-import { format, startOfMonth, endOfMonth } from "date-fns";
+import { format, endOfMonth } from "date-fns";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { useTheme } from "../Theme-provider";
+import useAccent from "../hooks/useAccent";
+import AccentPicker from "../components/ui/AccentPicker";
 import {
   Trophy,
   Target,
   Flame,
   CheckCircle2,
   Clock,
-  ChevronRight,
   AlertCircle,
 } from "lucide-react";
+import {
+  POS_T,
+  MUTED,
+  HEAD,
+  DIVIDER,
+  CARD,
+  PANEL,
+} from "../lib/uiTokens";
 
 // Sample data — in real app you would load from localStorage or backend
 const SAMPLE_CHALLENGES = [
@@ -24,7 +32,7 @@ const SAMPLE_CHALLENGES = [
     type: "streak",
     reward: "Custom badge + premium journal template",
     active: true,
-    endDate: new Date(2025, 2, 15).toISOString(), // March 15, 2025
+    endDate: new Date(2025, 2, 15).toISOString(),
   },
   {
     id: "profit-goal",
@@ -62,9 +70,7 @@ const SAMPLE_CHALLENGES = [
 ];
 
 export default function Challenges() {
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
-
+  const { accent, setAccent, ac } = useAccent();
   const [challenges, setChallenges] = useState([]);
 
   // Load or initialize challenges
@@ -78,14 +84,8 @@ export default function Challenges() {
     }
   }, []);
 
-  const saveChallenges = (updated) => {
-    setChallenges(updated);
-    localStorage.setItem("challenges", JSON.stringify(updated));
-  };
-
-  const getProgress = (challenge) => {
-    return Math.min(100, Math.round((challenge.current / challenge.target) * 100));
-  };
+  const getProgress = (challenge) =>
+    Math.min(100, Math.round((challenge.current / challenge.target) * 100));
 
   const formatDate = (isoString) => {
     try {
@@ -97,150 +97,186 @@ export default function Challenges() {
 
   const activeChallenges = challenges.filter((c) => c.active);
   const completedChallenges = challenges.filter((c) => !c.active && c.completed);
+  const avgProgress = activeChallenges.length
+    ? Math.round(activeChallenges.reduce((sum, c) => sum + getProgress(c), 0) / activeChallenges.length)
+    : 0;
+
+  const summary = [
+    ["Active", activeChallenges.length],
+    ["Completed", completedChallenges.length],
+    ["Avg progress", `${avgProgress}%`],
+    ["Rewards at stake", `${challenges.filter((c) => c.active).length}`],
+  ];
+
+  const challengeCard = (challenge) => {
+    const progress = getProgress(challenge);
+    const isCompleted = progress >= 100;
+    return (
+      <Card key={challenge.id} className={`${CARD} relative overflow-hidden p-0`}>
+        {isCompleted && (
+          <div
+            className="absolute right-0 top-0 rounded-bl-lg px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white"
+            style={{ backgroundColor: ac.hex }}
+          >
+            Completed
+          </div>
+        )}
+
+        <div className={`flex items-start justify-between gap-3 border-b px-4 py-3.5 ${DIVIDER}`}>
+          <div className="min-w-0 pr-8">
+            <h3 className={`text-[15px] font-semibold ${HEAD}`}>{challenge.title}</h3>
+            <p className={`mt-0.5 text-xs ${MUTED}`}>{challenge.description}</p>
+          </div>
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+            style={{
+              backgroundColor: isCompleted ? "rgba(34,196,147,0.14)" : `${ac.hex}1f`,
+              color: isCompleted ? "#0e9f77" : ac.hex,
+            }}
+          >
+            {isCompleted ? <CheckCircle2 size={20} /> : <Target size={20} />}
+          </div>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <div>
+            <div className="mb-1.5 flex items-center justify-between text-xs font-medium">
+              <span className={MUTED}>Progress</span>
+              <span className={HEAD}>{progress}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-[#e6e8f2] dark:bg-[#262645]">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${progress}%`,
+                  backgroundColor: isCompleted ? "#22c493" : ac.hex,
+                }}
+              />
+            </div>
+          </div>
+
+          <div className={`flex items-center justify-between text-xs ${MUTED}`}>
+            <span className="font-medium">
+              {challenge.current} / {challenge.target}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Clock size={13} /> Ends {formatDate(challenge.endDate)}
+            </span>
+          </div>
+        </div>
+
+        <div className={`flex items-start gap-2 border-t px-4 py-3 text-xs ${DIVIDER} ${MUTED}`}>
+          <Trophy size={14} className="mt-0.5 shrink-0 text-amber-500" />
+          <span>
+            <span className="font-semibold text-[#14142b] dark:text-white">Reward:</span> {challenge.reward}
+          </span>
+        </div>
+      </Card>
+    );
+  };
 
   return (
     <div
-      className={`min-h-screen w-full p-4 sm:p-6 lg:p-8 transition-colors duration-300
-        ${isDark
-          ? "bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100"
-          : "bg-gradient-to-br from-gray-50 via-white to-gray-100 text-gray-900"}`}
+      className={`min-h-screen w-full bg-[#f4f5fa] p-3 text-[#14142b] dark:bg-[#0b0b19] dark:text-[#e8e9f7] sm:p-6 lg:p-8`}
     >
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-amber-500 to-orange-600 bg-clip-text text-transparent">
-          Trading Challenges
-        </h1>
-        <p className="mt-2 text-lg opacity-80">
-          Build discipline • Track progress • Unlock rewards
-        </p>
-      </div>
+      <div className="mx-auto max-w-[1600px]">
+        {/* Header */}
+        <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div className="min-w-0">
+            <h1 className={`text-2xl font-bold tracking-tight sm:text-3xl ${HEAD}`}>Challenges</h1>
+            <p className={`mt-1 text-sm ${MUTED}`}>
+              Build discipline · Track progress · Unlock rewards
+            </p>
+          </div>
+          <AccentPicker accent={accent} setAccent={setAccent} />
+        </div>
 
-      {activeChallenges.length === 0 && completedChallenges.length === 0 ? (
-        <Card className="p-12 text-center rounded-2xl bg-white/50 dark:bg-gray-800/50 border border-dashed">
-          <Target className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-          <h3 className="text-2xl font-semibold mb-3">No challenges yet</h3>
-          <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-8">
-            Start a challenge to push your trading skills and stay accountable.
-          </p>
-          <Button className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700">
-            Create Your First Challenge
-          </Button>
-        </Card>
-      ) : (
-        <>
-          {/* Active Challenges */}
-          {activeChallenges.length > 0 && (
-            <section className="mb-12">
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                <Flame className="text-orange-500" size={28} /> Active Challenges
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {activeChallenges.map((challenge) => {
-                  const progress = getProgress(challenge);
-                  const isCompleted = progress >= 100;
-
-                  return (
-                    <Card
-                      key={challenge.id}
-                      className={`relative p-6 rounded-2xl border overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1
-                        ${isDark
-                          ? "bg-gray-800/60 border-gray-700/50 backdrop-blur-md"
-                          : "bg-white/80 border-gray-200/50 backdrop-blur-md"}`}
-                    >
-                      {isCompleted && (
-                        <div className="absolute top-0 right-0 bg-emerald-500 text-white text-xs font-bold px-4 py-1 rounded-bl-xl">
-                          COMPLETED
-                        </div>
-                      )}
-
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="pr-10">
-                          <h3 className="text-xl font-bold">{challenge.title}</h3>
-                          <p className="text-sm opacity-80 mt-1.5">{challenge.description}</p>
-                        </div>
-                        <div className={`p-3 rounded-xl ${
-                          isCompleted
-                            ? "bg-emerald-500/20 text-emerald-400"
-                            : "bg-amber-500/20 text-amber-400"
-                        }`}>
-                          {isCompleted ? <CheckCircle2 size={28} /> : <Target size={28} />}
-                        </div>
-                      </div>
-
-                      {/* Progress */}
-                      <div className="mb-5">
-                        <div className="flex justify-between text-sm mb-1.5 font-medium">
-                          <span>Progress</span>
-                          <span>{progress}%</span>
-                        </div>
-                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-1000 ease-out ${
-                              isCompleted ? "bg-emerald-500" : "bg-gradient-to-r from-amber-500 to-orange-500"
-                            }`}
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between items-center text-sm">
-                        <div className="opacity-80">
-                          {challenge.current} / {challenge.target}
-                        </div>
-                        <div className="flex items-center gap-1.5 opacity-80">
-                          <Clock size={14} />
-                          Ends {formatDate(challenge.endDate)}
-                        </div>
-                      </div>
-
-                      <div className="mt-5 pt-4 border-t border-gray-200/50 dark:border-gray-700/50">
-                        <p className="text-sm opacity-80 flex items-center gap-2">
-                          <Trophy size={16} className="text-amber-400" />
-                          Reward: {challenge.reward}
-                        </p>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Completed */}
-          {completedChallenges.length > 0 && (
-            <section>
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                <Trophy className="text-yellow-500" size={28} /> Completed Challenges
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {completedChallenges.map((challenge) => (
-                  <Card
-                    key={challenge.id}
-                    className={`p-6 rounded-2xl border bg-gradient-to-br from-emerald-900/10 to-emerald-950/5
-                      ${isDark ? "border-emerald-800/30" : "border-emerald-200/40"}`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="p-4 rounded-xl bg-emerald-500/20 text-emerald-400">
-                        <CheckCircle2 size={32} />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold">{challenge.title}</h3>
-                        <p className="text-sm opacity-80 mt-1">{challenge.description}</p>
-                        <div className="mt-5 text-sm flex items-center gap-2 text-emerald-400 font-medium">
-                          <Trophy size={16} />
-                          Reward unlocked: {challenge.reward}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
+        {challenges.length === 0 ? (
+          <Card className={`${CARD} p-10 text-center`}>
+            <Target size={36} className={`mx-auto mb-3 opacity-40 ${MUTED}`} />
+            <p className={`text-lg font-semibold ${HEAD}`}>No challenges yet</p>
+            <p className={`mx-auto mb-5 mt-1 max-w-md text-sm ${MUTED}`}>
+              Start a challenge to push your trading skills and stay accountable.
+            </p>
+            <Button
+              style={{ backgroundColor: ac.hex }}
+              className="font-semibold text-white hover:brightness-110"
+            >
+              Create your first challenge
+            </Button>
+          </Card>
+        ) : (
+          <div className="space-y-5">
+            {/* Summary strip */}
+            <Card className={`${CARD} overflow-hidden`}>
+              <div className="grid grid-cols-2 gap-px bg-[#e6e8f2] dark:bg-[#262645] md:grid-cols-4">
+                {summary.map(([label, value]) => (
+                  <div key={label} className="bg-white px-4 py-4 dark:bg-[#15152b]">
+                    <div className={`text-[11px] font-medium ${MUTED}`}>{label}</div>
+                    <div className={`mt-1 text-xl font-bold tabular-nums ${HEAD}`}>{value}</div>
+                  </div>
                 ))}
               </div>
+            </Card>
+
+            {/* Active */}
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
+                  <Flame size={17} className="text-amber-500" /> Active challenges
+                </h2>
+                <span className={`text-xs ${MUTED}`}>{activeChallenges.length} running</span>
+              </div>
+
+              {activeChallenges.length === 0 ? (
+                <Card className={`${CARD} p-8 text-center`}>
+                  <p className={`text-sm ${MUTED}`}>No active challenges right now.</p>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {activeChallenges.map(challengeCard)}
+                </div>
+              )}
             </section>
-          )}
-        </>
-      )}
+
+            {/* Completed */}
+            {completedChallenges.length > 0 && (
+              <section>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
+                    <Trophy size={17} className="text-amber-500" /> Completed challenges
+                  </h2>
+                  <span className={`text-xs ${MUTED}`}>{completedChallenges.length} earned</span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {completedChallenges.map((challenge) => (
+                    <Card key={challenge.id} className={`${CARD} p-4`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`${PANEL} flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${POS_T}`}>
+                          <CheckCircle2 size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className={`text-sm font-semibold ${HEAD}`}>{challenge.title}</h3>
+                          <p className={`mt-0.5 text-xs ${MUTED}`}>{challenge.description}</p>
+                          <div className={`mt-3 inline-flex items-center gap-1.5 text-xs font-semibold ${POS_T}`}>
+                            <Trophy size={13} /> {challenge.reward}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <div className={`flex items-center gap-2 text-xs ${MUTED}`}>
+              <AlertCircle size={14} />
+              Progress is saved on this device. Connect an account to sync challenges across devices.
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

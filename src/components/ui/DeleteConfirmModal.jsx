@@ -8,6 +8,7 @@ import {
   DialogFooter,
 } from "./dialog";
 import { Button } from "./button";
+import { CARD, HEAD, MUTED, DIVIDER } from "../../lib/uiTokens";
 
 export default function DeleteConfirmModal({
   isOpen,
@@ -19,51 +20,32 @@ export default function DeleteConfirmModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className={`
-          max-w-md 
-          bg-white text-slate-900 
-          dark:bg-gradient-to-b dark:from-blue-950 dark:to-gray-950 
-          dark:text-white 
-          border border-slate-300 dark:border-blue-800/50 
-          rounded-2xl shadow-2xl p-6
-          backdrop-blur-sm
-        `}
+        className={`${CARD} max-w-md p-6`}
         aria-describedby="delete-modal-description"
       >
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold text-red-600 dark:text-red-400">
+          <DialogTitle className="text-lg font-bold text-[#d93a57] dark:text-[#ff6b86]">
             {title}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="py-5" id="delete-modal-description">
-          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-            {message}
-          </p>
+        <div className="py-4" id="delete-modal-description">
+          <p className={`text-sm leading-relaxed ${MUTED}`}>{message}</p>
         </div>
 
-        <DialogFooter className="gap-4 sm:gap-6">
+        <DialogFooter className={`gap-2 border-t pt-4 sm:gap-2 ${DIVIDER}`}>
           <Button
             variant="outline"
             onClick={onClose}
-            className={`
-              border border-slate-400 dark:border-blue-700/60 
-              text-slate-700 dark:text-slate-300 
-              hover:bg-slate-100 dark:hover:bg-blue-900/20 
-              transition-all duration-200
-            `}
+            className={`border font-semibold ${DIVIDER} ${HEAD}`}
           >
             Cancel
           </Button>
 
           <Button
             onClick={onConfirm}
-            className={`
-              bg-red-600 hover:bg-red-700 active:bg-red-800 
-              text-white font-medium 
-              shadow-md hover:shadow-lg 
-              transition-all duration-200
-            `}
+            className="font-semibold text-white shadow-none transition hover:brightness-110"
+            style={{ backgroundColor: "#f2556e" }}
           >
             Delete
           </Button>
