@@ -18,6 +18,68 @@
   --muted-2: rgba(255, 255, 255, 0.06);
   --glass: rgba(255, 255, 255, 0.02);
   --radius: 12px;
+
+  /* ── shadcn/ui tokens (Tradezella palette, light) ─────────────
+     These were never defined before, so Button / Dialog / Select
+     rendered with empty colours. Surface = white card, page = #f4f5fa */
+  --background: 0 0% 100%;
+  --foreground: 240 37% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 37% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 37% 12%;
+  --primary: 252 100% 64%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 231 33% 96%;
+  --secondary-foreground: 240 37% 12%;
+  --muted: 231 33% 96%;
+  --muted-foreground: 232 15% 49%;
+  --accent: 231 33% 96%;
+  --accent-foreground: 240 37% 12%;
+  --destructive: 350 86% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 230 32% 93%;
+  --input: 230 32% 93%;
+  --ring: 252 100% 64%;
+  --chart-1: 252 100% 64%;
+  --chart-2: 161 69% 46%;
+  --chart-3: 350 86% 64%;
+  --chart-4: 38 92% 50%;
+  --chart-5: 187 94% 43%;
+
+  --app-bg: #f4f5fa;
+  --app-surface: #ffffff;
+  --app-border: #e6e8f2;
+  --app-text: #14142b;
+  --app-muted: #6b7090;
+}
+
+.dark {
+  --background: 240 34% 13%;
+  --foreground: 236 48% 94%;
+  --card: 240 34% 13%;
+  --card-foreground: 236 48% 94%;
+  --popover: 240 34% 13%;
+  --popover-foreground: 236 48% 94%;
+  --primary: 252 100% 64%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 32% 17%;
+  --secondary-foreground: 236 48% 94%;
+  --muted: 240 32% 17%;
+  --muted-foreground: 233 23% 63%;
+  --accent: 240 32% 17%;
+  --accent-foreground: 236 48% 94%;
+  --destructive: 350 86% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 240 29% 21%;
+  --input: 240 29% 21%;
+  --ring: 252 100% 64%;
+
+  --app-bg: #0b0b19;
+  --app-surface: #15152b;
+  --app-border: #262645;
+  --app-text: #e8e9f7;
+  --app-muted: #8a8fb5;
 }
 
 /* Dark gradient base (used in dashboard, etc.) */
@@ -30,7 +92,7 @@
   linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 100%);
 }
 
-/* Base page */
+/* Base page – follows the light / dark toggle (class on <html>) */
 html,
 body,
 #root {
@@ -41,18 +103,32 @@ body,
     Roboto, "Helvetica Neue", Arial;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(180deg, var(--bg-start), var(--bg-end));
-  color: #e6eef8;
+  background: var(--app-bg);
+  color: var(--app-text);
 }
 
-/* Scrollbar style */
+::selection {
+  background: rgba(108, 71, 255, 0.28);
+}
+
+/* Scrollbar – slim, theme aware */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border) transparent;
+}
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
   height: 8px;
 }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
+  background: var(--app-border);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-muted);
 }
 
 /* Card shadow & widgets */
@@ -121,7 +197,7 @@ body,
 
 /* Button helpers */
 .btn-primary {
-  @apply bg-gradient-to-r from-indigo-600 to-pink-500 text-white font-semibold px-4 py-2 rounded-lg;
+  @apply bg-[#6C47FF] text-white font-semibold px-4 py-2 rounded-lg hover:brightness-110;
 }
 
 /* Utility text colors */
@@ -132,16 +208,17 @@ body,
   color: rgba(255, 255, 255, 0.48);
 }
 
-/* Form input tweaks */
-input[type="date"],
-input[type="text"],
-input[type="number"],
-textarea {
+/* Form input defaults – :where() keeps specificity at 0 so any Tailwind
+   class on an input still wins over these */
+:where(input[type="date"], input[type="text"], input[type="number"], textarea) {
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--app-border);
   background: transparent;
-  color: #e6eef8;
+  color: var(--app-text);
   padding: 8px;
+}
+:where(input, textarea)::placeholder {
+  color: var(--app-muted);
 }
 
 /* Responsiveness tweaks */

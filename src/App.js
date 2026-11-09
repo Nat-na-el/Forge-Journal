@@ -40,7 +40,23 @@ import {
 } from "firebase/firestore";
 
 // ────────────────────────────────────────────────
-// ManageAccountsModal – unchanged
+// Shared look (Tradezella-style – same palette as Dashboard / Journal / Sidebar)
+// ────────────────────────────────────────────────
+const ACCENT = "#6C47FF";
+const MODAL_PANEL =
+  "w-full rounded-2xl border border-[#e6e8f2] bg-white text-[#14142b] shadow-2xl dark:border-[#262645] dark:bg-[#15152b] dark:text-white";
+const FIELD =
+  "w-full rounded-lg border border-[#e6e8f2] bg-white px-3 py-2.5 text-sm text-[#14142b] outline-none transition focus:border-[#6C47FF] focus:ring-2 focus:ring-[#6C47FF]/30 disabled:opacity-60 dark:border-[#262645] dark:bg-[#101024] dark:text-white";
+const LABEL = "mb-1.5 block text-xs font-semibold text-[#6b7090] dark:text-[#8a8fb5]";
+const BTN_PRIMARY =
+  "rounded-lg bg-[#6C47FF] px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50";
+const BTN_GHOST =
+  "rounded-lg border border-[#e6e8f2] px-4 py-2.5 text-sm font-semibold text-[#3b3f5e] transition-colors hover:bg-[#f1f2f8] disabled:opacity-50 dark:border-[#262645] dark:text-[#c9ccea] dark:hover:bg-[#1e1e3a]";
+const ICON_ACT =
+  "rounded-md p-1.5 text-xs text-[#6b7090] transition-colors hover:bg-[#e6e8f2] dark:text-[#8a8fb5] dark:hover:bg-[#262645]";
+
+// ────────────────────────────────────────────────
+// ManageAccountsModal
 // ────────────────────────────────────────────────
 function ManageAccountsModal({
   accounts,
@@ -66,19 +82,17 @@ function ManageAccountsModal({
   if (accounts.length === 0) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000] p-4">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-md max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className={`${MODAL_PANEL} max-h-[80vh] max-w-md overflow-y-auto p-6`}>
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
-            Manage Accounts – Forgex
-          </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <h3 className="text-lg font-bold">Manage accounts</h3>
+          <button onClick={onClose} className={ICON_ACT} aria-label="Close">
             ✕
           </button>
         </div>
         <div className="space-y-3 mb-4">
           {accounts.map((account) => (
-            <div key={account.id} className="p-3 bg-gray-50 dark:bg-gray-700 rounded">
+            <div key={account.id} className="rounded-xl border border-[#e6e8f2] bg-[#f7f8fc] p-3 dark:border-[#262645] dark:bg-[#101024]">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   {editingId === account.id ? (
@@ -87,7 +101,7 @@ function ManageAccountsModal({
                         type="text"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 p-1 border rounded dark:bg-gray-600"
+                        className={`${FIELD} flex-1 !py-1.5`}
                         autoFocus
                       />
                       <button
@@ -96,21 +110,21 @@ function ManageAccountsModal({
                           setEditingId(null);
                           setEditName("");
                         }}
-                        className="px-2 py-1 bg-gray-500 text-white rounded text-xs"
+                        className="rounded-lg bg-[#6C47FF] px-3 py-1 text-xs font-semibold text-white hover:brightness-110"
                       >
                         Save
                       </button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 bg-gray-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#6C47FF]">
+                        <span className="text-xs font-bold text-white">
                           {account.name.charAt(0)}
                         </span>
                       </div>
                       <div>
-                        <span className="font-medium block">{account.name}</span>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                        <span className="block text-sm font-semibold">{account.name}</span>
+                        <div className="space-y-0.5 text-xs text-[#6b7090] dark:text-[#8a8fb5]">
                           <div>${Number(account.starting_balance || 0).toLocaleString()} start</div>
                           <div>Created: {account.createdAt?.toDate?.()?.toLocaleDateString() || "—"}</div>
                         </div>
@@ -124,20 +138,20 @@ function ManageAccountsModal({
                       setEditingId(account.id);
                       setEditName(account.name);
                     }}
-                    className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                    className={ICON_ACT}
                   >
                     ✏️
                   </button>
                   <button
                     onClick={() => resetAccount(account.id)}
-                    className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                    className={ICON_ACT}
                   >
                     🔄
                   </button>
                   {accounts.length > 1 && (
                     <button
                       onClick={() => deleteAccount(account.id)}
-                      className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                      className={ICON_ACT}
                     >
                       🗑️
                     </button>
@@ -149,7 +163,7 @@ function ManageAccountsModal({
         </div>
         <button
           onClick={onCreateAccount}
-          className="w-full p-2 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm"
+          className={`${BTN_PRIMARY} w-full`}
         >
           + Create New Account
         </button>
@@ -243,27 +257,27 @@ function EditBalancePNL({ onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-2xl w-full max-w-md">
-        <h3 className="text-xl font-bold mb-6 text-gray-900 dark:text-gray-100">
-          {isNewAccount ? "Create New Account – Forgex" : "Edit Account"}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className={`${MODAL_PANEL} max-w-md p-6`}>
+        <h3 className="mb-6 text-lg font-bold">
+          {isNewAccount ? "Create new account" : "Edit account"}
         </h3>
         <form onSubmit={saveAccount} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className={LABEL}>
               Account Name
             </label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full p-3 rounded-lg border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-indigo-500 outline-none"
+              className={FIELD}
               required
               disabled={isSubmitting}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className={LABEL}>
               Starting Balance ($)
             </label>
             <input
@@ -271,13 +285,13 @@ function EditBalancePNL({ onSaved }) {
               step="0.01"
               value={form.startingBalance}
               onChange={(e) => setForm({ ...form, startingBalance: Number(e.target.value) })}
-              className="w-full p-3 rounded-lg border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-indigo-500 outline-none"
+              className={FIELD}
               required
               disabled={isSubmitting}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className={LABEL}>
               Leverage (e.g., 100 for 100:1)
             </label>
             <input
@@ -286,7 +300,7 @@ function EditBalancePNL({ onSaved }) {
               min="1"
               value={form.leverage}
               onChange={(e) => setForm({ ...form, leverage: Number(e.target.value) })}
-              className="w-full p-3 rounded-lg border bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-indigo-500 outline-none"
+              className={FIELD}
               required
               disabled={isSubmitting}
             />
@@ -295,7 +309,7 @@ function EditBalancePNL({ onSaved }) {
             <button
               type="button"
               onClick={() => navigate("/dashboard", { replace: true })}
-              className="px-5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+              className={BTN_GHOST}
               disabled={isSubmitting}
             >
               Cancel
@@ -303,7 +317,7 @@ function EditBalancePNL({ onSaved }) {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50"
+              className={BTN_PRIMARY}
             >
               {isSubmitting ? "Saving..." : isNewAccount ? "Create Account" : "Save Changes"}
             </button>
@@ -474,23 +488,33 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-indigo-500"></div>
-        <p className="ml-4 text-xl text-gray-300">Loading your accounts...</p>
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-[#f4f5fa] dark:bg-[#0b0b19]">
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#262645]"
+          style={{ borderTopColor: ACCENT }}
+        />
+        <p className="text-sm font-medium text-[#6b7090] dark:text-[#8a8fb5]">
+          Loading your accounts…
+        </p>
       </div>
     );
   }
 
   const isLoggedIn = !!auth.currentUser;
 
+  // Sidebar is flush with the left edge: 12rem open, 4rem collapsed (drawer on phones)
+  const sidebarWidth = isMobile ? "0rem" : open ? "12rem" : "4rem";
+
   return (
-    <div className="flex flex-col min-h-screen bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-100">
+    <div className="flex min-h-screen flex-col bg-[#f4f5fa] text-[#14142b] dark:bg-[#0b0b19] dark:text-[#e8e9f7]">
       {isLoggedIn ? (
         <>
-          <div className="fixed top-0 left-0 right-0 h-12 z-50">
-            <Topbar onMenuClick={() => setOpen((o) => !o)} />
-          </div>
-          <div className="flex flex-1 pt-12">
+          <Topbar
+            onMenuClick={() => setOpen((o) => !o)}
+            sidebarOpen={open}
+            currentAccount={currentAccount}
+          />
+          <div className="flex flex-1 pt-14">
             <Sidebar
               open={open}
               setOpen={setOpen}
@@ -501,29 +525,20 @@ function AppContent() {
               onShowManage={() => setShowManageModal(true)}
             />
             <div
-              className="flex-1 min-w-0 transition-all duration-300"
-              style={
-                isMobile
-                  ? { marginLeft: 0, maxWidth: "100vw" }
-                  : {
-                      marginLeft: open ? "calc(12rem + 8px)" : "calc(6rem + 8px)",
-                      maxWidth: open
-                        ? "calc(100vw - 12rem - 8px)"
-                        : "calc(100vw - 6rem - 8px)",
-                    }
-              }
+              className="min-w-0 flex-1 transition-[margin,max-width] duration-300"
+              style={{
+                marginLeft: sidebarWidth,
+                maxWidth: `calc(100vw - ${sidebarWidth})`,
+              }}
             >
               <main
-                className="overflow-y-auto overflow-x-hidden relative"
-                style={{
-                  height: "calc(100dvh - 3rem)",
-                  paddingTop: "1.5rem",
-                }}
+                className="relative overflow-y-auto overflow-x-hidden"
+                style={{ height: "calc(100dvh - 3.5rem)" }}
               >
                 <div
-                  className="bg-transparent border-none p-1 sm:p-3 mx-0 sm:mx-2 mb-0"
+                  className="mx-0 mb-0 border-none bg-transparent p-1 sm:mx-2 sm:p-3"
                   style={{
-                    minHeight: "calc(100dvh - 4.5rem)",
+                    minHeight: "calc(100dvh - 3.5rem)",
                     paddingBottom: isMobile ? "calc(4.5rem + env(safe-area-inset-bottom))" : undefined,
                   }}
                 >
