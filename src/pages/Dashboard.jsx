@@ -9,6 +9,7 @@ import {
   eachDayOfInterval,
   format,
   isSameMonth,
+  isToday,
   subWeeks,
 } from "date-fns";
 import { Card } from "../components/ui/card";
@@ -18,7 +19,6 @@ import { useTheme } from "../Theme-provider";
 import {
   TrendingUp,
   Activity,
-  Percent,
   Zap,
   BarChart3,
   DollarSign,
@@ -32,6 +32,12 @@ import {
   Palette,
   Target,
   LineChart as LineChartIcon,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
+  Wallet,
+  CalendarDays,
+  Plus,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -40,11 +46,13 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
+  ArcElement,
   Filler,
   Tooltip,
   Legend,
 } from "chart.js";
-import { Radar, Line } from "react-chartjs-2";
+import { Radar, Line, Bar, Doughnut } from "react-chartjs-2";
 import { db, auth } from "../firebase";
 import {
   collection,
@@ -53,37 +61,7 @@ import {
   orderBy,
   doc,
   getDoc,
-  writeBatch,
-  serverTimestamp,
 } from "firebase/firestore";
-
-// ────────────────────────────────────────────────
-// Animated number component
-// ────────────────────────────────────────────────
-const AnimatedNumber = ({ value, duration = 1500, decimals = 2 }) => {
-  const [display, setDisplay] = useState(0);
-
-  useEffect(() => {
-    const start = performance.now();
-    const step = (timestamp) => {
-      const progress = Math.min((timestamp - start) / duration, 1);
-      setDisplay(value * progress);
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }, [value, duration]);
-
-  return <>{Number(display).toFixed(decimals)}</>;
-};
-
-// Helper to format numbers with commas and 2 decimals
-const formatNumber = (num) => {
-  if (num === undefined || num === null) return "0.00";
-  return Number(num).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-};
 
 ChartJS.register(
   RadialLinearScale,
@@ -91,13 +69,35 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
+  ArcElement,
   Filler,
   Tooltip,
   Legend
 );
 
+// ────────────────────────────────────────────────
+// Design tokens – Tradezella-style surfaces
+// ────────────────────────────────────────────────
+const POS = "#22c493";
+const NEG = "#f2556e";
+const NEUTRAL = "#7c8cf8";
+
+const POS_T = "text-[#0e9f77] dark:text-[#2dd4a0]";
+const NEG_T = "text-[#d93a57] dark:text-[#ff6b86]";
+const MUTED = "text-[#6b7090] dark:text-[#8a8fb5]";
+const HEAD = "text-[#14142b] dark:text-white";
+const DIVIDER = "border-[#e6e8f2] dark:border-[#262645]";
+const CARD =
+  "gap-0 rounded-xl bg-white dark:bg-[#15152b] border border-[#e6e8f2] dark:border-[#262645] shadow-sm dark:shadow-none";
+const PANEL =
+  "rounded-xl border border-[#e6e8f2] dark:border-[#262645] bg-[#f7f8fc] dark:bg-[#101024]";
+const FOCUS =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF]";
+
 // Accent themes (the light / dark mode still follows the app theme)
 const ACCENTS = {
+  zella: { name: "Zella", hex: "#6C47FF", hex2: "#9b7bff" },
   indigo: { name: "Indigo", hex: "#6366f1", hex2: "#a855f7" },
   emerald: { name: "Emerald", hex: "#10b981", hex2: "#06b6d4" },
   cyan: { name: "Ocean", hex: "#06b6d4", hex2: "#3b82f6" },
@@ -105,13 +105,135 @@ const ACCENTS = {
   rose: { name: "Rose", hex: "#f43f5e", hex2: "#ec4899" },
 };
 
+const RADAR_LABELS = ["Win Rate", "Profit Factor", "Avg R:R", "Payoff", "Green Days", "Recovery"];
+
 // A trade's date, whichever field the page that saved it used
 const tDate = (t) => t?.date || t?.openDateTime || t?.closeDateTime || "";
 
-const CARD =
-  "rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200";
+// ────────────────────────────────────────────────
+// Small helpers
+// ────────────────────────────────────────────────
+const formatNumber = (num) => {
+  if (num === undefined || num === null || Number.isNaN(Number(num))) return "0.00";
+  return Number(num).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
-const RADAR_LABELS = ["Win Rate", "Profit Factor", "Avg R:R", "Payoff", "Green Days", "Recovery"];
+const money = (v, signed = true) => {
+  const n = Number(v) || 0;
+  const sign = n < 0 ? "-" : signed && n > 0 ? "+" : "";
+  return `${sign}$${formatNumber(Math.abs(n))}`;
+};
+
+const pnlClass = (v) => (Number(v) >= 0 ? POS_T : NEG_T);
+
+const fmtAxis = (v) => {
+  const a = Math.abs(v);
+  const s = a >= 1000 ? `${(a / 1000).toFixed(a >= 10000 ? 0 : 1)}k` : a;
+  return `${v < 0 ? "-" : ""}$${s}`;
+};
+
+// ────────────────────────────────────────────────
+// Animated number component
+// ────────────────────────────────────────────────
+const AnimatedNumber = ({ value, duration = 1200, decimals = 2 }) => {
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      setDisplay(value);
+      return undefined;
+    }
+    let raf;
+    const start = performance.now();
+    const step = (timestamp) => {
+      const progress = Math.min((timestamp - start) / duration, 1);
+      setDisplay(value * progress);
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+
+  return (
+    <>
+      {Number(display).toLocaleString("en-US", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })}
+    </>
+  );
+};
+
+// Half / full ring built on a doughnut chart
+const Gauge = ({ values, colors, isDark, half = false }) => {
+  const total = values.reduce((a, b) => a + b, 0);
+  const empty = isDark ? "#262645" : "#e6e8f2";
+  const data = {
+    datasets: [
+      {
+        data: total ? values : [1],
+        backgroundColor: total ? colors : [empty],
+        borderWidth: 0,
+        spacing: total ? 2 : 0,
+        borderRadius: total ? 3 : 0,
+      },
+    ],
+  };
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: "78%",
+    rotation: half ? -90 : 0,
+    circumference: half ? 180 : 360,
+    events: [],
+    animation: { duration: 800 },
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+  };
+  return <Doughnut data={data} options={options} />;
+};
+
+const Chip = ({ color, children }) => (
+  <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tabular-nums bg-[#f1f2f8] dark:bg-[#1e1e3a] text-[#3b3f5e] dark:text-[#c9ccea]">
+    <i className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+    {children}
+  </span>
+);
+
+const CardHead = ({ icon: Icon, title, sub, right, accent }) => (
+  <div className={`flex items-start justify-between gap-3 border-b px-4 sm:px-5 py-3.5 ${DIVIDER}`}>
+    <div className="min-w-0">
+      <h3 className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
+        {Icon && <Icon className="h-4 w-4 shrink-0" style={{ color: accent }} />}
+        {title}
+      </h3>
+      {sub && <p className={`mt-0.5 text-xs ${MUTED}`}>{sub}</p>}
+    </div>
+    {right}
+  </div>
+);
+
+const Kpi = ({ title, hint, badge, value, valueClass, visual, children }) => (
+  <Card className={`${CARD} p-4`}>
+    <div className="flex items-center justify-between gap-2">
+      <span className={`text-[13px] font-medium ${MUTED}`} title={hint}>
+        {title}
+      </span>
+      {badge}
+    </div>
+    <div className="mt-3 flex items-end justify-between gap-2">
+      <div className={`text-[26px] leading-none font-bold tabular-nums ${valueClass}`}>{value}</div>
+      {visual}
+    </div>
+    {children && <div className="mt-3.5">{children}</div>}
+  </Card>
+);
 
 // Scores a list of trades on six axes (each 0–100) for the spider-web chart
 function computeEdge(list) {
@@ -192,19 +314,26 @@ export default function Dashboard({ currentAccount }) {
   const [accent, setAccent] = useState(() => {
     try {
       const saved = localStorage.getItem("forgexAccent");
-      return ACCENTS[saved] ? saved : "indigo";
+      return ACCENTS[saved] ? saved : "zella";
     } catch {
-      return "indigo";
+      return "zella";
     }
   });
   const [curveRange, setCurveRange] = useState("month");
-  const ac = ACCENTS[accent] || ACCENTS.indigo;
+  const ac = ACCENTS[accent] || ACCENTS.zella;
 
   useEffect(() => {
     try {
       localStorage.setItem("forgexAccent", accent);
     } catch {}
   }, [accent]);
+
+  useEffect(() => {
+    if (!showQuickAnalysis) return undefined;
+    const onKey = (e) => e.key === "Escape" && setShowQuickAnalysis(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showQuickAnalysis]);
 
   // ─── Fetch account metadata ───────────────────────────────────────
   const fetchAccountMeta = async (user, accountId) => {
@@ -244,11 +373,9 @@ export default function Dashboard({ currentAccount }) {
     setError(null);
 
     try {
-      // Fetch account metadata
       const meta = await fetchAccountMeta(user, currentAccount.id);
       setAccountMeta(meta);
 
-      // Fetch trades from the account's trades subcollection
       const q = query(
         collection(db, "users", user.uid, "accounts", currentAccount.id, "trades"),
         orderBy("createdAt", "desc")
@@ -282,11 +409,10 @@ export default function Dashboard({ currentAccount }) {
       return;
     }
 
-    // Check if MT5 is connected
     if (!currentAccount.mt5Connected) {
-      setSyncMessage({ 
-        text: "Please connect your MT5 account first (open the account menu and tap 'Connect MT5 account')", 
-        type: "error" 
+      setSyncMessage({
+        text: "Please connect your MT5 account first (open the account menu and tap 'Connect MT5 account')",
+        type: "error",
       });
       setTimeout(() => setSyncMessage({ text: "", type: "" }), 5000);
       return;
@@ -303,22 +429,20 @@ export default function Dashboard({ currentAccount }) {
     setSyncMessage({ text: "Syncing trades from MT5...", type: "info" });
 
     try {
-      // New MetaApi-based sync (read-only investor connection). Never creates duplicates.
+      // MetaApi-based sync (read-only investor connection). Never creates duplicates.
       const r = await syncMT5Account({ login: currentAccount.mt5Login, server: currentAccount.mt5Server });
 
       setSyncMessage({
         text: `Synced from MT5: ${r.added} new trade${r.added === 1 ? "" : "s"}, ${r.updated} updated.`,
-        type: "success"
+        type: "success",
       });
 
-      // Refresh the trades display
       await refreshTrades();
-
-    } catch (error) {
-      console.error('Sync failed:', error);
-      setSyncMessage({ 
-        text: error.message || 'Failed to sync trades from MT5', 
-        type: "error" 
+    } catch (err) {
+      console.error("Sync failed:", err);
+      setSyncMessage({
+        text: err.message || "Failed to sync trades from MT5",
+        type: "error",
       });
     } finally {
       setSyncing(false);
@@ -378,10 +502,7 @@ export default function Dashboard({ currentAccount }) {
       if (current === null) {
         current = pnl > 0 ? "Win" : "Loss";
         streak = { type: current, count: 1 };
-      } else if (
-        (pnl > 0 && current === "Win") ||
-        (pnl < 0 && current === "Loss")
-      ) {
+      } else if ((pnl > 0 && current === "Win") || (pnl < 0 && current === "Loss")) {
         streak.count += 1;
       } else {
         break;
@@ -437,12 +558,8 @@ export default function Dashboard({ currentAccount }) {
 
     if (Object.keys(dailyPnL).length > 0) {
       const entries = Object.entries(dailyPnL);
-      const bestEntry = entries.reduce((max, curr) =>
-        curr[1] > max[1] ? curr : max
-      );
-      const worstEntry = entries.reduce((min, curr) =>
-        curr[1] < min[1] ? curr : min
-      );
+      const bestEntry = entries.reduce((max, curr) => (curr[1] > max[1] ? curr : max));
+      const worstEntry = entries.reduce((min, curr) => (curr[1] < min[1] ? curr : min));
       bestDayPnL = bestEntry[1].toFixed(2);
       bestDayDate = format(new Date(bestEntry[0]), "dd MMM");
       worstDayPnL = worstEntry[1].toFixed(2);
@@ -454,10 +571,7 @@ export default function Dashboard({ currentAccount }) {
       }
     }
 
-    const totalRR = monthlyTrades.reduce(
-      (sum, t) => sum + (Number(t.rr) || 0),
-      0
-    );
+    const totalRR = monthlyTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0);
     const avgRR = total ? (totalRR / total).toFixed(2) : "0.00";
 
     const totalPnLNum = profits - losses;
@@ -474,9 +588,7 @@ export default function Dashboard({ currentAccount }) {
       winCount: wins,
       lossCount: total - wins,
       totalTrades: total,
-      avgPnL: (
-        monthlyTrades.reduce((a, b) => a + Number(b.pnl || 0), 0) / total
-      ).toFixed(2),
+      avgPnL: (monthlyTrades.reduce((a, b) => a + Number(b.pnl || 0), 0) / total).toFixed(2),
       bestDayPnL,
       bestDayDate,
       worstDayPnL,
@@ -486,14 +598,49 @@ export default function Dashboard({ currentAccount }) {
     };
   }, [monthlyTrades]);
 
+  // ─── Detailed breakdown used by the gauges and the daily bar chart ───
+  const perf = useMemo(() => {
+    const pnls = monthlyTrades.map((t) => Number(t.pnl) || 0);
+    const winsArr = pnls.filter((p) => p > 0);
+    const lossArr = pnls.filter((p) => p < 0);
+    const grossW = winsArr.reduce((a, b) => a + b, 0);
+    const grossL = Math.abs(lossArr.reduce((a, b) => a + b, 0));
+    const avgWin = winsArr.length ? grossW / winsArr.length : 0;
+    const avgLoss = lossArr.length ? grossL / lossArr.length : 0;
+
+    const dayMap = {};
+    monthlyTrades.forEach((t) => {
+      const k = format(new Date(t.date), "yyyy-MM-dd");
+      dayMap[k] = (dayMap[k] || 0) + (Number(t.pnl) || 0);
+    });
+    const daily = Object.entries(dayMap)
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([key, pnl]) => ({ key, label: format(new Date(key), "dd MMM"), pnl: Number(pnl.toFixed(2)) }));
+    const greenDays = daily.filter((d) => d.pnl > 0).length;
+    const redDays = daily.filter((d) => d.pnl < 0).length;
+    const flatDays = daily.length - greenDays - redDays;
+
+    return {
+      wins: winsArr.length,
+      losses: lossArr.length,
+      breakeven: pnls.length - winsArr.length - lossArr.length,
+      grossW,
+      grossL,
+      avgWin,
+      avgLoss,
+      payoff: avgLoss ? avgWin / avgLoss : avgWin > 0 ? Infinity : 0,
+      daily,
+      greenDays,
+      redDays,
+      flatDays,
+      dayWinRate: daily.length ? (greenDays / daily.length) * 100 : 0,
+    };
+  }, [monthlyTrades]);
+
   // ─── Monthly asset‑specific stats ─────────────────────────────
   const monthlyAssetStats = useMemo(() => {
     if (!monthlyTrades.length) {
-      return {
-        topPair: "—",
-        totalLots: 0,
-        assetPnL: [],
-      };
+      return { topPair: "—", topPairCount: 0, totalLots: 0, assetPnL: [] };
     }
 
     const pairCount = {};
@@ -507,7 +654,6 @@ export default function Dashboard({ currentAccount }) {
       totalLots += Number(t.lotSize) || 0;
     });
 
-    // Most traded pair
     let topPair = "—";
     let maxCount = 0;
     Object.entries(pairCount).forEach(([p, c]) => {
@@ -517,7 +663,6 @@ export default function Dashboard({ currentAccount }) {
       }
     });
 
-    // Top 5 assets by absolute PnL
     const assetPnL = Object.entries(pairPnL)
       .map(([pair, pnl]) => ({ pair, pnl }))
       .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
@@ -545,11 +690,13 @@ export default function Dashboard({ currentAccount }) {
       const wins = weekTrades.filter((t) => Number(t.pnl) > 0).length;
       const losses = weekTrades.filter((t) => Number(t.pnl) < 0).length;
       const breakeven = weekTrades.filter((t) => Number(t.pnl) === 0).length;
+      const pnl = weekTrades.reduce((s, t) => s + (Number(t.pnl) || 0), 0);
       weeks.push({
         label: format(weekStart, "dd MMM"),
         wins,
         losses,
         breakeven,
+        pnl,
         total: weekTrades.length,
       });
     }
@@ -615,9 +762,7 @@ export default function Dashboard({ currentAccount }) {
 
   // ─── Recent trades preview ───────────────────────────────────
   const recentTrades = useMemo(() => {
-    return [...trades]
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 5);
+    return [...trades].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8);
   }, [trades]);
 
   // ─── All-time total PnL ──────────────────────────────────────
@@ -629,14 +774,13 @@ export default function Dashboard({ currentAccount }) {
   // ─── Account data ────────────────────────────────────────────
   const initialBalance = accountMeta?.starting_balance || 10000;
   const accountCreatedAt = accountMeta?.createdAt?.toDate?.() || new Date("2024-01-01");
+  const currentBalance = initialBalance + Number(allTimePnL);
 
-  // ─── Account growth percentage ───────────────────────────────
   const accountGrowth = useMemo(() => {
     if (initialBalance <= 0) return 0;
     return ((allTimePnL / initialBalance) * 100).toFixed(1);
   }, [allTimePnL, initialBalance]);
 
-  // ─── Quick Analysis Modal Content (unchanged) ────────────────
   // ─── Spider-web (radar) data: this month vs all-time ─────────
   const radarMonth = useMemo(() => computeEdge(monthlyTrades), [monthlyTrades]);
   const radarAll = useMemo(() => computeEdge(trades), [trades]);
@@ -659,8 +803,19 @@ export default function Dashboard({ currentAccount }) {
     return { labels, values, count: src.length };
   }, [curveRange, monthlyTrades, trades, initialBalance]);
 
-  const chartText = isDark ? "#9ca3af" : "#4b5563";
-  const chartGrid = isDark ? "rgba(148,163,184,0.16)" : "rgba(100,116,139,0.2)";
+  // ─── Chart theming ───────────────────────────────────────────
+  const chartText = isDark ? "#8a8fb5" : "#6b7090";
+  const chartGrid = isDark ? "rgba(138,143,181,0.14)" : "rgba(107,112,144,0.16)";
+  const tooltipBase = {
+    backgroundColor: isDark ? "#0b0b19" : "#ffffff",
+    titleColor: isDark ? "#ffffff" : "#14142b",
+    bodyColor: isDark ? "#c9ccea" : "#3b3f5e",
+    borderColor: isDark ? "#262645" : "#e6e8f2",
+    borderWidth: 1,
+    padding: 10,
+    cornerRadius: 8,
+    displayColors: false,
+  };
 
   const radarChartData = {
     labels: RADAR_LABELS,
@@ -668,8 +823,8 @@ export default function Dashboard({ currentAccount }) {
       radarAll && {
         label: "All-time",
         data: radarAll.scores,
-        borderColor: isDark ? "rgba(156,163,175,0.9)" : "rgba(107,114,128,0.9)",
-        backgroundColor: "rgba(156,163,175,0.08)",
+        borderColor: isDark ? "rgba(138,143,181,0.85)" : "rgba(107,112,144,0.85)",
+        backgroundColor: "rgba(138,143,181,0.07)",
         borderDash: [5, 4],
         borderWidth: 1.5,
         pointRadius: 0,
@@ -678,10 +833,10 @@ export default function Dashboard({ currentAccount }) {
         label: format(viewDate, "MMM yyyy"),
         data: radarMonth.scores,
         borderColor: ac.hex,
-        backgroundColor: ac.hex + "40",
+        backgroundColor: ac.hex + "38",
         borderWidth: 2.5,
         pointBackgroundColor: ac.hex,
-        pointBorderColor: "#fff",
+        pointBorderColor: isDark ? "#15152b" : "#fff",
         pointRadius: 4,
         pointHoverRadius: 6,
       },
@@ -706,7 +861,11 @@ export default function Dashboard({ currentAccount }) {
         position: "bottom",
         labels: { color: chartText, usePointStyle: true, boxWidth: 8, padding: 14 },
       },
-      tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${Math.round(c.parsed.r)}/100` } },
+      tooltip: {
+        ...tooltipBase,
+        displayColors: true,
+        callbacks: { label: (c) => ` ${c.dataset.label}: ${Math.round(c.parsed.r)}/100` },
+      },
     },
   };
 
@@ -716,13 +875,22 @@ export default function Dashboard({ currentAccount }) {
       {
         data: equity.values,
         borderColor: ac.hex,
-        backgroundColor: ac.hex + "22",
+        backgroundColor: (ctx) => {
+          const { chart } = ctx;
+          const { ctx: c, chartArea } = chart;
+          if (!chartArea) return ac.hex + "22";
+          const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          g.addColorStop(0, ac.hex + "55");
+          g.addColorStop(1, ac.hex + "00");
+          return g;
+        },
         fill: true,
-        tension: 0.35,
+        tension: 0.3,
         borderWidth: 2.5,
         pointRadius: equity.count > 40 ? 0 : 3,
         pointHoverRadius: 5,
         pointBackgroundColor: ac.hex,
+        pointBorderColor: isDark ? "#15152b" : "#fff",
       },
     ],
   };
@@ -733,40 +901,61 @@ export default function Dashboard({ currentAccount }) {
     interaction: { mode: "index", intersect: false },
     plugins: {
       legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (c) => ` $${Number(c.parsed.y).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-        },
-      },
+      tooltip: { ...tooltipBase, callbacks: { label: (c) => ` ${money(c.parsed.y, false)}` } },
     },
     scales: {
-      x: { grid: { display: false }, ticks: { color: chartText, maxTicksLimit: 6, maxRotation: 0 } },
-      y: { grid: { color: chartGrid }, ticks: { color: chartText, maxTicksLimit: 5 } },
+      x: { grid: { display: false }, border: { display: false }, ticks: { color: chartText, maxTicksLimit: 7, maxRotation: 0 } },
+      y: { grid: { color: chartGrid }, border: { display: false }, ticks: { color: chartText, maxTicksLimit: 5, callback: fmtAxis } },
+    },
+  };
+
+  const dailyBarData = {
+    labels: perf.daily.map((d) => d.label),
+    datasets: [
+      {
+        data: perf.daily.map((d) => d.pnl),
+        backgroundColor: perf.daily.map((d) => (d.pnl >= 0 ? POS : NEG)),
+        borderRadius: 4,
+        maxBarThickness: 28,
+      },
+    ],
+  };
+
+  const dailyBarOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { ...tooltipBase, callbacks: { label: (c) => ` ${money(c.parsed.y)}` } },
+    },
+    scales: {
+      x: { grid: { display: false }, border: { display: false }, ticks: { color: chartText, maxTicksLimit: 8, maxRotation: 0 } },
+      y: { grid: { color: chartGrid }, border: { display: false }, ticks: { color: chartText, maxTicksLimit: 5, callback: fmtAxis } },
     },
   };
 
   const equityNet = equity.values[equity.values.length - 1] - equity.values[0];
+  const maxAssetAbs = Math.max(1, ...monthlyAssetStats.assetPnL.map((a) => Math.abs(a.pnl)));
 
+  // ─── Quick Analysis Modal Content ────────────────────────────
   const quickAnalysisContent = () => {
     if (!monthlyTrades.length) {
       return (
         <div className="text-center py-10 px-4">
-          <AlertCircle size={64} className="mx-auto text-indigo-400 mb-6 opacity-80" />
-          <h3 className="text-2xl font-semibold mb-4 text-gray-200">
-            No trades recorded this month
-          </h3>
-          <p className="text-gray-400 max-w-lg mx-auto leading-relaxed">
-            Add some trades to unlock real-time performance insights, pattern detection,
-            and personalized trading suggestions.
+          <AlertCircle size={56} className="mx-auto mb-5" style={{ color: ac.hex }} />
+          <h3 className={`text-xl font-semibold mb-3 ${HEAD}`}>No trades recorded this month</h3>
+          <p className={`${MUTED} max-w-lg mx-auto leading-relaxed`}>
+            Add some trades to unlock performance insights, pattern detection, and coaching suggestions.
           </p>
           <button
             onClick={() => {
               setShowQuickAnalysis(false);
               navigate("/trades/new");
             }}
-            className="mt-8 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md transition-all"
+            style={{ backgroundColor: ac.hex }}
+            className={`mt-7 rounded-lg px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110 transition ${FOCUS}`}
           >
-            Add Your First Trade
+            Add your first trade
           </button>
         </div>
       );
@@ -778,104 +967,86 @@ export default function Dashboard({ currentAccount }) {
     const totalTrades = monthlyStats.totalTrades;
 
     return (
-      <div className="space-y-8">
-        {/* Performance Snapshot */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="p-6 bg-gray-900/70 rounded-2xl border border-gray-700 shadow-inner">
-            <div className="text-sm text-gray-400 mb-2">Win Rate</div>
-            <div className="text-4xl font-bold text-indigo-300">{winRate}%</div>
-            <div className="mt-3 text-sm opacity-80 flex items-center gap-2">
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className={`${PANEL} p-5`}>
+            <div className={`text-sm mb-2 ${MUTED}`}>Win rate</div>
+            <div className={`text-3xl font-bold tabular-nums ${HEAD}`}>{winRate}%</div>
+            <div className={`mt-3 text-sm flex items-start gap-2 ${MUTED}`}>
               {winRate >= 60 ? (
-                <CheckCircle className="text-emerald-400" size={18} />
-              ) : winRate >= 45 ? (
-                <AlertCircle className="text-amber-400" size={18} />
+                <CheckCircle className="mt-0.5 shrink-0 text-[#22c493]" size={16} />
               ) : (
-                <AlertCircle className="text-rose-400" size={18} />
+                <AlertCircle className={`mt-0.5 shrink-0 ${winRate >= 45 ? "text-amber-500" : "text-[#f2556e]"}`} size={16} />
               )}
               {winRate >= 60
-                ? "Strong performance — protect your edge"
+                ? "Strong performance. Protect your edge."
                 : winRate >= 45
-                ? "Solid base — improve reward:risk"
-                : "Needs attention — focus on high-probability entries"}
+                ? "Solid base. Improve reward to risk."
+                : "Needs attention. Focus on high-probability entries."}
             </div>
           </div>
 
-          <div className="p-6 bg-gray-900/70 rounded-2xl border border-gray-700 shadow-inner">
-            <div className="text-sm text-gray-400 mb-2">Net Result</div>
-            <div
-              className={`text-4xl font-bold ${
-                totalPnL >= 0 ? "text-emerald-400" : "text-rose-400"
-              }`}
-            >
-              {totalPnL >= 0 ? "+" : ""}${Math.abs(totalPnL).toFixed(2)}
-            </div>
-            <div className="mt-3 text-sm opacity-80 flex items-center gap-2">
+          <div className={`${PANEL} p-5`}>
+            <div className={`text-sm mb-2 ${MUTED}`}>Net result</div>
+            <div className={`text-3xl font-bold tabular-nums ${pnlClass(totalPnL)}`}>{money(totalPnL)}</div>
+            <div className={`mt-3 text-sm flex items-start gap-2 ${MUTED}`}>
               {totalPnL >= 0 ? (
-                <ArrowUpRight className="text-emerald-400" size={18} />
+                <ArrowUpRight className="mt-0.5 shrink-0 text-[#22c493]" size={16} />
               ) : (
-                <ArrowDownRight className="text-rose-400" size={18} />
+                <ArrowDownRight className="mt-0.5 shrink-0 text-[#f2556e]" size={16} />
               )}
-              {totalPnL >= 0 ? "Positive month — manage greed" : "Drawdown — tighten risk now"}
+              {totalPnL >= 0 ? "Positive month. Manage greed." : "Drawdown. Tighten risk now."}
             </div>
           </div>
 
-          <div className="p-6 bg-gray-900/70 rounded-2xl border border-gray-700 shadow-inner">
-            <div className="text-sm text-gray-400 mb-2">Average R:R</div>
-            <div className="text-4xl font-bold text-purple-300">{avgRR}</div>
-            <div className="mt-3 text-sm opacity-80 flex items-center gap-2">
+          <div className={`${PANEL} p-5`}>
+            <div className={`text-sm mb-2 ${MUTED}`}>Average R:R</div>
+            <div className="text-3xl font-bold tabular-nums" style={{ color: ac.hex }}>{avgRR}</div>
+            <div className={`mt-3 text-sm flex items-start gap-2 ${MUTED}`}>
               {avgRR >= 2.5 ? (
-                <CheckCircle className="text-emerald-400" size={18} />
+                <CheckCircle className="mt-0.5 shrink-0 text-[#22c493]" size={16} />
               ) : (
-                <AlertCircle className="text-amber-400" size={18} />
+                <AlertCircle className="mt-0.5 shrink-0 text-amber-500" size={16} />
               )}
-              {avgRR >= 2.5
-                ? "Excellent asymmetry — keep hunting"
-                : "Can improve — aim for 1:3+ setups"}
+              {avgRR >= 2.5 ? "Excellent asymmetry. Keep hunting." : "Can improve. Aim for 1:3+ setups."}
             </div>
           </div>
         </div>
 
-        {/* Personalized Suggestions */}
-        <div className="p-6 bg-gradient-to-br from-gray-950 to-gray-900 rounded-2xl border border-gray-700 shadow-inner">
-          <h4 className="text-xl font-semibold mb-5 flex items-center gap-3 text-gray-200">
-            <Lightbulb size={22} className="text-yellow-400" />
-            Instant Coaching Insights
+        <div className={`${PANEL} p-5 sm:p-6`}>
+          <h4 className={`text-base font-semibold mb-4 flex items-center gap-2 ${HEAD}`}>
+            <Lightbulb size={18} className="text-amber-500" />
+            Coaching insights
           </h4>
-          <div className="space-y-4 text-gray-300 text-sm leading-relaxed">
+          <div className={`space-y-3.5 text-sm leading-relaxed ${isDark ? "text-[#c9ccea]" : "text-[#3b3f5e]"}`}>
             {totalTrades < 15 && (
               <div className="flex items-start gap-3">
-                <AlertCircle className="text-amber-400 mt-1 shrink-0" size={18} />
-                <p>
-                  Sample size still small ({totalTrades} trades). Aim for at least 20–30 trades before drawing strong conclusions.
-                </p>
+                <AlertCircle className="text-amber-500 mt-0.5 shrink-0" size={16} />
+                <p>Sample size is still small ({totalTrades} trades). Aim for 20–30 trades before drawing strong conclusions.</p>
               </div>
             )}
             {winRate < 50 && (
               <div className="flex items-start gap-3">
-                <AlertCircle className="text-rose-400 mt-1 shrink-0" size={18} />
-                <p>
-                  Win rate below 50% — be extra selective this week. Only take A+ setups.
-                </p>
+                <AlertCircle className="text-[#f2556e] mt-0.5 shrink-0" size={16} />
+                <p>Win rate is below 50%. Be extra selective this week and only take A+ setups.</p>
               </div>
             )}
             {avgRR < 2 && (
               <div className="flex items-start gap-3">
-                <AlertCircle className="text-amber-400 mt-1 shrink-0" size={18} />
-                <p>
-                  Average reward:risk is low ({avgRR}). Focus on trades with minimum 1:2.5.
-                </p>
+                <AlertCircle className="text-amber-500 mt-0.5 shrink-0" size={16} />
+                <p>Average reward to risk is low ({avgRR}). Focus on trades with a minimum of 1:2.5.</p>
               </div>
             )}
             <div className="flex items-start gap-3">
-              <CheckCircle className="text-emerald-400 mt-1 shrink-0" size={18} />
-              <p>Review your last 5 losing trades in detail. Fix one repeating mistake.</p>
+              <CheckCircle className="text-[#22c493] mt-0.5 shrink-0" size={16} />
+              <p>Review your last 5 losing trades in detail and fix one repeating mistake.</p>
             </div>
             <div className="flex items-start gap-3">
-              <CheckCircle className="text-emerald-400 mt-1 shrink-0" size={18} />
-              <p>Maintain risk at ≤1% per trade until win rate exceeds 55%.</p>
+              <CheckCircle className="text-[#22c493] mt-0.5 shrink-0" size={16} />
+              <p>Keep risk at 1% per trade or less until your win rate exceeds 55%.</p>
             </div>
             <div className="flex items-start gap-3">
-              <CheckCircle className="text-emerald-400 mt-1 shrink-0" size={18} />
+              <CheckCircle className="text-[#22c493] mt-0.5 shrink-0" size={16} />
               <p>Journal every trade’s emotion and confidence level (1–10).</p>
             </div>
           </div>
@@ -884,695 +1055,791 @@ export default function Dashboard({ currentAccount }) {
     );
   };
 
-  // If no account is selected, show a message
+  // ─── No account selected ─────────────────────────────────────
   if (!currentAccount) {
     return (
-      <div className={`min-h-screen w-full p-8 flex items-center justify-center ${isDark ? "bg-gray-950" : "bg-gray-50"}`}>
-        <Card className="p-8 max-w-md text-center bg-white/80 dark:bg-gray-800/60 backdrop-blur-md">
-          <AlertCircle size={48} className="mx-auto text-amber-500 mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Account Selected</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Please create or select an account from the sidebar to view your dashboard.
+      <div
+        className={`${isDark ? "dark bg-[#0b0b19]" : "bg-[#f4f5fa]"} min-h-screen w-full p-8 flex items-center justify-center`}
+      >
+        <Card className={`${CARD} p-8 max-w-md text-center`}>
+          <AlertCircle size={44} className="mx-auto text-amber-500 mb-4" />
+          <h2 className={`text-xl font-bold mb-2 ${HEAD}`}>No account selected</h2>
+          <p className={`${MUTED} mb-6`}>
+            Create or select an account from the sidebar to view your dashboard.
           </p>
           <button
             onClick={() => {}}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+            style={{ backgroundColor: ACCENTS.zella.hex }}
+            className={`px-5 py-2.5 text-sm font-semibold text-white rounded-lg hover:brightness-110 transition ${FOCUS}`}
           >
-            Create Account
+            Create account
           </button>
         </Card>
       </div>
     );
   }
 
+  // ─── Derived display values ──────────────────────────────────
+  const netPnl = Number(monthlyStats.totalPnL);
+  const payoffText = perf.payoff === Infinity ? "∞" : perf.payoff.toFixed(2);
+  const avgTotal = perf.avgWin + perf.avgLoss;
+
+  const glance = [
+    { label: "Total trades", value: monthlyStats.totalTrades, sub: `${perf.wins} wins, ${perf.losses} losses` },
+    { label: "Expectancy", value: money(monthlyStats.expectancy), sub: "per trade", cls: pnlClass(monthlyStats.expectancy) },
+    { label: "Average R:R", value: monthlyStats.avgRR, sub: "reward to risk" },
+    { label: "Consistency", value: `${monthlyStats.consistencyScore}%`, sub: "best day vs net P&L" },
+    { label: "Best day", value: money(monthlyStats.bestDayPnL), sub: monthlyStats.bestDayDate, cls: pnlClass(monthlyStats.bestDayPnL) },
+    { label: "Worst day", value: money(monthlyStats.worstDayPnL), sub: monthlyStats.worstDayDate, cls: pnlClass(monthlyStats.worstDayPnL) },
+  ];
+
   return (
-    <div className={`relative min-h-screen w-full p-2 sm:p-6 lg:p-8 text-gray-100 ${isDark ? "bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950" : "bg-gradient-to-br from-gray-50 via-white to-gray-100"}`}>
-      {/* Header + Account Details */}
-      <div className="mb-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <div>
-            <h1
-              className="text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-clip-text text-transparent"
-              style={{ backgroundImage: `linear-gradient(90deg, ${ac.hex}, ${ac.hex2})` }}
-            >
-              Forgex Dashboard
-            </h1>
-            <p className="mt-1.5 text-gray-400">
-              {format(viewDate, "MMMM yyyy")} • {currentAccount?.name || "Account"}
+    <div
+      className={`${isDark ? "dark bg-[#0b0b19] text-[#e8e9f7]" : "bg-[#f4f5fa] text-[#14142b]"} relative min-h-screen w-full p-3 sm:p-6 lg:p-8`}
+    >
+      <div className="mx-auto max-w-[1600px]">
+        {/* ───────── Header ───────── */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+          <div className="min-w-0">
+            <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${HEAD}`}>Dashboard</h1>
+            <p className={`mt-1 text-sm flex flex-wrap items-center gap-x-2 gap-y-1 ${MUTED}`}>
+              <span>Forgex</span>
+              <span aria-hidden="true">/</span>
+              <span className="font-medium">{currentAccount?.name || "Account"}</span>
               {currentAccount.mt5Connected && (
-                <span className="ml-2 text-xs bg-green-600/20 text-green-400 px-2 py-1 rounded-full">
-                  MT5 Connected
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#22c493]/15 px-2.5 py-0.5 text-xs font-semibold text-[#0e9f77] dark:text-[#2dd4a0]">
+                  <i className="h-1.5 w-1.5 rounded-full bg-[#22c493]" />
+                  MT5 connected
                 </span>
               )}
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 w-full sm:w-auto sm:items-end">
-            {/* Accent theme picker */}
-            <div className="flex items-center gap-2" role="radiogroup" aria-label="Accent theme">
-              <Palette size={16} className="text-gray-400" />
-              {Object.entries(ACCENTS).map(([key, a]) => (
-                <button
-                  key={key}
-                  onClick={() => setAccent(key)}
-                  title={a.name}
-                  aria-label={`${a.name} theme`}
-                  aria-pressed={accent === key}
-                  className={`h-6 w-6 rounded-full transition-transform ${
-                    accent === key
-                      ? "ring-2 ring-offset-2 ring-offset-transparent ring-gray-500 dark:ring-white/70 scale-110"
-                      : "opacity-80 hover:scale-110"
-                  }`}
-                  style={{ backgroundImage: `linear-gradient(135deg, ${a.hex}, ${a.hex2})` }}
-                />
-              ))}
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            {/* Month stepper */}
+            <div className={`flex items-center rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b]`}>
+              <button
+                onClick={prevMonth}
+                aria-label="Previous month"
+                className={`p-2.5 rounded-l-lg ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className={`min-w-[8.5rem] px-2 text-center text-sm font-semibold ${HEAD}`}>
+                {format(viewDate, "MMMM yyyy")}
+              </span>
+              <button
+                onClick={nextMonth}
+                aria-label="Next month"
+                className={`p-2.5 rounded-r-lg ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
+              >
+                <ChevronRight size={16} />
+              </button>
             </div>
-          <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
+
             <button
               onClick={syncFromMT5}
               disabled={syncing}
-              className={`flex flex-1 sm:flex-none justify-center items-center gap-2 px-3 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base rounded-xl shadow-md transition-all duration-200 ${
-                syncing 
-                  ? 'bg-gray-500 cursor-not-allowed' 
-                  : currentAccount.mt5Connected
-                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : 'bg-gray-600 hover:bg-gray-700 text-white opacity-50 cursor-not-allowed'
-              }`}
-              title={!currentAccount.mt5Connected ? 'Connect MT5 first in sidebar' : ''}
+              title={!currentAccount.mt5Connected ? "Connect MT5 first in the sidebar" : "Sync trades from MT5"}
+              className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3.5 py-2.5 text-sm font-semibold transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${HEAD} ${
+                syncing || !currentAccount.mt5Connected ? "opacity-60" : ""
+              } ${syncing ? "cursor-not-allowed" : ""} ${FOCUS}`}
             >
-              <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
-              {syncing ? 'Syncing...' : 'Sync from MT5'}
+              <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
+              {syncing ? "Syncing..." : "Sync MT5"}
             </button>
 
             <button
               onClick={() => setShowQuickAnalysis(true)}
               style={{ backgroundColor: ac.hex }}
-              className="flex flex-1 sm:flex-none justify-center items-center gap-2 px-3 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base hover:brightness-110 text-white rounded-xl shadow-md transition-all duration-200"
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
             >
-              <Zap size={18} />
-              Quick Analysis
+              <Zap size={15} />
+              Quick analysis
             </button>
-          </div>
+
+            {/* Accent picker */}
+            <div className="flex items-center gap-1.5 pl-1" role="radiogroup" aria-label="Accent theme">
+              <Palette size={15} className={MUTED} />
+              {Object.entries(ACCENTS).map(([key, a]) => (
+                <button
+                  key={key}
+                  role="radio"
+                  aria-checked={accent === key}
+                  onClick={() => setAccent(key)}
+                  title={a.name}
+                  aria-label={`${a.name} theme`}
+                  className={`h-5 w-5 rounded-full transition-transform ${FOCUS} ${
+                    accent === key
+                      ? "scale-110 ring-2 ring-offset-2 ring-[#8a8fb5] ring-offset-[#f4f5fa] dark:ring-white/70 dark:ring-offset-[#0b0b19]"
+                      : "opacity-75 hover:scale-110 hover:opacity-100"
+                  }`}
+                  style={{ backgroundImage: `linear-gradient(135deg, ${a.hex}, ${a.hex2})` }}
+                />
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Sync Message */}
+        {/* Sync message */}
         {syncMessage.text && (
-          <div className={`mb-4 p-3 rounded-lg ${
-            syncMessage.type === 'success' ? 'bg-green-500/20 text-green-200' :
-            syncMessage.type === 'error' ? 'bg-red-500/20 text-red-200' :
-            'bg-blue-500/20 text-blue-200'
-          }`}>
+          <div
+            role="status"
+            className={`mb-5 flex items-center gap-2.5 rounded-lg border px-4 py-3 text-sm font-medium ${
+              syncMessage.type === "success"
+                ? "border-[#22c493]/30 bg-[#22c493]/10 text-[#0e9f77] dark:text-[#2dd4a0]"
+                : syncMessage.type === "error"
+                ? "border-[#f2556e]/30 bg-[#f2556e]/10 text-[#d93a57] dark:text-[#ff6b86]"
+                : "border-[#7c8cf8]/30 bg-[#7c8cf8]/10 text-[#4a56c9] dark:text-[#aab4ff]"
+            }`}
+          >
+            {syncMessage.type === "success" ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
             {syncMessage.text}
           </div>
         )}
 
-        {/* Account Overview Card */}
-        <Card className="p-4 sm:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg">
-          <h3 className="text-lg font-semibold mb-5 flex items-center gap-2 text-gray-900 dark:text-gray-100">
-            <DollarSign className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
-            Account Overview
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Total PnL (All Time)</div>
-              <div
-                className={`text-2xl font-bold mt-1 ${
-                  allTimePnL >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                }`}
-              >
-                {allTimePnL >= 0 ? "+" : ""}${Math.abs(allTimePnL)}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Starting Balance</div>
-              <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">
-                ${initialBalance.toLocaleString()}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Account Growth</div>
-              <div
-                className={`text-2xl font-bold mt-1 ${
-                  accountGrowth >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                }`}
-              >
-                {accountGrowth}%
-              </div>
-            </div>
-
-            <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Created</div>
-              <div className="text-xl font-medium text-gray-700 dark:text-gray-300 mt-1">
-                {format(accountCreatedAt, "dd MMM yyyy")}
-              </div>
-            </div>
+        {loading ? (
+          <div className="flex justify-center items-center h-72">
+            <div
+              className="h-10 w-10 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#262645]"
+              style={{ borderTopColor: ac.hex }}
+              role="progressbar"
+              aria-label="Loading trades"
+            />
           </div>
-        </Card>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-        </div>
-      ) : error ? (
-        <div className="text-center p-8 text-rose-400">
-          {error}
-        </div>
-      ) : (
-        <>
-          {/* Stats Cards (core metrics) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 lg:gap-5 mb-8">
-            {[
-              {
-                title: "Monthly P&L",
-                value: Number(monthlyStats.totalPnL),
-                prefix: Number(monthlyStats.totalPnL) >= 0 ? "+" : "-",
-                color: Number(monthlyStats.totalPnL) >= 0 ? "emerald" : "rose",
-                icon: TrendingUp,
-              },
-              {
-                title: "Win Rate",
-                value: Number(monthlyStats.winRate),
-                suffix: "%",
-                color: "indigo",
-                icon: Percent,
-                animated: true,
-              },
-              {
-                title: "Profit Factor",
-                value: monthlyStats.profitFactor,
-                color: "cyan",
-                icon: Activity,
-              },
-              {
-                title: "Consistency Score",
-                value: Number(monthlyStats.consistencyScore),
-                suffix: "%",
-                color: "violet",
-                icon: Zap,
-                animated: true,
-              },
-              {
-                title: "Total Trades",
-                value: monthlyStats.totalTrades,
-                color: "violet",
-                icon: BarChart3,
-                animated: true,
-              },
-              {
-                title: "Expectancy",
-                value: Number(monthlyStats.expectancy),
-                prefix: "$",
-                color: "teal",
-                icon: DollarSign,
-              },
-            ].map((stat, i) => (
-              <Card
-                key={i}
-                className="p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200 group"
+        ) : error ? (
+          <Card className={`${CARD} mx-auto max-w-md p-8 text-center`}>
+            <AlertCircle size={36} className="mx-auto mb-3 text-[#f2556e]" />
+            <p className={`mb-5 text-sm ${MUTED}`}>{error}</p>
+            <button
+              onClick={refreshTrades}
+              style={{ backgroundColor: ac.hex }}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition ${FOCUS}`}
+            >
+              Try again
+            </button>
+          </Card>
+        ) : (
+          <>
+            {/* ───────── KPI row ───────── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-4">
+              <Kpi
+                title="Net P&L"
+                hint="Total profit and loss for the selected month"
+                badge={
+                  <span className="rounded-md bg-[#f1f2f8] dark:bg-[#1e1e3a] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[#3b3f5e] dark:text-[#c9ccea]">
+                    {monthlyStats.totalTrades}
+                  </span>
+                }
+                value={
+                  <>
+                    {netPnl < 0 ? "-" : ""}$<AnimatedNumber value={Math.abs(netPnl)} />
+                  </>
+                }
+                valueClass={pnlClass(netPnl)}
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-xs font-medium text-gray-600 dark:text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                    {stat.title}
-                  </div>
-                  <stat.icon className="h-5 w-5 text-gray-500 dark:text-gray-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
+                <div className={`text-xs ${MUTED}`}>
+                  Account growth{" "}
+                  <span className={`font-semibold ${pnlClass(accountGrowth)}`}>
+                    {Number(accountGrowth) >= 0 ? "+" : ""}
+                    {accountGrowth}%
+                  </span>{" "}
+                  all-time
                 </div>
-                <div
-                  className={`text-2xl sm:text-3xl font-extrabold ${
-                    stat.color === "emerald"
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : stat.color === "rose"
-                      ? "text-rose-600 dark:text-rose-400"
-                      : stat.color === "indigo"
-                      ? "text-indigo-600 dark:text-indigo-400"
-                      : stat.color === "cyan"
-                      ? "text-cyan-600 dark:text-cyan-400"
-                      : stat.color === "violet"
-                      ? "text-violet-600 dark:text-violet-400"
-                      : "text-teal-600 dark:text-teal-400"
-                  }`}
-                >
-                  {stat.animated ? (
-                    <AnimatedNumber value={stat.value} decimals={stat.decimals || 0} />
-                  ) : (
+              </Kpi>
+
+              <Kpi
+                title="Trade win %"
+                hint="Share of trades closed in profit"
+                value={<><AnimatedNumber value={Number(monthlyStats.winRate)} decimals={1} />%</>}
+                valueClass={HEAD}
+                visual={
+                  <div className="h-[56px] w-[104px]">
+                    <Gauge
+                      half
+                      isDark={isDark}
+                      values={[perf.wins, perf.breakeven, perf.losses]}
+                      colors={[POS, NEUTRAL, NEG]}
+                    />
+                  </div>
+                }
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  <Chip color={POS}>{perf.wins}</Chip>
+                  <Chip color={NEUTRAL}>{perf.breakeven}</Chip>
+                  <Chip color={NEG}>{perf.losses}</Chip>
+                </div>
+              </Kpi>
+
+              <Kpi
+                title="Profit factor"
+                hint="Gross profit divided by gross loss"
+                value={monthlyStats.profitFactor}
+                valueClass={HEAD}
+                visual={
+                  <div className="h-[56px] w-[56px]">
+                    <Gauge isDark={isDark} values={[perf.grossW, perf.grossL]} colors={[POS, NEG]} />
+                  </div>
+                }
+              >
+                <div className={`text-xs ${MUTED}`}>
+                  <span className={`font-semibold ${POS_T}`}>{money(perf.grossW, false)}</span> won,{" "}
+                  <span className={`font-semibold ${NEG_T}`}>{money(perf.grossL, false)}</span> lost
+                </div>
+              </Kpi>
+
+              <Kpi
+                title="Day win %"
+                hint="Share of trading days that closed green"
+                value={<><AnimatedNumber value={perf.dayWinRate} decimals={1} />%</>}
+                valueClass={HEAD}
+                visual={
+                  <div className="h-[56px] w-[104px]">
+                    <Gauge
+                      half
+                      isDark={isDark}
+                      values={[perf.greenDays, perf.flatDays, perf.redDays]}
+                      colors={[POS, NEUTRAL, NEG]}
+                    />
+                  </div>
+                }
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  <Chip color={POS}>{perf.greenDays}</Chip>
+                  <Chip color={NEUTRAL}>{perf.flatDays}</Chip>
+                  <Chip color={NEG}>{perf.redDays}</Chip>
+                </div>
+              </Kpi>
+
+              <Kpi
+                title="Avg win / loss trade"
+                hint="Average winning trade divided by average losing trade"
+                value={payoffText}
+                valueClass={HEAD}
+              >
+                <div className="h-2 w-full overflow-hidden rounded-full bg-[#e6e8f2] dark:bg-[#262645] flex">
+                  <div
+                    className="h-full"
+                    style={{ width: `${avgTotal ? (perf.avgWin / avgTotal) * 100 : 50}%`, backgroundColor: POS }}
+                  />
+                  <div className="h-full flex-1" style={{ backgroundColor: avgTotal ? NEG : "transparent" }} />
+                </div>
+                <div className="mt-2 flex justify-between text-xs font-semibold tabular-nums">
+                  <span className={POS_T}>{money(perf.avgWin, false)}</span>
+                  <span className={NEG_T}>-{money(perf.avgLoss, false)}</span>
+                </div>
+              </Kpi>
+            </div>
+
+            {/* ───────── Month at a glance ───────── */}
+            <div className={`mb-4 overflow-hidden rounded-xl border ${DIVIDER} bg-[#e6e8f2] dark:bg-[#262645]`}>
+              <div className="grid grid-cols-2 gap-px sm:grid-cols-3 xl:grid-cols-6">
+                {glance.map((g) => (
+                  <div key={g.label} className="bg-white dark:bg-[#15152b] px-4 py-3.5">
+                    <div className={`text-xs font-medium ${MUTED}`}>{g.label}</div>
+                    <div className={`mt-1 text-lg font-bold tabular-nums ${g.cls || HEAD}`}>{g.value}</div>
+                    <div className={`text-[11px] ${MUTED}`}>{g.sub}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ───────── Radar + Cumulative P&L ───────── */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4">
+              <Card className={`${CARD} xl:col-span-4 p-0`}>
+                <CardHead
+                  icon={Target}
+                  accent={ac.hex}
+                  title="Performance radar"
+                  sub={radarMonth ? `${format(viewDate, "MMMM yyyy")} vs all-time` : "All-time (no trades this month)"}
+                  right={
+                    <div className="text-right shrink-0">
+                      <div className={`text-[11px] ${MUTED}`}>Edge score</div>
+                      <div className="text-2xl font-bold leading-none mt-1 tabular-nums" style={{ color: ac.hex }}>
+                        {radarMain ? radarMain.edge : "—"}
+                        <span className={`text-xs font-semibold ${MUTED}`}>/100</span>
+                      </div>
+                    </div>
+                  }
+                />
+                <div className="p-4 sm:p-5">
+                  {radarMain ? (
                     <>
-                      {stat.prefix || ""}
-                      {stat.value}
-                      {stat.suffix || ""}
+                      <div className="relative h-72">
+                        <Radar data={radarChartData} options={radarOptions} />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mt-4">
+                        {RADAR_LABELS.map((label, i) => (
+                          <div key={label} className={`${PANEL} px-2 py-2 text-center`}>
+                            <div className={`text-[10px] sm:text-[11px] truncate ${MUTED}`}>{label}</div>
+                            <div className={`text-sm font-bold tabular-nums ${HEAD}`}>{radarMain.raw[i]}</div>
+                          </div>
+                        ))}
+                      </div>
                     </>
+                  ) : (
+                    <div className={`h-72 flex flex-col items-center justify-center text-center gap-2 ${MUTED}`}>
+                      <Target size={36} className="opacity-40" />
+                      <p className="text-sm">Add trades to see your performance radar.</p>
+                    </div>
                   )}
                 </div>
               </Card>
-            ))}
-          </div>
 
-          {/* New Row: Asset‑specific stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-8">
-            {/* Most Traded Pair */}
-            <Card className="p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Most Traded Pair</h3>
-              <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
-                {monthlyAssetStats.topPair}
-              </div>
-              {monthlyAssetStats.topPairCount > 0 && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {monthlyAssetStats.topPairCount} trades this month
-                </p>
-              )}
-            </Card>
-
-            {/* Total Lot Size */}
-            <Card className="p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Total Lot Size (Monthly)</h3>
-              <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                {monthlyAssetStats.totalLots}
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {monthlyTrades.length} trades
-              </p>
-            </Card>
-
-            {/* Top Performing Assets */}
-            <Card className="p-5 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Top Assets by PnL</h3>
-              <div className="space-y-2">
-                {monthlyAssetStats.assetPnL.length > 0 ? (
-                  monthlyAssetStats.assetPnL.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-sm">
-                      <span className="font-medium truncate max-w-[100px]">{item.pair}</span>
-                      <span
-                        className={`font-bold ${
-                          item.pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                        }`}
-                      >
-                        {item.pnl >= 0 ? "+" : ""}${formatNumber(Math.abs(item.pnl))}
-                      </span>
+              <Card className={`${CARD} xl:col-span-8 p-0`}>
+                <CardHead
+                  icon={LineChartIcon}
+                  accent={ac.hex}
+                  title="Cumulative P&L"
+                  sub={
+                    <>
+                      <span className={`font-semibold ${pnlClass(equityNet)}`}>{money(equityNet)}</span>
+                      {` across ${equity.count} trades`}
+                    </>
+                  }
+                  right={
+                    <div className="flex rounded-lg bg-[#f1f2f8] dark:bg-[#0f0f22] p-1 text-xs">
+                      {[
+                        ["month", "This month"],
+                        ["all", "All-time"],
+                      ].map(([key, label]) => (
+                        <button
+                          key={key}
+                          onClick={() => setCurveRange(key)}
+                          aria-pressed={curveRange === key}
+                          className={`rounded-md px-3 py-1.5 font-semibold transition-colors ${FOCUS} ${
+                            curveRange === key ? "text-white shadow-sm" : `${MUTED} hover:text-[#14142b] dark:hover:text-white`
+                          }`}
+                          style={curveRange === key ? { backgroundColor: ac.hex } : undefined}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
-                    No asset data
-                  </div>
-                )}
-              </div>
-            </Card>
-          </div>
-
-          {/* Performance Radar + Equity Curve */}
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 lg:gap-6 mb-8">
-            <Card className={`${CARD} xl:col-span-2 p-4 sm:p-6`}>
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="min-w-0">
-                  <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                    <Target className="h-5 w-5" style={{ color: ac.hex }} />
-                    Performance Radar
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {radarMonth ? `${format(viewDate, "MMMM yyyy")} vs all-time` : "All-time (no trades this month)"}
-                  </p>
+                  }
+                />
+                <div className="p-4 sm:p-5">
+                  {equity.count ? (
+                    <div className="relative h-72 sm:h-80 xl:h-[26rem]">
+                      <Line data={equityChartData} options={equityOptions} />
+                    </div>
+                  ) : (
+                    <div className={`h-72 flex flex-col items-center justify-center text-center gap-2 ${MUTED}`}>
+                      <LineChartIcon size={36} className="opacity-40" />
+                      <p className="text-sm">No trades in this range yet.</p>
+                    </div>
+                  )}
                 </div>
-                <div className="text-right shrink-0">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Edge Score</div>
-                  <div className="text-3xl font-extrabold leading-none mt-1" style={{ color: ac.hex }}>
-                    {radarMain ? radarMain.edge : "—"}
-                    <span className="text-sm font-semibold text-gray-400">/100</span>
-                  </div>
-                </div>
-              </div>
+              </Card>
+            </div>
 
-              {radarMain ? (
-                <>
-                  <div className="relative h-72 sm:h-80">
-                    <Radar data={radarChartData} options={radarOptions} />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 mt-4">
-                    {RADAR_LABELS.map((label, i) => (
-                      <div
-                        key={label}
-                        className="rounded-xl bg-gray-100/70 dark:bg-gray-900/40 px-2 py-2 text-center"
-                      >
-                        <div className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate">{label}</div>
-                        <div className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">
-                          {radarMain.raw[i]}
-                        </div>
+            {/* ───────── Net daily P&L + Account overview ───────── */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4">
+              <Card className={`${CARD} xl:col-span-8 p-0`}>
+                <CardHead
+                  icon={BarChart3}
+                  accent={ac.hex}
+                  title="Net daily P&L"
+                  sub={`${perf.greenDays} green and ${perf.redDays} red days in ${format(viewDate, "MMMM")}`}
+                />
+                <div className="p-4 sm:p-5">
+                  {perf.daily.length ? (
+                    <div className="relative h-64">
+                      <Bar data={dailyBarData} options={dailyBarOptions} />
+                    </div>
+                  ) : (
+                    <div className={`h-64 flex flex-col items-center justify-center text-center gap-2 ${MUTED}`}>
+                      <BarChart3 size={36} className="opacity-40" />
+                      <p className="text-sm">No trading days this month.</p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              <Card className={`${CARD} xl:col-span-4 p-0`}>
+                <CardHead icon={Wallet} accent={ac.hex} title="Account overview" />
+                <div className="p-4 sm:p-5">
+                  <div className={`text-xs ${MUTED}`}>Current balance</div>
+                  <div className={`mt-1 text-3xl font-bold tabular-nums ${HEAD}`}>${formatNumber(currentBalance)}</div>
+                  <div className="mt-5 space-y-3.5 text-sm">
+                    {[
+                      ["Starting balance", `$${formatNumber(initialBalance)}`, HEAD],
+                      ["Total P&L (all-time)", money(allTimePnL), pnlClass(allTimePnL)],
+                      ["Account growth", `${Number(accountGrowth) >= 0 ? "+" : ""}${accountGrowth}%`, pnlClass(accountGrowth)],
+                      ["Created", format(accountCreatedAt, "dd MMM yyyy"), HEAD],
+                    ].map(([label, value, cls]) => (
+                      <div key={label} className={`flex items-center justify-between border-b pb-3 last:border-0 last:pb-0 ${DIVIDER}`}>
+                        <span className={MUTED}>{label}</span>
+                        <span className={`font-semibold tabular-nums ${cls}`}>{value}</span>
                       </div>
                     ))}
                   </div>
-                </>
-              ) : (
-                <div className="h-72 flex flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400 gap-2">
-                  <Target size={40} className="opacity-40" />
-                  <p className="text-sm">Add trades to see your performance radar.</p>
                 </div>
-              )}
-            </Card>
-
-            <Card className={`${CARD} xl:col-span-3 p-4 sm:p-6`}>
-              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                    <LineChartIcon className="h-5 w-5" style={{ color: ac.hex }} />
-                    Equity Curve
-                  </h3>
-                  <p
-                    className={`text-sm font-semibold mt-1 ${
-                      equityNet >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                    }`}
-                  >
-                    {equityNet >= 0 ? "+" : "-"}${formatNumber(Math.abs(equityNet))}
-                    <span className="font-normal text-gray-500 dark:text-gray-400">
-                      {" "}
-                      · {equity.count} trades
-                    </span>
-                  </p>
-                </div>
-                <div className="flex rounded-xl bg-gray-100 dark:bg-gray-900/50 p-1 text-sm">
-                  {[
-                    ["month", "This month"],
-                    ["all", "All-time"],
-                  ].map(([key, label]) => (
-                    <button
-                      key={key}
-                      onClick={() => setCurveRange(key)}
-                      className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
-                        curveRange === key
-                          ? "text-white shadow"
-                          : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                      }`}
-                      style={curveRange === key ? { backgroundColor: ac.hex } : undefined}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {equity.count ? (
-                <div className="relative h-64 sm:h-80 xl:h-[22rem]">
-                  <Line data={equityChartData} options={equityOptions} />
-                </div>
-              ) : (
-                <div className="h-64 flex flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400 gap-2">
-                  <LineChartIcon size={40} className="opacity-40" />
-                  <p className="text-sm">No trades in this range yet.</p>
-                </div>
-              )}
-            </Card>
-          </div>
-
-          {/* Recent Trades + Weekly Breakdown */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-            <Card className="lg:col-span-2 p-3 sm:p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                  <Activity className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
-                  Recent Trades
-                </h3>
-                <button
-                  onClick={() => navigate("/trades")}
-                  className="text-sm flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                >
-                  View All →
-                </button>
-              </div>
-
-              {recentTrades.length === 0 ? (
-                <div className="text-center py-12 rounded-xl bg-white/50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400">
-                  No recent trades yet
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recentTrades.map((trade, i) => (
-                    <div
-                      key={i}
-                      onClick={() => navigate(`/trades?date=${format(new Date(trade.date), "yyyy-MM-dd")}`)}
-                      className="flex items-center justify-between p-4 rounded-xl bg-white/60 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-700/60 transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div
-                          className={`w-12 h-12 rounded-xl flex items-center justify-center text-base font-bold shadow-sm ${
-                            trade.pnl >= 0
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                              : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
-                          }`}
-                        >
-                          {trade.pair?.slice(0, 2) || "T"}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-gray-900 dark:text-gray-100">
-                            {trade.pair} {trade.direction}
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            {format(new Date(trade.date), "dd MMM yyyy • HH:mm")}
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        className={`font-bold text-lg ${
-                          trade.pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                        }`}
-                      >
-                        {trade.pnl >= 0 ? "+" : ""}${Math.abs(Number(trade.pnl || 0)).toFixed(2)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-
-            {/* Weekly Breakdown Card */}
-            <Card className="p-3 sm:p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg hover:shadow-xl transition-all duration-200">
-              <h3 className="text-lg font-semibold mb-5 flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                <BarChart3 className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
-                Weekly Performance
-              </h3>
-
-              <div className="space-y-4">
-                {weeklyBreakdown.map((week, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-400 w-16">{week.label}</span>
-                    <div className="flex gap-3">
-                      <span className="text-emerald-400 font-medium">{week.wins}W</span>
-                      <span className="text-rose-400 font-medium">{week.losses}L</span>
-                      <span className="text-gray-500 font-medium">{week.breakeven}B</span>
-                    </div>
-                    <span className="text-gray-300 font-semibold">
-                      {week.total} trades
-                    </span>
-                  </div>
-                ))}
-                {weeklyBreakdown.every((w) => w.total === 0) && (
-                  <div className="text-center py-6 text-gray-500">No trades in last 4 weeks</div>
-                )}
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-gray-700">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-400">Current Streak</span>
-                  <span
-                    className={`font-bold ${
-                      currentStreak.type === "Win"
-                        ? "text-emerald-400"
-                        : currentStreak.type === "Loss"
-                        ? "text-rose-400"
-                        : "text-gray-400"
-                    }`}
-                  >
-                    {currentStreak.type === "None" ? "—" : `${currentStreak.count} ${currentStreak.type}`}
-                  </span>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Calendar (unchanged) */}
-          <Card className="p-3 sm:p-5 lg:p-6 rounded-2xl bg-white/80 dark:bg-gray-800/60 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-lg">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={prevMonth}
-                  className={`p-3 rounded-xl transition-all shadow-sm hover:shadow-md ${
-                    isDark ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  ◀
-                </button>
-                <button
-                  onClick={() => {
-                    const res = prompt("Enter month (YYYY-MM)");
-                    if (res && /^\d{4}-\d{2}$/.test(res)) {
-                      const [y, m] = res.split("-").map(Number);
-                      jumpTo(y, m);
-                    }
-                  }}
-                  className={`px-5 py-3 rounded-xl border transition-all shadow-sm hover:shadow-md ${
-                    isDark ? "bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700" : "bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  {format(viewDate, "MMMM yyyy")}
-                </button>
-                <button
-                  onClick={nextMonth}
-                  className={`p-3 rounded-xl transition-all shadow-sm hover:shadow-md ${
-                    isDark ? "bg-gray-800 text-gray-300 hover:bg-gray-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  ▶
-                </button>
-              </div>
-              <span className="text-sm font-medium text-gray-400 dark:text-gray-400">
-                Tap a day to view trades
-              </span>
+              </Card>
             </div>
 
-            <div className="sm:overflow-x-auto">
-              <div className="grid grid-cols-7 sm:grid-cols-8 sm:min-w-[640px] gap-1 sm:gap-2">
-                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Wk"].map((d) => (
-                  <div
-                    key={d}
-                    className={`text-[10px] sm:text-xs font-medium text-center py-2 sm:py-3 ${d === "Wk" ? "hidden sm:block" : ""} ${isDark ? "text-gray-400" : "text-gray-600"}`}
-                  >
-                    {d === "Wk" ? d : d.slice(0, 1)}<span className="hidden sm:inline">{d === "Wk" ? "" : d.slice(1)}</span>
-                  </div>
-                ))}
+            {/* ───────── Calendar + side widgets ───────── */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4">
+              <Card className={`${CARD} xl:col-span-8 p-0`}>
+                <CardHead
+                  icon={CalendarDays}
+                  accent={ac.hex}
+                  title="Trading calendar"
+                  sub="Select a day to view its trades"
+                  right={
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={prevMonth}
+                        aria-label="Previous month"
+                        className={`rounded-lg p-2 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          const res = prompt("Enter month (YYYY-MM)");
+                          if (res && /^\d{4}-\d{2}$/.test(res)) {
+                            const [y, m] = res.split("-").map(Number);
+                            jumpTo(y, m);
+                          }
+                        }}
+                        title="Jump to a month"
+                        className={`rounded-lg border ${DIVIDER} px-3 py-1.5 text-sm font-semibold ${HEAD} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
+                      >
+                        {format(viewDate, "MMM yyyy")}
+                      </button>
+                      <button
+                        onClick={nextMonth}
+                        aria-label="Next month"
+                        className={`rounded-lg p-2 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  }
+                />
 
-                {calendarWeeks.map((week, wi) => {
-                  const wSum = weekSummary(week);
-                  return (
-                    <React.Fragment key={wi}>
-                      {week.map((dayObj, di) => {
-                        const ds = daySummary(dayObj);
-                        const isCur = isSameMonth(dayObj, viewDate);
-                        const pnl = ds?.pnl || 0;
-                        const intensity = Math.min(Math.abs(pnl) / 1500, 0.6);
+                <div className="p-3 sm:p-5">
+                  <div className="sm:overflow-x-auto">
+                    <div className="grid grid-cols-7 sm:grid-cols-8 sm:min-w-[640px] gap-1 sm:gap-1.5">
+                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Week"].map((d) => (
+                        <div
+                          key={d}
+                          className={`text-[10px] sm:text-xs font-semibold text-center py-1.5 ${MUTED} ${
+                            d === "Week" ? "hidden sm:block" : ""
+                          }`}
+                        >
+                          {d === "Week" ? d : d.slice(0, 1)}
+                          <span className="hidden sm:inline">{d === "Week" ? "" : d.slice(1)}</span>
+                        </div>
+                      ))}
 
+                      {calendarWeeks.map((week, wi) => {
+                        const wSum = weekSummary(week);
                         return (
-                          <div
-                            key={di}
-                            onClick={() => openDay(dayObj)}
-                            className={`
-                              cursor-pointer aspect-square rounded-lg sm:rounded-xl p-0.5 sm:p-2 flex flex-col justify-between border transition-all duration-300
-                              ${isCur
-                                ? isDark
-                                  ? "bg-gray-900/70 border-indigo-500/30"
-                                  : "bg-white/80 border-gray-200"
-                                : isDark
-                                ? "bg-transparent border-dashed border-gray-700/40"
-                                : "bg-transparent border-dashed border-gray-300"}
-                              hover:shadow-xl hover:scale-[1.03] hover:border-indigo-400
-                            `}
-                            style={{
-                              backgroundColor: pnl > 0
-                                ? `rgba(34, 197, 94, ${intensity})`
-                                : pnl < 0
-                                ? `rgba(239, 68, 68, ${intensity})`
-                                : undefined,
-                            }}
-                          >
-                            <div className={`text-xs text-center ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                              {format(dayObj, "d")}
-                            </div>
-                            <div className="flex-1 flex flex-col items-center justify-center text-center">
-                              {ds ? (
-                                <>
-                                  <div
-                                    className={`font-bold text-[10px] sm:text-sm leading-tight ${
-                                      pnl >= 0
-                                        ? "text-emerald-400"
-                                        : "text-rose-400"
-                                    }`}
-                                  >
-                                    <span className="sm:hidden">{pnl >= 0 ? "+" : "-"}{Math.abs(pnl).toFixed(0)}</span>
-                                    <span className="hidden sm:inline">{pnl >= 0 ? "+" : ""}${Math.abs(pnl).toFixed(2)}</span>
+                          <React.Fragment key={wi}>
+                            {week.map((dayObj, di) => {
+                              const ds = daySummary(dayObj);
+                              const isCur = isSameMonth(dayObj, viewDate);
+                              const pnl = ds?.pnl || 0;
+                              const alpha = 0.1 + Math.min(Math.abs(pnl) / 1500, 1) * 0.26;
+                              const today = isToday(dayObj);
+
+                              return (
+                                <div
+                                  key={di}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => openDay(dayObj)}
+                                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openDay(dayObj)}
+                                  aria-label={`${format(dayObj, "d MMMM")}${ds ? `, ${money(pnl)}` : ", no trades"}`}
+                                  className={`cursor-pointer min-h-[54px] sm:min-h-[92px] rounded-lg p-1 sm:p-2 flex flex-col justify-between border transition-colors ${FOCUS} ${
+                                    isCur
+                                      ? "bg-white dark:bg-[#101024] border-[#e6e8f2] dark:border-[#262645]"
+                                      : "bg-transparent border-dashed border-[#e6e8f2]/70 dark:border-[#262645]/60 opacity-60"
+                                  } hover:border-[#6C47FF]`}
+                                  style={{
+                                    backgroundColor: ds
+                                      ? pnl >= 0
+                                        ? `rgba(34, 196, 147, ${alpha})`
+                                        : pnl < 0
+                                        ? `rgba(242, 85, 110, ${alpha})`
+                                        : undefined
+                                      : undefined,
+                                    boxShadow: today ? `inset 0 0 0 2px ${ac.hex}` : undefined,
+                                  }}
+                                >
+                                  <div className={`text-[10px] sm:text-xs text-right font-medium ${MUTED}`}>
+                                    {format(dayObj, "d")}
                                   </div>
-                                  <div className={`hidden sm:block text-[10px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                                    {ds.count}t • {ds.winRate}%
+                                  <div className="flex flex-col items-center justify-center text-center">
+                                    {ds ? (
+                                      <>
+                                        <div className={`font-bold text-[10px] sm:text-sm leading-tight tabular-nums ${pnlClass(pnl)}`}>
+                                          <span className="sm:hidden">
+                                            {pnl >= 0 ? "+" : "-"}
+                                            {Math.abs(pnl).toFixed(0)}
+                                          </span>
+                                          <span className="hidden sm:inline">{money(pnl)}</span>
+                                        </div>
+                                        <div className={`hidden sm:block text-[10px] ${MUTED}`}>
+                                          {ds.count} {ds.count === 1 ? "trade" : "trades"}, {ds.winRate}%
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className={`text-xs ${MUTED} opacity-50`}>—</div>
+                                    )}
                                   </div>
-                                </>
-                              ) : (
-                                <div className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>—</div>
-                              )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Weekly summary */}
+                            <div
+                              className={`hidden sm:flex min-h-[92px] flex-col items-center justify-center rounded-lg border p-2 bg-[#f7f8fc] dark:bg-[#1b1b36] ${DIVIDER}`}
+                            >
+                              <div className={`text-xs font-medium mb-1 ${MUTED}`}>Week {wi + 1}</div>
+                              <div className={`text-sm font-bold tabular-nums ${wSum.count ? pnlClass(wSum.pnl) : MUTED}`}>
+                                {wSum.count ? money(wSum.pnl) : "—"}
+                              </div>
+                              <div className={`text-[10px] ${MUTED}`}>
+                                {wSum.count} {wSum.count === 1 ? "trade" : "trades"}, {wSum.winRate}%
+                              </div>
                             </div>
-                          </div>
+                          </React.Fragment>
                         );
                       })}
+                    </div>
+                  </div>
+                </div>
+              </Card>
 
-                      {/* Weekly Summary */}
-                      <div
-                        className={`hidden sm:flex aspect-square rounded-xl p-1.5 sm:p-2 flex-col justify-center items-center border ${
-                          isDark ? "bg-gray-800/50 border-gray-700" : "bg-gray-100/50 border-gray-200"
-                        }`}
-                      >
-                        <div className={`text-xs mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                          W{wi + 1}
+              <div className="xl:col-span-4 flex flex-col gap-4">
+                {/* Weekly performance */}
+                <Card className={`${CARD} p-0`}>
+                  <CardHead
+                    icon={BarChart3}
+                    accent={ac.hex}
+                    title="Weekly performance"
+                    sub="Last 4 weeks"
+                  />
+                  <div className="p-4 sm:p-5 space-y-4">
+                    {weeklyBreakdown.map((week, idx) => (
+                      <div key={idx}>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className={`font-medium ${HEAD}`}>Week of {week.label}</span>
+                          <span className={`font-semibold tabular-nums ${week.total ? pnlClass(week.pnl) : MUTED}`}>
+                            {week.total ? money(week.pnl) : "—"}
+                          </span>
                         </div>
-                        <div
-                          className={`text-sm font-bold ${
-                            wSum.pnl >= 0
-                              ? "text-emerald-400"
-                              : "text-rose-400"
-                          }`}
-                        >
-                          {wSum.pnl >= 0 ? "+" : ""}${Math.abs(wSum.pnl).toFixed(2)}
+                        <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-[#e6e8f2] dark:bg-[#262645]">
+                          {week.total > 0 && (
+                            <>
+                              <div style={{ width: `${(week.wins / week.total) * 100}%`, backgroundColor: POS }} />
+                              <div style={{ width: `${(week.breakeven / week.total) * 100}%`, backgroundColor: NEUTRAL }} />
+                              <div style={{ width: `${(week.losses / week.total) * 100}%`, backgroundColor: NEG }} />
+                            </>
+                          )}
                         </div>
-                        <div className={`text-[10px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                          {wSum.count}t • {wSum.winRate}%
+                        <div className={`mt-1.5 flex gap-3 text-xs tabular-nums ${MUTED}`}>
+                          <span>{week.wins}W</span>
+                          <span>{week.losses}L</span>
+                          <span>{week.breakeven}B</span>
+                          <span className="ml-auto">{week.total} trades</span>
                         </div>
                       </div>
-                    </React.Fragment>
-                  );
-                })}
+                    ))}
+                    {weeklyBreakdown.every((w) => w.total === 0) && (
+                      <div className={`text-center py-4 text-sm ${MUTED}`}>No trades in the last 4 weeks</div>
+                    )}
+
+                    <div className={`flex items-center justify-between border-t pt-4 ${DIVIDER}`}>
+                      <span className={`flex items-center gap-2 text-sm ${MUTED}`}>
+                        <Flame size={16} className={currentStreak.type === "Win" ? "text-[#22c493]" : currentStreak.type === "Loss" ? "text-[#f2556e]" : ""} />
+                        Current streak
+                      </span>
+                      <span
+                        className={`text-sm font-bold ${
+                          currentStreak.type === "Win" ? POS_T : currentStreak.type === "Loss" ? NEG_T : MUTED
+                        }`}
+                      >
+                        {currentStreak.type === "None" ? "—" : `${currentStreak.count} ${currentStreak.type}`}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Top assets */}
+                <Card className={`${CARD} p-0 flex-1`}>
+                  <CardHead
+                    icon={TrendingUp}
+                    accent={ac.hex}
+                    title="Top assets by P&L"
+                    sub={
+                      monthlyAssetStats.topPairCount > 0
+                        ? `Most traded: ${monthlyAssetStats.topPair} (${monthlyAssetStats.topPairCount}), ${monthlyAssetStats.totalLots} lots`
+                        : "No trades this month"
+                    }
+                  />
+                  <div className="p-4 sm:p-5 space-y-3.5">
+                    {monthlyAssetStats.assetPnL.length > 0 ? (
+                      monthlyAssetStats.assetPnL.map((item) => (
+                        <div key={item.pair}>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className={`font-medium truncate max-w-[55%] ${HEAD}`}>{item.pair}</span>
+                            <span className={`font-semibold tabular-nums ${pnlClass(item.pnl)}`}>{money(item.pnl)}</span>
+                          </div>
+                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-[#e6e8f2] dark:bg-[#262645]">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${(Math.abs(item.pnl) / maxAssetAbs) * 100}%`,
+                                backgroundColor: item.pnl >= 0 ? POS : NEG,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className={`text-center py-4 text-sm ${MUTED}`}>No asset data</div>
+                    )}
+                  </div>
+                </Card>
               </div>
             </div>
-          </Card>
 
-          {/* Floating Quick Add Button */}
-          <button
-            onClick={() => navigate("/trades/new")}
-            style={{ backgroundColor: ac.hex }}
-            className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-[1000] w-14 h-14 rounded-full hover:brightness-110 text-white shadow-lg transition-all duration-200 flex items-center justify-center transform hover:scale-110 active:scale-95"
-            aria-label="Add New Trade"
-          >
-            <span className="text-3xl font-bold leading-none">+</span>
-          </button>
+            {/* ───────── Recent trades ───────── */}
+            <Card className={`${CARD} p-0 mb-10`}>
+              <CardHead
+                icon={Activity}
+                accent={ac.hex}
+                title="Recent trades"
+                right={
+                  <button
+                    onClick={() => navigate("/trades")}
+                    className={`flex items-center gap-1 text-sm font-semibold hover:underline ${FOCUS} rounded`}
+                    style={{ color: ac.hex }}
+                  >
+                    View all
+                    <ChevronRight size={15} />
+                  </button>
+                }
+              />
 
-          {/* Quick Analysis Modal */}
-          {showQuickAnalysis && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[2000] p-4">
-              <div className="w-full max-w-3xl rounded-2xl bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-2xl overflow-hidden">
-                <div className="p-6 sm:p-8">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
-                      Quick Analysis
-                    </h2>
+              {recentTrades.length === 0 ? (
+                <div className={`py-14 text-center text-sm ${MUTED}`}>No trades yet. Add one with the + button.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead>
+                      <tr className={`border-b text-left text-xs font-medium ${MUTED} ${DIVIDER}`}>
+                        <th className="px-4 sm:px-5 py-3 font-medium">Date</th>
+                        <th className="px-3 py-3 font-medium">Symbol</th>
+                        <th className="px-3 py-3 font-medium">Side</th>
+                        <th className="px-3 py-3 font-medium hidden sm:table-cell text-right">Lots</th>
+                        <th className="px-3 py-3 font-medium hidden sm:table-cell text-right">R:R</th>
+                        <th className="px-4 sm:px-5 py-3 font-medium text-right">Net P&L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentTrades.map((trade, i) => {
+                        const p = Number(trade.pnl) || 0;
+                        const isLong = /buy|long/i.test(String(trade.direction || ""));
+                        return (
+                          <tr
+                            key={trade.id || i}
+                            onClick={() => navigate(`/trades?date=${format(new Date(trade.date), "yyyy-MM-dd")}`)}
+                            className={`cursor-pointer border-b last:border-0 transition-colors hover:bg-[#f7f8fc] dark:hover:bg-[#1b1b36] ${DIVIDER}`}
+                          >
+                            <td className={`px-4 sm:px-5 py-3.5 whitespace-nowrap ${MUTED}`}>
+                              {format(new Date(trade.date), "dd MMM yyyy, HH:mm")}
+                            </td>
+                            <td className={`px-3 py-3.5 font-semibold ${HEAD}`}>{trade.pair || "—"}</td>
+                            <td className="px-3 py-3.5">
+                              <span
+                                className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
+                                  isLong
+                                    ? "bg-[#22c493]/15 text-[#0e9f77] dark:text-[#2dd4a0]"
+                                    : "bg-[#f2556e]/15 text-[#d93a57] dark:text-[#ff6b86]"
+                                }`}
+                              >
+                                {trade.direction || "—"}
+                              </span>
+                            </td>
+                            <td className={`px-3 py-3.5 hidden sm:table-cell text-right tabular-nums ${MUTED}`}>
+                              {trade.lotSize ?? "—"}
+                            </td>
+                            <td className={`px-3 py-3.5 hidden sm:table-cell text-right tabular-nums ${MUTED}`}>
+                              {trade.rr ? Number(trade.rr).toFixed(2) : "—"}
+                            </td>
+                            <td className={`px-4 sm:px-5 py-3.5 text-right font-bold tabular-nums ${pnlClass(p)}`}>
+                              {money(p)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+
+            {/* Floating Quick Add Button */}
+            <button
+              onClick={() => navigate("/trades/new")}
+              style={{ backgroundColor: ac.hex }}
+              className={`fixed bottom-24 md:bottom-6 right-4 md:right-6 z-[1000] flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg shadow-black/25 transition hover:brightness-110 active:scale-95 ${FOCUS}`}
+              aria-label="Add new trade"
+            >
+              <Plus size={26} strokeWidth={2.5} />
+            </button>
+
+            {/* Quick Analysis Modal */}
+            {showQuickAnalysis && (
+              <div
+                className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4"
+                onClick={() => setShowQuickAnalysis(false)}
+              >
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Quick analysis"
+                  onClick={(e) => e.stopPropagation()}
+                  className={`max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border bg-white dark:bg-[#15152b] shadow-2xl ${DIVIDER}`}
+                >
+                  <div className={`flex items-center justify-between border-b px-5 sm:px-7 py-4 ${DIVIDER}`}>
+                    <div>
+                      <h2 className={`flex items-center gap-2 text-lg font-bold ${HEAD}`}>
+                        <Zap size={18} style={{ color: ac.hex }} />
+                        Quick analysis
+                      </h2>
+                      <p className={`text-xs mt-0.5 ${MUTED}`}>{format(viewDate, "MMMM yyyy")}</p>
+                    </div>
                     <button
                       onClick={() => setShowQuickAnalysis(false)}
-                      className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                      aria-label="Close"
+                      className={`rounded-lg p-2 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
                     >
-                      <X size={28} />
+                      <X size={20} />
                     </button>
                   </div>
 
-                  {quickAnalysisContent()}
+                  <div className="p-5 sm:p-7">{quickAnalysisContent()}</div>
 
-                  <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                  <div className={`flex justify-end border-t px-5 sm:px-7 py-4 ${DIVIDER}`}>
                     <button
                       onClick={() => setShowQuickAnalysis(false)}
-                      className="px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-xl transition-colors"
+                      className={`rounded-lg border ${DIVIDER} px-5 py-2 text-sm font-semibold ${HEAD} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
                     >
                       Close
                     </button>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </>
-      )}
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
