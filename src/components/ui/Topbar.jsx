@@ -1,154 +1,283 @@
-import React, { useState } from 'react';
-import { Sun, Moon, Settings, LogOut, Menu } from 'lucide-react';
-import { Button } from './button';
-import { useTheme } from '../../Theme-provider';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  Sun,
+  Moon,
+  Settings,
+  LogOut,
+  Menu,
+  Plus,
+  ChevronDown,
+  Plug,
+} from "lucide-react";
+import { useTheme } from "../../Theme-provider";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
-} from './dialog';
-import { auth } from '../../firebase';
+} from "./dialog";
+import { auth } from "../../firebase";
+import useIsMobile from "../../hooks/useIsMobile";
 
-export default function Topbar({ onMenuClick }) {
+// ────────────────────────────────────────────────
+// Look & feel (Tradezella-style: slim, flat, sits beside the sidebar)
+// Same palette as Dashboard / Daily Journal / Sidebar
+// ────────────────────────────────────────────────
+const ACCENT_HEX = {
+  zella: "#6C47FF",
+  indigo: "#6366f1",
+  emerald: "#10b981",
+  cyan: "#06b6d4",
+  amber: "#f59e0b",
+  rose: "#f43f5e",
+};
+const readAccent = () => {
+  try {
+    return ACCENT_HEX[localStorage.getItem("forgexAccent")] || ACCENT_HEX.zella;
+  } catch {
+    return ACCENT_HEX.zella;
+  }
+};
+
+const FOCUS =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF]";
+const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg text-[#6b7090] transition-colors hover:bg-[#f1f2f8] hover:text-[#14142b] dark:text-[#8a8fb5] dark:hover:bg-[#1e1e3a] dark:hover:text-white ${FOCUS}`;
+
+const PAGE_TITLES = {
+  "/": "Dashboard",
+  "/dashboard": "Dashboard",
+  "/journal": "Daily Journal",
+  "/trades": "Trades",
+  "/trades/new": "Add Trade",
+  "/notebook": "Notebook",
+  "/reports": "Reports",
+  "/challenges": "Challenges",
+  "/mentor": "Mentor Mode",
+  "/backtest": "Backtest",
+  "/settings": "Settings",
+  "/quantitative-analysis": "Quantitative Analysis",
+  "/edit-balance-pnl": "Account",
+};
+
+const money = (n) =>
+  Number(n || 0).toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+
+export default function Topbar({
+  onMenuClick,
+  sidebarOpen = true,
+  currentAccount,
+}) {
   const { theme, setTheme } = useTheme();
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const isMobile = useIsMobile();
+  const accent = readAccent();
 
-  // Get current account name safely (from localStorage – you can remove if fully migrating accounts)
-  const currentId = localStorage.getItem('currentAccountId');
-  const accounts = JSON.parse(localStorage.getItem('accounts') || '[]');
-  const currentAccount = accounts.find((acc) => acc.id === currentId);
-  const accountName = currentAccount ? currentAccount.name : 'Guest';
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  // close the profile menu on outside click / Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    const onKey = (e) => e.key === "Escape" && setMenuOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  const title = PAGE_TITLES[location.pathname] || "Dashboard";
+  const accountName = currentAccount?.name || "No account";
+  const user = auth.currentUser;
+  const initial = (user?.displayName || user?.email || accountName || "F")
+    .charAt(0)
+    .toUpperCase();
 
   const handleLogoutConfirm = async () => {
     setShowLogoutDialog(false);
     try {
-      await auth.signOut(); // Firebase sign out → triggers onAuthStateChanged in App.js → redirects to Landing
+      // triggers onAuthStateChanged in App.js → redirects to Landing / Login
+      await auth.signOut();
     } catch (error) {
       console.error("Logout error:", error);
-      // Optional: show error toast/notification
     }
   };
 
-  const handleSettingsClick = () => {
-    navigate('/settings');
-  };
+  // Sits right of the sidebar on desktop (12rem open / 4rem collapsed), full width on phones
+  const left = isMobile ? 0 : sidebarOpen ? "12rem" : "4rem";
 
   return (
     <>
       <header
-        className={`
-          fixed top-2 left-2 right-2 sm:top-4 sm:left-4 sm:right-4 z-50 h-14 sm:h-16 flex items-center justify-between 
-          px-2 sm:px-6 
-          bg-white/90 dark:bg-gradient-to-r dark:from-slate-900 dark:to-slate-800 
-          backdrop-blur-xl shadow-[0_4px_12px_rgba(75,94,170,0.3)] 
-          border border-gray-200/40 dark:border-gray-400/20 
-          rounded-2xl transition-all duration-300
-        `}
+        className="fixed right-0 top-0 z-50 flex h-14 items-center justify-between gap-3 border-b border-[#e6e8f2] bg-white/90 px-3 backdrop-blur-md transition-[left] duration-300 dark:border-[#262645] dark:bg-[#0b0b19]/90 sm:px-6"
+        style={{ left }}
       >
-        {/* Left side – menu button (phones) + Forgex branding */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button
-            onClick={onMenuClick}
-            className="md:hidden p-2 rounded-md hover:bg-gray-200/70 dark:hover:bg-indigo-600/30 min-w-[40px] min-h-[40px] flex items-center justify-center"
-            aria-label="Open menu"
-          >
-            <Menu className="h-6 w-6 text-gray-800 dark:text-gray-200" />
-          </button>
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-md bg-gradient-to-br from-indigo-600 to-indigo-400 flex items-center justify-center font-bold text-white text-sm sm:text-base">
-            F
-          </div>
-          <div className="hidden sm:block">
-            <div className="text-sm font-semibold text-gray-900 dark:text-white">FORGEX</div>
-            <div className="text-xs text-gray-500 dark:text-gray-300 -mt-0.5">
-              Trading Dashboard
-            </div>
-          </div>
+        {/* Left – menu button (phones) + page title */}
+        <div className="flex min-w-0 items-center gap-2.5">
+          {isMobile && (
+            <button
+              onClick={onMenuClick}
+              className={ICON_BTN}
+              aria-label="Open menu"
+            >
+              <Menu size={20} />
+            </button>
+          )}
+          <h1 className="truncate text-[15px] font-semibold tracking-tight text-[#14142b] dark:text-white sm:text-base">
+            {title}
+          </h1>
         </div>
 
-        {/* Right side – buttons & account */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Account name */}
-          <div className="hidden sm:flex text-sm font-medium text-gray-700 dark:text-gray-300 px-3 py-1.5 bg-gray-100/70 dark:bg-gray-800/50 rounded-md">
-            {accountName}
+        {/* Right – account, add trade, theme, settings, profile */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Active account pill */}
+          <div className="hidden items-center gap-2 rounded-lg border border-[#e6e8f2] bg-[#f7f8fc] px-3 py-1.5 dark:border-[#262645] dark:bg-[#101024] md:flex">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                currentAccount?.mt5Connected ? "bg-[#22c493]" : "bg-[#8a8fb5]"
+              }`}
+            />
+            <span className="max-w-[140px] truncate text-[13px] font-semibold text-[#14142b] dark:text-white">
+              {accountName}
+            </span>
+            {currentAccount?.mt5Connected && (
+              <Plug size={12} className="text-[#22c493]" aria-label="MT5 connected" />
+            )}
+            {currentAccount && (
+              <span className="border-l border-[#e6e8f2] pl-2 text-xs font-medium tabular-nums text-[#6b7090] dark:border-[#262645] dark:text-[#8a8fb5]">
+                {money(currentAccount.current_balance ?? currentAccount.starting_balance)}
+              </span>
+            )}
           </div>
+
+          {/* Primary action */}
+          <button
+            onClick={() => navigate("/trades/new")}
+            className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98] ${FOCUS}`}
+            style={{ backgroundColor: accent }}
+            aria-label="Add trade"
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            <span className="hidden sm:inline">Add Trade</span>
+          </button>
 
           {/* Theme toggle */}
           <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className={`
-              p-2 rounded-md transition-all duration-200
-              hover:bg-gray-200/70 dark:hover:bg-indigo-600/30
-              active:scale-95 focus:outline-none focus:ring-2 focus:ring-indigo-500/40
-              min-w-[40px] min-h-[40px] flex items-center justify-center
-            `}
-            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className={ICON_BTN}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
           >
-            {theme === 'dark' ? (
-              <Sun className="h-5 w-5 text-yellow-400" />
-            ) : (
-              <Moon className="h-5 w-5 text-indigo-700" />
-            )}
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
           </button>
 
-          {/* Settings button */}
-          <Button
-            onClick={handleSettingsClick}
-            variant="outline"
-            className={`
-              border-gray-300 dark:border-gray-600
-              hover:bg-gray-100 dark:hover:bg-gray-700
-              text-gray-800 dark:text-gray-200
-              text-sm sm:text-base
-              px-2 sm:px-4 min-w-[40px] sm:min-w-[120px]
-            `}
+          {/* Settings */}
+          <button
+            onClick={() => navigate("/settings")}
+            className={`${ICON_BTN} hidden sm:flex`}
             aria-label="Settings"
           >
-            <Settings className="h-5 w-5 sm:mr-2" />
-            <span className="hidden sm:inline">Settings</span>
-          </Button>
+            <Settings size={18} />
+          </button>
 
-          {/* Logout */}
-          <Button
-            variant="destructive"
-            onClick={() => setShowLogoutDialog(true)}
-            className="text-sm sm:text-base px-2 sm:px-4 min-w-[40px] sm:min-w-[120px]"
-            aria-label="Logout"
-          >
-            <LogOut className="h-5 w-5 sm:mr-2" />
-            <span className="hidden sm:inline">Logout</span>
-          </Button>
+          {/* Profile menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              className={`flex h-9 items-center gap-1 rounded-lg pl-1 pr-1.5 transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="Account menu"
+            >
+              <span
+                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white"
+                style={{ backgroundColor: accent }}
+              >
+                {initial}
+              </span>
+              <ChevronDown
+                size={14}
+                className="hidden text-[#6b7090] dark:text-[#8a8fb5] sm:block"
+              />
+            </button>
+
+            {menuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-11 w-60 overflow-hidden rounded-xl border border-[#e6e8f2] bg-white shadow-xl dark:border-[#262645] dark:bg-[#15152b] dark:shadow-black/50"
+              >
+                <div className="border-b border-[#e6e8f2] px-4 py-3 dark:border-[#262645]">
+                  <div className="truncate text-sm font-semibold text-[#14142b] dark:text-white">
+                    {user?.displayName || accountName}
+                  </div>
+                  {user?.email && (
+                    <div className="truncate text-xs text-[#6b7090] dark:text-[#8a8fb5]">
+                      {user.email}
+                    </div>
+                  )}
+                </div>
+                <div className="p-1.5">
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigate("/settings");
+                    }}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-[#3b3f5e] transition-colors hover:bg-[#f1f2f8] dark:text-[#c9ccea] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                  >
+                    <Settings size={15} /> Settings
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowLogoutDialog(true);
+                    }}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-[#d93a57] transition-colors hover:bg-[#f2556e]/10 dark:text-[#ff6b86] ${FOCUS}`}
+                  >
+                    <LogOut size={15} /> Log out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* Logout Confirmation Dialog */}
+      {/* Logout confirmation */}
       <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
-        <DialogContent className="max-w-md bg-white text-slate-900 dark:bg-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-6">
+        <DialogContent className="max-w-sm rounded-2xl border border-[#e6e8f2] bg-white p-6 text-[#14142b] shadow-2xl dark:border-[#262645] dark:bg-[#15152b] dark:text-white">
           <DialogHeader>
-            <DialogTitle>Confirm Logout – Forgex</DialogTitle>
+            <DialogTitle>Log out of Forgex?</DialogTitle>
+            <DialogDescription className="text-[#6b7090] dark:text-[#8a8fb5]">
+              You will need to sign in again to see your journal.
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Are you sure you want to log out?
-            </p>
-          </div>
-          <DialogFooter className="gap-3">
-            <Button
-              variant="outline"
+          <DialogFooter className="gap-2 pt-2 sm:space-x-0">
+            <button
               onClick={() => setShowLogoutDialog(false)}
-              className="border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className={`h-9 rounded-lg border border-[#e6e8f2] px-4 text-sm font-semibold text-[#3b3f5e] transition-colors hover:bg-[#f1f2f8] dark:border-[#262645] dark:text-[#c9ccea] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
             >
               Cancel
-            </Button>
-            <Button
+            </button>
+            <button
               onClick={handleLogoutConfirm}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className={`h-9 rounded-lg bg-[#f2556e] px-4 text-sm font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
             >
-              Yes, Log Out
-            </Button>
+              Log out
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

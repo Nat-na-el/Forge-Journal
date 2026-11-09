@@ -30,7 +30,7 @@ import useIsMobile from "../../hooks/useIsMobile";
 // ────────────────────────────────────────────────
 // Desktop position is unchanged from the old sidebar so the page layout keeps working.
 // For a flush, full-height sidebar like Tradezella use: "left-0 top-0 h-[100dvh]"
-const DESKTOP_POS = "left-8 top-20 h-[calc(100vh-2.5rem)]";
+const DESKTOP_POS = "left-0 top-0 h-[100dvh]";
 
 const SHELL_BG = "linear-gradient(180deg, #0b0518 0%, #160a36 38%, #2a1566 100%)";
 const NAV_IDLE = "text-[#a99fd1] hover:bg-white/[0.05] hover:text-white";
@@ -393,7 +393,7 @@ export default function Sidebar({
         {/* Background lives on its own layer so the account menu can overflow the sidebar */}
         <div
           className={`absolute inset-0 overflow-hidden border border-white/10 shadow-2xl shadow-black/40 ${
-            isMobile ? "" : "rounded-2xl"
+            ""
           }`}
           style={{ background: SHELL_BG }}
         />

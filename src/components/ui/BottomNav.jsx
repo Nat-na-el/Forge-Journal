@@ -14,7 +14,7 @@ export default function BottomNav({ onMenuClick }) {
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-[900] flex items-stretch justify-around
-                 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-t border-gray-200 dark:border-gray-700"
+                 border-t border-[#e6e8f2] bg-white/95 backdrop-blur dark:border-[#262645] dark:bg-[#0b0b19]/95"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {tabs.map(({ to, icon: Icon, label }) => (
@@ -23,10 +23,10 @@ export default function BottomNav({ onMenuClick }) {
           to={to}
           end
           className={({ isActive }) =>
-            `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium ${
+            `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-semibold transition-colors ${
               isActive
-                ? "text-indigo-600 dark:text-indigo-400"
-                : "text-gray-500 dark:text-gray-400"
+                ? "text-[#6C47FF] dark:text-[#9b7bff]"
+                : "text-[#6b7090] dark:text-[#8a8fb5]"
             }`
           }
         >
@@ -36,7 +36,7 @@ export default function BottomNav({ onMenuClick }) {
       ))}
       <button
         onClick={onMenuClick}
-        className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium text-gray-500 dark:text-gray-400"
+        className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-semibold text-[#6b7090] dark:text-[#8a8fb5]"
       >
         <Menu size={22} />
         More
