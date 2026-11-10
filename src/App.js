@@ -23,6 +23,7 @@ import SettingsPage from "./pages/SettingsPage";
 import Backtest from "./pages/Backtest";
 import Replay from "./pages/Replay";
 import Spaces from "./pages/Spaces";
+import Pricing from "./pages/Pricing";
 import AddTrade from "./components/ui/AddTrade";
 import QuantitativeAnalysis from "./pages/QuantitativeAnalysis";
 import Login from "./pages/Login";
@@ -555,6 +556,7 @@ function AppContent() {
                     <Route path="/backtest" element={<Backtest currentAccount={currentAccount} />} />
                     <Route path="/replay" element={<Replay currentAccount={currentAccount} />} />
                     <Route path="/spaces" element={<Spaces currentAccount={currentAccount} />} />
+                    <Route path="/pricing" element={<Pricing />} />
                     <Route path="/quantitative-analysis" element={<QuantitativeAnalysis />} />
                     <Route path="/edit-balance-pnl" element={<EditBalancePNL />} />
                     <Route path="/trades/new" element={<AddTrade currentAccount={currentAccount} />} />
