@@ -13,6 +13,7 @@ import {
   Settings,
   Calculator,
   Monitor,
+  Share2,
   ChevronsLeft,
   ChevronsRight,
   ChevronDown,
@@ -72,6 +73,7 @@ const MORE_NAV = [
   { to: "/mentor", icon: Users, label: "Mentor Mode" },
   { to: "/backtest", icon: Calculator, label: "Backtest" },
   { to: "/replay", icon: Monitor, label: "Replay" },
+  { to: "/spaces", icon: Share2, label: "Spaces" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
