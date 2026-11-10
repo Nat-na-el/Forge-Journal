@@ -1,7 +1,7 @@
 // src/components/ui/AddTrade.jsx  – full "New Trade" page, saves to Firestore like the Journal
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   ArrowLeft,
@@ -44,6 +44,7 @@ const emptyForm = () => ({
   exit: "",
   lotSize: "0.1",
   pnlManual: "",
+  playbookId: "",
   strategy: "",
   notes: "",
   screenshotUrl: "",
@@ -90,6 +91,7 @@ export default function AddTrade({ currentAccount }) {
   const [tags, setTags] = useState([]);
   const [rating, setRating] = useState(0);
   const [mistakes, setMistakes] = useState([]);
+  const [playbooks, setPlaybooks] = useState([]);
   const [tagInput, setTagInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -99,6 +101,21 @@ export default function AddTrade({ currentAccount }) {
   const leverage = currentAccount?.leverage || 100;
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const onChange = (e) => set({ [e.target.name]: e.target.value });
+
+  // Playbooks for this account, so a trade can be linked to a named setup.
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user || !currentAccount?.id) return undefined;
+    let cancelled = false;
+    getDocs(collection(db, "users", user.uid, "accounts", currentAccount.id, "playbooks"))
+      .then((snap) => {
+        if (!cancelled) setPlaybooks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAccount?.id]);
 
   // ─── Live maths (same formula as the Daily Journal) ──────────────────
   const calc = useMemo(() => {
@@ -182,6 +199,9 @@ export default function AddTrade({ currentAccount }) {
     if (!pending && !form.exit && form.pnlManual === "")
       return setError("Add an exit price (or a P&L), or mark the trade as Pending.");
 
+    const selectedPlaybook = playbooks.find((p) => p.id === form.playbookId);
+    const strategyText = (form.strategy || "").trim() || selectedPlaybook?.name || "";
+
     const payload = {
       openDateTime: form.openDateTime || nowLocal(),
       closeDateTime: pending ? null : form.closeDateTime || null,
@@ -194,7 +214,9 @@ export default function AddTrade({ currentAccount }) {
       pnl: finalPnl,
       rr: pending || !calc.rr ? "" : calc.rr.toFixed(2),
       lotSize: Number(form.lotSize) || 0.1,
-      strategy: (form.strategy || "").trim(),
+      playbookId: form.playbookId || "",
+      playbook: selectedPlaybook?.name || "",
+      strategy: strategyText,
       notes: form.notes.trim(),
       status: form.status,
       confluences: tags,
@@ -482,7 +504,30 @@ export default function AddTrade({ currentAccount }) {
               <h3 className="font-semibold text-lg">3 · Context</h3>
 
               <div>
-                <Label className="text-sm opacity-70">Strategy / playbook</Label>
+                <Label className="text-sm opacity-70">Playbook</Label>
+                <select
+                  name="playbookId"
+                  value={form.playbookId}
+                  onChange={onChange}
+                  className="w-full mt-1 p-3 rounded-xl border text-sm outline-none focus:ring-2 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
+                  style={{ "--tw-ring-color": ac.hex }}
+                >
+                  <option value="">No playbook</option>
+                  {playbooks.map((playbook) => (
+                    <option key={playbook.id} value={playbook.id}>
+                      {playbook.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs opacity-60">
+                  {playbooks.length
+                    ? "Linking a trade feeds that playbook's win rate and P&L."
+                    : "No playbooks yet — create them on the Playbooks page."}
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-sm opacity-70">Strategy (free text)</Label>
                 <input
                   name="strategy"
                   value={form.strategy}

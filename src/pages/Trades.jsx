@@ -15,7 +15,6 @@ import {
   Check,
   AlertCircle,
   PlusCircle,
-  BookOpen,
   Tag,
   BarChart3,
   TrendingUp,
@@ -323,6 +322,8 @@ export default function Trades({ currentAccount }) {
     confluences: [],
     screenshotUrl: "",
     strategy: "",
+    playbookId: "",
+    playbook: "",
     rating: 0,
     mistakes: [],
     openDateTime: "",
@@ -332,8 +333,7 @@ export default function Trades({ currentAccount }) {
   const [tradeToDelete, setTradeToDelete] = useState(null);
   const [user, setUser] = useState(null);
   const [csvModalOpen, setCsvModalOpen] = useState(false);
-
-  const isAccountReady = user && currentAccount;
+  const [playbooks, setPlaybooks] = useState([]);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((authUser) => {
@@ -385,6 +385,24 @@ export default function Trades({ currentAccount }) {
       setLoading(false);
     }
   }, [currentAccount, user]);
+
+  // Playbooks available for linking in the edit modal.
+  useEffect(() => {
+    const accountId = currentAccount?.id;
+    if (!user || !accountId) {
+      setPlaybooks([]);
+      return undefined;
+    }
+    let cancelled = false;
+    getDocs(collection(db, "users", user.uid, "accounts", accountId, "playbooks"))
+      .then((snap) => {
+        if (!cancelled) setPlaybooks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAccount?.id, user]);
 
   const filteredTrades = useMemo(() => {
     let result = [...trades];
@@ -538,6 +556,8 @@ export default function Trades({ currentAccount }) {
       confluences: trade.confluences || [],
       screenshotUrl: trade.screenshotUrl || "",
       strategy: trade.strategy || "",
+      playbookId: trade.playbookId || "",
+      playbook: trade.playbook || "",
       rating: Number(trade.rating) || 0,
       mistakes: trade.mistakes || [],
       openDateTime: trade.openDateTime || "",
@@ -565,6 +585,11 @@ export default function Trades({ currentAccount }) {
       );
       await updateDoc(tradeRef, {
         ...editForm,
+        playbook: playbooks.find((p) => p.id === editForm.playbookId)?.name || "",
+        strategy:
+          (editForm.strategy || "").trim() ||
+          playbooks.find((p) => p.id === editForm.playbookId)?.name ||
+          "",
         updatedAt: serverTimestamp(),
       });
       setMessage({ text: "Trade updated successfully!", type: "success" });
@@ -607,6 +632,8 @@ export default function Trades({ currentAccount }) {
       "PnL",
       "R:R",
       "Status",
+      "Playbook",
+      "Strategy",
       "Confluences",
       "Rating",
       "Mistakes",
@@ -624,6 +651,8 @@ export default function Trades({ currentAccount }) {
       t.pnl || 0,
       t.rr || "",
       t.status || "executed",
+      t.playbook || "",
+      t.strategy || "",
       (t.confluences || []).join("; "),
       Number(t.rating) || "",
       (t.mistakes || []).join("; "),
@@ -1423,6 +1452,22 @@ export default function Trades({ currentAccount }) {
                   >
                     <option value="executed">Executed</option>
                     <option value="pending">Pending</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Playbook</label>
+                  <select
+                    value={editForm.playbookId || ""}
+                    onChange={(e) => setEditForm({ ...editForm, playbookId: e.target.value })}
+                    className={FIELD}
+                  >
+                    <option value="">No playbook</option>
+                    {playbooks.map((playbook) => (
+                      <option key={playbook.id} value={playbook.id}>
+                        {playbook.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

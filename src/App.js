@@ -14,6 +14,7 @@ import Topbar from "./components/ui/Topbar";
 import Dashboard from "./pages/Dashboard";
 import DailyJournal from "./pages/DailyJournal";
 import Trades from "./pages/Trades";
+import Playbooks from "./pages/Playbooks";
 import Notebook from "./pages/Notebook";
 import Reports from "./pages/Reports";
 import Challenges from "./pages/Challenges";
@@ -543,6 +544,7 @@ function AppContent() {
                     <Route path="/dashboard" element={<Dashboard currentAccount={currentAccount} />} />
                     <Route path="/journal" element={<DailyJournal currentAccount={currentAccount} />} />
                     <Route path="/trades" element={<Trades currentAccount={currentAccount} />} />
+                    <Route path="/playbooks" element={<Playbooks currentAccount={currentAccount} />} />
                     <Route path="/notebook" element={<Notebook currentAccount={currentAccount} />} />
                     <Route path="/reports" element={<Reports currentAccount={currentAccount} />} />
                     <Route path="/challenges" element={<Challenges />} />

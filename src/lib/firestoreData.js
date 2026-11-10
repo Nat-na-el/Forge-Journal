@@ -6,7 +6,14 @@ import { collection, getDocs, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
 
 // Sub-collections that hold an account's user-visible data.
-export const ACCOUNT_DATA_COLLECTIONS = ["trades", "journal", "notes", "challenges", "backtests"];
+export const ACCOUNT_DATA_COLLECTIONS = [
+  "trades",
+  "journal",
+  "notes",
+  "playbooks",
+  "challenges",
+  "backtests",
+];
 
 export async function deleteDocuments(refs) {
   for (let i = 0; i < refs.length; i += 400) {

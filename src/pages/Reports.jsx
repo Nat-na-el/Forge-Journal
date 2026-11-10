@@ -300,8 +300,10 @@ export default function Reports({ currentAccount }) {
     return groupStats(tagged, (t) => t.__tag).slice(0, 20);
   }, [filteredTrades]);
 
+  // Prefer the linked playbook name, then fall back to free-text strategy so
+  // trades logged before playbooks existed still group sensibly.
   const playbookRows = useMemo(
-    () => groupStats(filteredTrades, (t) => (t.strategy || "").trim()),
+    () => groupStats(filteredTrades, (t) => (t.playbook || t.strategy || "").trim()),
     [filteredTrades]
   );
 
@@ -360,6 +362,7 @@ export default function Reports({ currentAccount }) {
       "Take profit",
       "PnL",
       "R",
+      "Playbook",
       "Strategy",
       "Tags",
       "Rating",
@@ -381,6 +384,7 @@ export default function Reports({ currentAccount }) {
         t.takeProfit ?? "",
         t.pnl ?? 0,
         t.rr ?? "",
+        escape(t.playbook || ""),
         escape(t.strategy || ""),
         escape((t.confluences || []).join(" | ")),
         t.rating || "",
@@ -797,7 +801,7 @@ export default function Reports({ currentAccount }) {
                 <Panel title="Playbook / strategy performance" icon={Layers} accent={ac.hex} right={`${playbookRows.length} setups`}>
                   <div className="border-b px-4 py-2.5">
                     <p className={`text-[11px] ${MUTED}`}>
-                      Grouped from each trade&apos;s strategy field. Name a setup consistently to compare it here.
+                      Grouped by linked playbook, falling back to the strategy field. Link trades on the Playbooks page to compare setups here.
                     </p>
                   </div>
                   {playbookRows.length === 0 ? (

@@ -7,6 +7,7 @@ import {
   Activity,
   FileText,
   BarChart3,
+  BookMarked,
   Trophy,
   Users,
   Settings,
@@ -60,6 +61,7 @@ const MAIN_NAV = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true },
   { to: "/journal", icon: BookOpen, label: "Daily Journal" },
   { to: "/trades", icon: Activity, label: "Trades" },
+  { to: "/playbooks", icon: BookMarked, label: "Playbooks" },
   { to: "/notebook", icon: FileText, label: "Notebook" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
 ];

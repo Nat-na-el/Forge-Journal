@@ -289,4 +289,41 @@ Premium areas TradeZella markets: 500+ broker auto-sync · 50+ report categories
 
 Still to come in Phase 2: MAE/MFE, configurable breakeven band, trade filters/saved views, commission/swap split.
 
+---
+
+## 9. Phase 2 (continued) — playbooks
+
+A playbook is now a real entity instead of a free-text strategy string.
+
+**Data model**
+- New collection: `users/{uid}/accounts/{accountId}/playbooks`.
+- Playbook fields: `name`, `market`, `timeframe`, `description`, `entryCriteria`, `exitCriteria`, `riskPerTrade`, `rules[]`, `createdAt`, `updatedAt`.
+- Trades gain `playbookId` and a `playbook` name snapshot. Both are optional.
+
+**Playbooks page** `/playbooks` (`src/pages/Playbooks.jsx`)
+- Cards per playbook showing trades, win rate, profit factor and net P&L, sorted by net.
+- Create / edit / delete, with a rules checklist (add, edit, remove), entry and exit criteria, and risk per trade.
+- Detail view lists the setup's rules and its most recent linked trades.
+- Renaming a playbook updates the `playbook` snapshot on linked trades, and only rewrites `strategy` when it matched the old name.
+- Deleting a playbook leaves trades in the journal; they simply become unlinked.
+- Trades are linked by `playbookId`, with a name match on `strategy` as a fallback for trades logged before playbooks existed.
+
+**Trade capture**
+- Playbook select added to `AddTrade` and to the Trades edit modal.
+- Choosing a playbook fills `playbook` and, when the strategy box is empty, `strategy` too.
+
+**Reports**
+- "Playbook / strategy performance" now groups by `playbook` first, then `strategy`.
+- CSV exports (Trades and Reports) include a Playbook column.
+
+**Navigation**
+- `/playbooks` added to the sidebar between Trades and Notebook.
+
+**Build**
+- Removed the unused `react-app/jest` ESLint preset (it crashed the lint config with `Environment key "jest/globals" is unknown` on current dependency versions).
+- `netlify.toml` sets `CI = "false"` so legacy lint warnings do not fail production builds.
+
+Next in Phase 2: trade filters + saved views, then MAE/MFE + breakeven band + fee split.
+
+
 
