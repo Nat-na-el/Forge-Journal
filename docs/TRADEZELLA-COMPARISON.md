@@ -76,10 +76,10 @@ Premium areas TradeZella markets: 500+ broker auto-sync · 50+ report categories
 | TradeZella capability | Forge Journal | Notes |
 |---|---|---|
 | Custom tags | **Have** | `ConfluenceTags` in `Trades.jsx`. |
-| Tag performance analytics | **Missing** | Tags are searchable only — no win rate / P&L per tag. |
-| Playbooks (named strategy = setup + rules + stats) | **Missing** | Only a free-text `strategy` string on each trade. |
-| Strategy performance analytics | **Partial** | Can filter by strategy text; no aggregation dashboard. |
-| Setup / mistake taxonomy | **Missing** | No "mistake" or "rule broken" tagging. |
+| Tag performance analytics | **Have** | Reports → Tags & playbooks: win rate, PF, expectancy, net per tag. |
+| Playbooks (named strategy = setup + rules + stats) | **Have** | `/playbooks` page; each trade links via `playbookId`. |
+| Strategy performance analytics | **Have** | Reports → Tags & playbooks groups by playbook, then strategy. |
+| Setup / mistake taxonomy | **Have** | 1–5 rating plus preset/custom mistake tags, reported in Discipline. |
 | Auto-tagging from AI | **Missing** | — |
 
 ### E. Backtesting, replay & optimisation
@@ -156,6 +156,10 @@ Premium areas TradeZella markets: 500+ broker auto-sync · 50+ report categories
 
 ## 4. What is different (the real gaps)
 
+> Status note: this section records the gaps found at the start of the project.
+> Items 1, 2, 3, the R-distribution/hold-time part of 4, and the rating/mistake part of 5
+> have since been implemented — see sections 7–9.
+
 **Data foundation**
 1. `Reports.jsx` reads a dead legacy Render API instead of Firestore → reports don't reflect real trades.
 2. No persisted `playbook`/`setup` entity; strategy is a free-text string.
@@ -205,12 +209,14 @@ Premium areas TradeZella markets: 500+ broker auto-sync · 50+ report categories
 - Fix `SettingsPage.jsx` (real email, real `signOut`, real data deletion).
 - Fix `mentor.js` model default.
 
-**Phase 2 — The premium analytics layer**
-- Playbooks (named strategy with rules, description, stats).
-- Tag & playbook performance tables (win rate, PF, expectancy, net P&L, count).
-- MAE/MFE capture + charts; running P&L on the trade detail.
-- Time-of-day / day-of-week / session heatmaps; hold-time buckets; R-multiple histogram.
-- Trade rating (1–5) + mistake tags; configurable breakeven band.
+**Phase 2 — The premium analytics layer** (in progress)
+- ✅ Playbooks (named strategy with rules, description, stats).
+- ✅ Tag & playbook performance tables (win rate, PF, expectancy, net P&L, count).
+- ✅ Trade rating (1–5) + mistake tags.
+- ⬜ MAE/MFE capture + charts; running P&L on the trade detail.
+- ⬜ Time-of-day / day-of-week / session heatmaps; hold-time buckets; R-multiple histogram.
+  (Session and R-distribution tables already exist in Reports.)
+- ⬜ Configurable breakeven band.
 
 **Phase 3 — Backtesting credibility**
 - Real OHLC data (vendor or bundled dataset).
@@ -254,7 +260,7 @@ Premium areas TradeZella markets: 500+ broker auto-sync · 50+ report categories
 - Display name saved via `updateProfile` (+ best-effort Firestore mirror).
 - Notification preferences persist to `users/{uid}` and fall back to local storage.
 - Log out calls Firebase `signOut`.
-- "Clear all trading data" actually deletes trades, journal, notes, challenges and backtests across every account (batched, 400 writes per commit).
+- "Clear all trading data" actually deletes trades, journal, notes, playbooks, challenges and backtests across every account (batched, 400 writes per commit).
 
 **Data-integrity fixes**
 - Account reset used to target a `journals` collection that never existed; it now clears `journal`.
