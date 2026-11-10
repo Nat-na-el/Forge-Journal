@@ -1,9 +1,10 @@
 // src/pages/MentorMode.jsx – AI trading coach (talks to /.netlify/functions/mentor)
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
-import { format } from "date-fns";
-import { Send, Loader2, Trash2, Sparkles, AlertCircle, Database } from "lucide-react";
+import { collection, getDoc, getDocs, doc, updateDoc, query, orderBy, limit, increment } from "firebase/firestore";
+import { format, subDays } from "date-fns";
+import { Send, Loader2, Trash2, Sparkles, AlertCircle, Database, ShieldAlert, Flame, Calendar, DollarSign } from "lucide-react";
 import { Card } from "../components/ui/card";
+import { Button } from "../components/ui/button";
 import { db, auth } from "../firebase";
 import AccentPicker from "../components/ui/AccentPicker";
 import useAccent from "../hooks/useAccent";
@@ -14,6 +15,8 @@ import {
   CARD,
   FIELD,
   FOCUS,
+  POS_T,
+  NEG_T,
 } from "../lib/uiTokens";
 
 const ENDPOINT = "/.netlify/functions/mentor";
@@ -24,6 +27,37 @@ const QUICK_PROMPTS = [
   "Check my risk management",
   "Help me plan tomorrow",
   "I'm on a losing streak — help",
+];
+
+const AGENTS = [
+  {
+    id: "general",
+    name: "General Mentor",
+    icon: "Sparkles",
+    description: "Straight, practical feedback on your trading.",
+    systemPrompt: `You are an experienced trading mentor. Review the trader's journal data and give honest, practical, actionable feedback. Be direct but encouraging. Focus on what the data shows, not what the trader hopes. If you see a pattern, point it out. Keep answers concise and use bullet points when helpful.`,
+  },
+  {
+    id: "habit",
+    name: "Habit Agent",
+    icon: "Clock",
+    description: "Spots recurring behaviors — good and bad — across your trade log.",
+    systemPrompt: `You are a habit-analysis agent for traders. Your job is to spot recurring patterns in the trader's journal: repeated mistakes, consistent winning setups, time-of-day tendencies, day-of-week patterns, emotional triggers, and execution habits. Look at the trade list and context data to find what happens over and over. Tell the trader: (1) which habits are helping them, (2) which habits are hurting them, and (3) one specific habit to change this week. Be concrete and reference specific trades or patterns when you can.`,
+  },
+  {
+    id: "risk",
+    name: "Risk Agent",
+    icon: "ShieldAlert",
+    description: "Reviews position sizing, stop losses, drawdown, and risk per trade.",
+    systemPrompt: `You are a risk-management agent for traders. Your job is to evaluate the trader's risk discipline from their journal data. Look at: position sizing vs account balance, stop-loss placement and adherence, max drawdown, loss streaks, risk/reward ratios, and whether the trader is risking too much on single trades. Give a clear risk rating (1-10) with justification, flag any rule violations, and suggest specific risk rules to adopt. Be strict — capital preservation comes first.`,
+  },
+  {
+    id: "sentiment",
+    name: "Sentiment Agent",
+    icon: "Flame",
+    description: "Reads your trade notes for emotional state and psychological patterns.",
+    systemPrompt: `You are a trading-psychology agent. Your job is to read the trader's journal notes and trade comments to detect emotional state and psychological patterns. Look for: fear, greed, revenge trading, overconfidence, hesitation, FOMO, anger, and discipline breakdowns. Correlate emotions with trade outcomes. Tell the trader: (1) what emotional state they seem to be in, (2) how that state is affecting their P&L, and (3) one psychological technique to use next session. Be empathetic but direct.`,
+  },
 ];
 
 const GREETING =
@@ -163,6 +197,14 @@ function Markdown({ text }) {
 
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+const decrementCredit = async (uid) => {
+  try {
+    await updateDoc(doc(db, "users", uid), { credits: increment(-1) });
+  } catch {
+    /* best effort */
+  }
+};
+
 export default function MentorMode({ currentAccount }) {
   const { accent, setAccent, ac } = useAccent();
 
@@ -172,7 +214,12 @@ export default function MentorMode({ currentAccount }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [shareData, setShareData] = useState(true);
+  const [agent, setAgent] = useState(AGENTS[0]);
   const [trades, setTrades] = useState([]);
+  const [weeklyReview, setWeeklyReview] = useState(null);
+  const [weeklyReviewLoading, setWeeklyReviewLoading] = useState(false);
+  const [credits, setCredits] = useState(null);
+  const [creditsLoading, setCreditsLoading] = useState(true);
   const endRef = useRef(null);
 
   // Load saved chat for this account
@@ -216,7 +263,65 @@ export default function MentorMode({ currentAccount }) {
     };
   }, [currentAccount?.id]);
 
+  // Load AI credit balance from Firestore
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        setCreditsLoading(false);
+        return;
+      }
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (!cancelled) {
+          setCredits(snap.exists() ? Number(snap.data()?.credits || 0) : 0);
+        }
+      } catch (err) {
+        console.warn("Could not load credits:", err?.message || err);
+        if (!cancelled) setCredits(0);
+      } finally {
+        if (!cancelled) setCreditsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const context = useMemo(() => buildContext(trades, currentAccount), [trades, currentAccount]);
+
+  const weekAgo = subDays(new Date(), 7);
+  const weeklyTrades = useMemo(() => {
+    return trades.filter((t) => {
+      if (t.status !== "executed") return false;
+      const d = new Date(t.closeDateTime || t.openDateTime || t.date);
+      return d >= weekAgo;
+    });
+  }, [trades]);
+
+  const weeklyStats = useMemo(() => {
+    const pnl = weeklyTrades.reduce((s, t) => s + (Number(t.pnl) || 0), 0);
+    const wins = weeklyTrades.filter((t) => (Number(t.pnl) || 0) > 0).length;
+    const losses = weeklyTrades.filter((t) => (Number(t.pnl) || 0) < 0).length;
+    const best = weeklyTrades.length ? Math.max(...weeklyTrades.map((t) => Number(t.pnl) || 0)) : 0;
+    const worst = weeklyTrades.length ? Math.min(...weeklyTrades.map((t) => Number(t.pnl) || 0)) : 0;
+    const grossWin = weeklyTrades.filter((t) => (Number(t.pnl) || 0) > 0).reduce((s, t) => s + (Number(t.pnl) || 0), 0);
+    const grossLoss = Math.abs(weeklyTrades.filter((t) => (Number(t.pnl) || 0) < 0).reduce((s, t) => s + (Number(t.pnl) || 0), 0));
+    return {
+      count: weeklyTrades.length,
+      pnl,
+      winRate: weeklyTrades.length ? (wins / weeklyTrades.length) * 100 : 0,
+      wins,
+      losses,
+      best,
+      worst,
+      grossWin,
+      grossLoss,
+      profitFactor: grossLoss ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0,
+    };
+  }, [weeklyTrades]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -225,6 +330,10 @@ export default function MentorMode({ currentAccount }) {
   const send = async (text) => {
     const content = (text ?? input).trim();
     if (!content || sending) return;
+    if (credits !== null && credits <= 0) {
+      setError("Out of AI credits. Please add more credits to continue chatting.");
+      return;
+    }
     setError(null);
     const userMsg = { id: newId(), role: "user", content, ts: new Date().toISOString() };
     const history = [...messages, userMsg];
@@ -242,6 +351,8 @@ export default function MentorMode({ currentAccount }) {
         body: JSON.stringify({
           messages: history.slice(-14).map((m) => ({ role: m.role, content: m.content })),
           context: shareData ? context : null,
+          agent: agent.id,
+          systemPrompt: agent.systemPrompt,
         }),
       });
       let data = {};
@@ -256,10 +367,69 @@ export default function MentorMode({ currentAccount }) {
         );
       }
       setMessages((m) => [...m, { id: newId(), role: "assistant", content: data.reply, ts: new Date().toISOString() }]);
+      if (user) await decrementCredit(user.uid);
+      setCredits((prev) => (prev === null ? prev : prev - 1));
     } catch (err) {
       setError(err.message || "Something went wrong.");
     } finally {
       setSending(false);
+    }
+  };
+
+  const generateWeeklyReview = async () => {
+    if (weeklyTrades.length === 0) {
+      setWeeklyReview("No executed trades in the last 7 days. Log some trades and come back.");
+      return;
+    }
+    if (credits !== null && credits <= 0) {
+      setError("Out of AI credits. Please add more credits to continue.");
+      return;
+    }
+    setWeeklyReviewLoading(true);
+    setError(null);
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("Please log in again.");
+      const token = await user.getIdToken();
+      const stats = weeklyStats;
+      const prompt = `Generate a weekly trading review based on this data:
+- Period: Last 7 days
+- Trades: ${stats.count}
+- Net P&L: $${stats.pnl.toFixed(2)}
+- Win rate: ${stats.winRate.toFixed(1)}% (${stats.wins}W / ${stats.losses}L)
+- Best trade: $${stats.best.toFixed(2)}
+- Worst trade: $${stats.worst.toFixed(2)}
+- Gross profit: $${stats.grossWin.toFixed(2)}
+- Gross loss: $${stats.grossLoss.toFixed(2)}
+- Profit factor: ${stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)}
+
+Agent role: ${agent.name}. ${agent.systemPrompt}
+
+Provide: (1) a one-line summary of the week, (2) 2-3 specific observations from the data, (3) one concrete action for next week. Be concise and use bullet points.`;
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: prompt }],
+          context: shareData ? context : null,
+          agent: agent.id,
+          systemPrompt: agent.systemPrompt,
+        }),
+      });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      if (!res.ok) {
+        throw new Error(data.error || `Request failed (${res.status})`);
+      }
+      setWeeklyReview(data.reply || "No review generated.");
+      if (user) await decrementCredit(user.uid);
+      setCredits((prev) => (prev === null ? prev : prev - 1));
+    } catch (err) {
+      setError(err.message || "Could not generate weekly review.");
+    } finally {
+      setWeeklyReviewLoading(false);
     }
   };
 
@@ -306,6 +476,24 @@ export default function MentorMode({ currentAccount }) {
                 : "No trades logged yet"}
             </span>
           )}
+          <select
+            value={agent.id}
+            onChange={(e) => setAgent(AGENTS.find((a) => a.id === e.target.value) || AGENTS[0])}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${DIVIDER} ${HEAD} ${FOCUS} bg-white dark:bg-[#101024]`}
+            aria-label="AI agent"
+          >
+            {AGENTS.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+          {credits !== null && creditsLoading === false && (
+            <span className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${DIVIDER} ${credits <= 0 ? NEG_T : HEAD}`}>
+              <DollarSign size={12} />
+              {credits <= 0 ? "Out of credits" : `Credits: ${credits}`}
+            </span>
+          )}
           {messages.length > 0 && (
             <button
               onClick={clearChat}
@@ -315,6 +503,71 @@ export default function MentorMode({ currentAccount }) {
             </button>
           )}
         </div>
+
+        {/* Weekly Review */}
+        <Card className={`${CARD} p-0`}>
+          <div className={`flex items-center justify-between border-b px-4 py-3 ${DIVIDER}`}>
+            <div className="flex items-center gap-2">
+              <Calendar size={16} style={{ color: ac.hex }} />
+              <h2 className={`text-[15px] font-semibold ${HEAD}`}>Weekly Review</h2>
+            </div>
+            <Button
+              onClick={generateWeeklyReview}
+              disabled={weeklyReviewLoading || weeklyTrades.length === 0}
+              variant="outline"
+              className={`border font-semibold ${DIVIDER}`}
+            >
+              {weeklyReviewLoading ? (
+                <Loader2 size={16} className="mr-2 animate-spin" />
+              ) : (
+                <Sparkles size={16} className="mr-2" />
+              )}
+              {weeklyReviewLoading ? "Generating…" : "AI Review"}
+            </Button>
+          </div>
+          <div className="p-4 sm:p-5">
+            {weeklyTrades.length === 0 ? (
+              <div className="text-center py-8">
+                <p className={`text-sm ${MUTED}`}>No executed trades in the last 7 days.</p>
+                <p className={`text-[11px] ${MUTED}`}>Log some trades and the weekly review will populate here.</p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    ["Net P&L", `$${weeklyStats.pnl.toFixed(2)}`, weeklyStats.pnl >= 0 ? POS_T : NEG_T],
+                    ["Win Rate", `${weeklyStats.winRate.toFixed(1)}%`, HEAD],
+                    ["Trades", weeklyStats.count, HEAD],
+                    ["Profit Factor", weeklyStats.profitFactor === Infinity ? "∞" : weeklyStats.profitFactor.toFixed(2), HEAD],
+                  ].map(([label, value, tone]) => (
+                    <div key={label} className={`rounded-xl border p-3 ${DIVIDER}`}>
+                      <div className={`text-[10px] font-medium ${MUTED}`}>{label}</div>
+                      <div className={`mt-0.5 text-lg font-bold tabular-nums ${tone}`}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className={`rounded-xl border p-3 ${DIVIDER}`}>
+                    <div className={`text-[10px] font-medium ${MUTED}`}>Best trade</div>
+                    <div className={`mt-0.5 text-lg font-bold tabular-nums ${POS_T}`}>$${weeklyStats.best.toFixed(2)}</div>
+                  </div>
+                  <div className={`rounded-xl border p-3 ${DIVIDER}`}>
+                    <div className={`text-[10px] font-medium ${MUTED}`}>Worst trade</div>
+                    <div className={`mt-0.5 text-lg font-bold tabular-nums ${NEG_T}`}>$${weeklyStats.worst.toFixed(2)}</div>
+                  </div>
+                </div>
+                {weeklyReview && (
+                  <div className={`mt-4 rounded-xl border p-4 ${DIVIDER} bg-white dark:bg-[#101024]`}>
+                    <div className={`mb-2 text-[10px] font-semibold uppercase tracking-wide ${MUTED}`}>
+                      AI Review ({agent.name})
+                    </div>
+                    <div className="whitespace-pre-wrap text-sm">{weeklyReview}</div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Card>
 
         {/* Chat */}
         <Card

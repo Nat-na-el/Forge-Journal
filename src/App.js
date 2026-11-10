@@ -547,7 +547,7 @@ function AppContent() {
                     <Route path="/playbooks" element={<Playbooks currentAccount={currentAccount} />} />
                     <Route path="/notebook" element={<Notebook currentAccount={currentAccount} />} />
                     <Route path="/reports" element={<Reports currentAccount={currentAccount} />} />
-                    <Route path="/challenges" element={<Challenges />} />
+                    <Route path="/challenges" element={<Challenges currentAccount={currentAccount} />} />
                     <Route path="/mentor" element={<MentorMode currentAccount={currentAccount} />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/backtest" element={<Backtest currentAccount={currentAccount} />} />
