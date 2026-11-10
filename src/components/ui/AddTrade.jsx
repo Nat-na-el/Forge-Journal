@@ -23,6 +23,7 @@ import { Input } from "./input";
 import { Label } from "./label";
 import AccentPicker from "./AccentPicker";
 import useAccent, { CARD } from "../../hooks/useAccent";
+import { MistakePicker, StarRating } from "./TradeGrading";
 
 const QUICK_PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "NAS100", "US30", "JP225", "UK100", "BTCUSD"];
 const QUICK_TAGS = ["Trend", "Breakout", "Support/Resistance", "Liquidity sweep", "News", "Retest"];
@@ -87,6 +88,8 @@ export default function AddTrade({ currentAccount }) {
 
   const [form, setForm] = useState(emptyForm);
   const [tags, setTags] = useState([]);
+  const [rating, setRating] = useState(0);
+  const [mistakes, setMistakes] = useState([]);
   const [tagInput, setTagInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -196,6 +199,8 @@ export default function AddTrade({ currentAccount }) {
       status: form.status,
       confluences: tags,
       screenshotUrl: form.screenshotUrl || "",
+      rating: Number(rating) || 0,
+      mistakes,
     };
 
     setSaving(true);
@@ -207,6 +212,8 @@ export default function AddTrade({ currentAccount }) {
       if (another) {
         setForm(emptyForm());
         setTags([]);
+        setRating(0);
+        setMistakes([]);
         setToast("Trade saved — ready for the next one.");
         setTimeout(() => setToast(null), 3000);
         window.scrollTo?.({ top: 0, behavior: "smooth" });
@@ -495,6 +502,26 @@ export default function AddTrade({ currentAccount }) {
                 </datalist>
                 <p className="mt-1.5 text-xs opacity-60">
                   Reuse the same name every time — Reports groups performance by strategy.
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-sm opacity-70">Trade rating</Label>
+                <div className="mt-2">
+                  <StarRating value={rating} onChange={setRating} accent={ac.hex} size={24} />
+                </div>
+                <p className="mt-1.5 text-xs opacity-60">
+                  Grade your execution, not the result. Reports compares P&L by grade.
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-sm opacity-70">Mistakes</Label>
+                <div className="mt-2">
+                  <MistakePicker value={mistakes} onChange={setMistakes} accent={ac.hex} />
+                </div>
+                <p className="mt-1.5 text-xs opacity-60">
+                  Optional. Tagging mistakes lets Reports total what each habit costs you.
                 </p>
               </div>
 

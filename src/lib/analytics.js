@@ -252,3 +252,41 @@ export function rDistribution(trades = []) {
     count: values.filter((v) => v > bucket.min && v <= bucket.max).length,
   }));
 }
+
+// ─── Trade grading ───────────────────────────────────────────────────────────
+
+export const RATING_WORDS = {
+  5: "Excellent",
+  4: "Good",
+  3: "Average",
+  2: "Poor",
+  1: "Bad",
+};
+
+/** One row per star rating (5 → 1) plus the unrated remainder. */
+export function ratingBreakdown(trades = []) {
+  const buckets = [5, 4, 3, 2, 1].map((rating) => {
+    const group = trades.filter((t) => Number(t.rating) === rating);
+    return { key: String(rating), rating, word: RATING_WORDS[rating], ...tradeStats(group) };
+  });
+
+  const rated = trades.filter((t) => Number(t.rating) > 0);
+
+  return {
+    buckets,
+    unrated: tradeStats(trades.filter((t) => !Number(t.rating))),
+    ratedCount: rated.length,
+    avgRating: rated.length ? avg(rated.map((t) => Number(t.rating))) : 0,
+  };
+}
+
+/** Every mistake tag with the trades that carried it, most costly first. */
+export function mistakeBreakdown(trades = []) {
+  const tagged = [];
+  trades.forEach((trade) => {
+    const mistakes = Array.isArray(trade.mistakes) ? trade.mistakes : [];
+    mistakes.forEach((mistake) => tagged.push({ ...trade, __mistake: mistake }));
+  });
+
+  return groupStats(tagged, (t) => t.__mistake).sort((a, b) => a.net - b.net);
+}

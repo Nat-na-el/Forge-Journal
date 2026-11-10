@@ -13,6 +13,7 @@ import AccentPicker from "../components/ui/AccentPicker";
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Award,
   BarChart3,
   Calendar,
   Clock,
@@ -47,15 +48,18 @@ import {
   groupStats,
   holdMinutes,
   hourBucket,
+  mistakeBreakdown,
   money,
   pct,
   ratio,
   rDistribution,
+  ratingBreakdown,
   sessionOf,
   streaks,
   tradeDate,
   tradeStats,
 } from "../lib/analytics";
+import { StarRating } from "../components/ui/TradeGrading";
 
 // ─── Shared bits ─────────────────────────────────────────────────────────────
 
@@ -71,6 +75,7 @@ const TABS = [
   ["symbols", "Symbols", BarChart3],
   ["sessions", "Sessions", Clock],
   ["tags", "Tags & playbooks", Tag],
+  ["discipline", "Discipline", Award],
   ["risk", "Risk", Shield],
 ];
 
@@ -303,6 +308,15 @@ export default function Reports({ currentAccount }) {
   const rRows = useMemo(() => rDistribution(filteredTrades), [filteredTrades]);
   const maxRBucket = Math.max(1, ...rRows.map((b) => b.count));
 
+  const ratingData = useMemo(() => ratingBreakdown(filteredTrades), [filteredTrades]);
+  const mistakeRows = useMemo(() => mistakeBreakdown(filteredTrades), [filteredTrades]);
+  const goodNet = ratingData.buckets
+    .filter((b) => b.rating >= 4)
+    .reduce((sum, b) => sum + b.net, 0);
+  const badNet = ratingData.buckets
+    .filter((b) => b.rating <= 2)
+    .reduce((sum, b) => sum + b.net, 0);
+
   const longShort = useMemo(() => {
     const side = (label, re) => {
       const group = filteredTrades.filter((t) => re.test(t.direction || ""));
@@ -348,6 +362,8 @@ export default function Reports({ currentAccount }) {
       "R",
       "Strategy",
       "Tags",
+      "Rating",
+      "Mistakes",
       "Notes",
     ];
 
@@ -367,6 +383,8 @@ export default function Reports({ currentAccount }) {
         t.rr ?? "",
         escape(t.strategy || ""),
         escape((t.confluences || []).join(" | ")),
+        t.rating || "",
+        escape((t.mistakes || []).join(" | ")),
         escape(t.notes || ""),
       ].join(",");
     });
@@ -816,6 +834,180 @@ export default function Reports({ currentAccount }) {
                       </table>
                     </div>
                   )}
+                </Panel>
+              </>
+            )}
+
+            {/* ── Discipline ──────────────────────────────────────────── */}
+            {tab === "discipline" && (
+              <>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <Card className={`${CARD} p-4`}>
+                    <div className={`text-[11px] font-medium ${MUTED}`}>Average rating</div>
+                    <div className="mt-2">
+                      <StarRating value={ratingData.avgRating} accent={ac.hex} readOnly size={20} />
+                    </div>
+                    <div className={`mt-2 text-xs ${MUTED}`}>
+                      {ratingData.ratedCount
+                        ? `${ratingData.avgRating.toFixed(1)}/5 across ${ratingData.ratedCount} rated trade${ratingData.ratedCount === 1 ? "" : "s"}`
+                        : "No trades rated yet"}
+                    </div>
+                  </Card>
+
+                  <Card className={`${CARD} p-4`}>
+                    <div className={`text-[11px] font-medium ${MUTED}`}>Rated trades</div>
+                    <div className={`mt-1 text-2xl font-bold tabular-nums ${HEAD}`}>
+                      {pct(stats.count ? (ratingData.ratedCount / stats.count) * 100 : 0)}
+                    </div>
+                    <div className={`mt-1 text-xs ${MUTED}`}>
+                      {ratingData.ratedCount} of {stats.count} closed trades
+                    </div>
+                  </Card>
+
+                  <Card className={`${CARD} p-4`}>
+                    <div className={`text-[11px] font-medium ${MUTED}`}>Good (4–5★) vs poor (1–2★)</div>
+                    <div className={`mt-1 text-2xl font-bold tabular-nums ${goodNet >= 0 ? POS_T : NEG_T}`}>
+                      {money(goodNet)}
+                    </div>
+                    <div className={`mt-1 text-xs font-semibold tabular-nums ${badNet >= 0 ? POS_T : NEG_T}`}>
+                      {money(badNet)} on poor-rated trades
+                    </div>
+                  </Card>
+                </div>
+
+                <Panel title="Performance by rating" icon={Award} accent={ac.hex} right="4–5★ should be your template">
+                  {ratingData.ratedCount === 0 ? (
+                    <Empty
+                      icon={Award}
+                      title="No rated trades yet"
+                      hint="Rate a trade 1–5 stars when you log or edit it. This table then shows which grades actually make money."
+                    />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[680px] border-collapse">
+                        <thead>
+                          <tr className={`border-b ${DIVIDER}`}>
+                            <th className={TH}>Rating</th>
+                            <th className={`${TH} text-right`}>Trades</th>
+                            <th className={`${TH} text-right`}>Win %</th>
+                            <th className={`${TH} text-right`}>PF</th>
+                            <th className={`${TH} text-right`}>Net P&L</th>
+                            <th className={`${TH} text-right`}>Avg trade</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ratingData.buckets.map((row) => (
+                            <tr key={row.key} className={`border-b last:border-0 ${DIVIDER}`}>
+                              <td className={TD}>
+                                <div className="flex items-center gap-2">
+                                  <StarRating value={row.rating} accent={ac.hex} readOnly size={13} />
+                                  <span className={`text-xs font-semibold ${HEAD}`}>{row.word}</span>
+                                </div>
+                              </td>
+                              <td className={`${TD} text-right ${MUTED}`}>{row.count}</td>
+                              <td className={`${TD} text-right ${HEAD}`}>{row.count ? pct(row.winRate) : "—"}</td>
+                              <td className={`${TD} text-right ${HEAD}`}>{row.count ? ratio(row.profitFactor) : "—"}</td>
+                              <td className={`${TD} text-right font-semibold ${row.net >= 0 ? POS_T : NEG_T}`}>
+                                {row.count ? money(row.net) : "—"}
+                              </td>
+                              <td className={`${TD} text-right ${row.count ? (row.avgPnl >= 0 ? POS_T : NEG_T) : MUTED}`}>
+                                {row.count ? money(row.avgPnl) : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                          {ratingData.unrated.count > 0 && (
+                            <tr className={`border-t ${DIVIDER}`}>
+                              <td className={`${TD} text-xs font-semibold ${MUTED}`}>Not rated</td>
+                              <td className={`${TD} text-right ${MUTED}`}>{ratingData.unrated.count}</td>
+                              <td className={`${TD} text-right ${HEAD}`}>{pct(ratingData.unrated.winRate)}</td>
+                              <td className={`${TD} text-right ${HEAD}`}>{ratio(ratingData.unrated.profitFactor)}</td>
+                              <td className={`${TD} text-right font-semibold ${ratingData.unrated.net >= 0 ? POS_T : NEG_T}`}>
+                                {money(ratingData.unrated.net)}
+                              </td>
+                              <td className={`${TD} text-right ${MUTED}`}>{money(ratingData.unrated.avgPnl)}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Panel>
+
+                <Panel title="Cost of mistakes" icon={Shield} accent={NEG} right="Most expensive first">
+                  {mistakeRows.length === 0 ? (
+                    <Empty
+                      icon={Shield}
+                      title="No mistakes tagged"
+                      hint="Tag mistakes like FOMO or moved stop on a trade. This table totals what each habit has cost you."
+                    />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[600px] border-collapse">
+                        <thead>
+                          <tr className={`border-b ${DIVIDER}`}>
+                            <th className={TH}>Mistake</th>
+                            <th className={`${TH} text-right`}>Times</th>
+                            <th className={`${TH} text-right`}>Net P&L</th>
+                            <th className={`${TH} text-right`}>Avg trade</th>
+                            <th className={TH}>Damage</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {mistakeRows.map((row) => {
+                            const worst = Math.min(0, ...mistakeRows.map((r) => r.net));
+                            const width = worst < 0 ? (row.net / worst) * 100 : 0;
+                            return (
+                              <tr key={row.key} className={`border-b last:border-0 ${DIVIDER}`}>
+                                <td className={`${TD} font-semibold ${HEAD}`}>{row.key}</td>
+                                <td className={`${TD} text-right ${MUTED}`}>{row.count}</td>
+                                <td className={`${TD} text-right font-semibold ${row.net >= 0 ? POS_T : NEG_T}`}>
+                                  {money(row.net)}
+                                </td>
+                                <td className={`${TD} text-right ${row.avgPnl >= 0 ? POS_T : NEG_T}`}>
+                                  {money(row.avgPnl)}
+                                </td>
+                                <td className="w-32 px-3 py-2.5">
+                                  <div className="h-2 overflow-hidden rounded bg-[#eef0f8] dark:bg-[#101024]">
+                                    <div
+                                      className="h-full rounded"
+                                      style={{
+                                        width: `${Math.max(0, Math.min(100, width))}%`,
+                                        backgroundColor: row.net < 0 ? NEG : POS,
+                                        opacity: 0.85,
+                                      }}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Panel>
+
+                <Panel title="What this means" icon={Award} accent={ac.hex} right="Read before your next session">
+                  <div className={`px-4 py-3 text-sm ${MUTED}`}>
+                    {ratingData.ratedCount < 10 ? (
+                      <>
+                        Rate at least ten trades before drawing conclusions. You currently have{" "}
+                        <span className={`font-semibold ${HEAD}`}>{ratingData.ratedCount}</span> rated.
+                      </>
+                    ) : goodNet > 0 && badNet < 0 ? (
+                      <>
+                        Your 4–5★ trades made{" "}
+                        <span className={`font-semibold ${POS_T}`}>{money(goodNet)}</span> while 1–2★ trades lost{" "}
+                        <span className={`font-semibold ${NEG_T}`}>{money(badNet)}</span>. The edge is in repeating
+                        the good setup and cutting the bad one, not in a new strategy.
+                      </>
+                    ) : (
+                      <>
+                        Good-rated trades are not carrying the account yet. Compare the win rate and profit factor
+                        rows above before trusting your own grading.
+                      </>
+                    )}
+                  </div>
                 </Panel>
               </>
             )}

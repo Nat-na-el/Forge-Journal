@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import DeleteConfirmModal from "../components/ui/DeleteConfirmModal";
 import CsvImportModal from "../components/ui/CsvImportModal";
+import { GradingSummary, MistakePicker, StarRating } from "../components/ui/TradeGrading";
 import useAccent from "../hooks/useAccent";
 import AccentPicker from "../components/ui/AccentPicker";
 import {
@@ -322,6 +323,8 @@ export default function Trades({ currentAccount }) {
     confluences: [],
     screenshotUrl: "",
     strategy: "",
+    rating: 0,
+    mistakes: [],
     openDateTime: "",
     closeDateTime: "",
   });
@@ -535,6 +538,8 @@ export default function Trades({ currentAccount }) {
       confluences: trade.confluences || [],
       screenshotUrl: trade.screenshotUrl || "",
       strategy: trade.strategy || "",
+      rating: Number(trade.rating) || 0,
+      mistakes: trade.mistakes || [],
       openDateTime: trade.openDateTime || "",
       closeDateTime: trade.closeDateTime || "",
     });
@@ -603,6 +608,8 @@ export default function Trades({ currentAccount }) {
       "R:R",
       "Status",
       "Confluences",
+      "Rating",
+      "Mistakes",
       "Notes",
     ];
     const rows = filteredTrades.map((t) => [
@@ -618,6 +625,8 @@ export default function Trades({ currentAccount }) {
       t.rr || "",
       t.status || "executed",
       (t.confluences || []).join("; "),
+      Number(t.rating) || "",
+      (t.mistakes || []).join("; "),
       `"${(t.notes || "").replace(/"/g, '""')}"`,
     ]);
     const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -1046,6 +1055,14 @@ export default function Trades({ currentAccount }) {
                                 Pending
                               </span>
                             )}
+                            {Number(trade.rating) > 0 && (
+                              <StarRating value={trade.rating} accent={ac.hex} readOnly size={12} />
+                            )}
+                            {trade.mistakes?.length > 0 && (
+                              <span className="rounded-md bg-[#f2556e]/10 px-2 py-0.5 text-[11px] font-semibold text-[#d93a57] dark:text-[#ff6b86]">
+                                {trade.mistakes.length} mistake{trade.mistakes.length === 1 ? "" : "s"}
+                              </span>
+                            )}
                           </div>
                           <div className={`mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs ${MUTED}`}>
                             <span>Open: {trade.openDateTime ? new Date(trade.openDateTime).toLocaleString() : "—"}</span>
@@ -1201,6 +1218,16 @@ export default function Trades({ currentAccount }) {
                         {selectedTrade.status === "pending" ? "Pending" : money(Number(selectedTrade.pnl || 0), true)}
                       </div>
                     </div>
+
+                    {(Number(selectedTrade.rating) > 0 || selectedTrade.mistakes?.length > 0) && (
+                      <div className={`rounded-xl border p-4 ${DIVIDER}`}>
+                        <GradingSummary
+                          rating={selectedTrade.rating}
+                          mistakes={selectedTrade.mistakes}
+                          accent={ac.hex}
+                        />
+                      </div>
+                    )}
 
                     {selectedTrade.confluences?.length > 0 && (
                       <div>
@@ -1425,6 +1452,25 @@ export default function Trades({ currentAccount }) {
                     tags={editForm.confluences}
                     accent={ac.hex}
                     onChange={(newTags) => setEditForm({ ...editForm, confluences: newTags })}
+                  />
+                </div>
+
+                <div>
+                  <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Trade rating</label>
+                  <StarRating
+                    value={Number(editForm.rating) || 0}
+                    onChange={(value) => setEditForm({ ...editForm, rating: value })}
+                    accent={ac.hex}
+                    size={22}
+                  />
+                </div>
+
+                <div>
+                  <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Mistakes</label>
+                  <MistakePicker
+                    value={editForm.mistakes || []}
+                    onChange={(next) => setEditForm({ ...editForm, mistakes: next })}
+                    accent={ac.hex}
                   />
                 </div>
 

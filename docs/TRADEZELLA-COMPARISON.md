@@ -263,3 +263,30 @@ Premium areas TradeZella markets: 500+ broker auto-sync · 50+ report categories
 **Strategy field**
 - `AddTrade` and the Trades edit modal now capture a strategy/playbook name, so the playbook report has data to group.
 
+---
+
+## 8. Phase 2 (started) — trade grading & mistakes
+
+**New component** `src/components/ui/TradeGrading.jsx`
+- `StarRating` — 1–5 stars, clickable or read-only.
+- `MistakePicker` — preset chips (FOMO, Chased entry, Moved stop, Oversized, Early exit, Revenge trade, No plan, Ignored news, Overtraded) plus custom entries.
+- `GradingSummary` — read-only block for the trade detail card.
+
+**Trade capture**
+- New optional fields: `rating` (0–5) and `mistakes` (array of strings).
+- Added to `AddTrade` (new trade form) and the Trades edit modal.
+- Trade list rows show compact stars and a mistake count; the detail modal shows the full grade.
+- CSV export (Trades and Reports) includes rating and mistakes.
+
+**Reports → Discipline tab**
+- Average rating, share of trades rated, and net P&L of 4–5★ vs 1–2★ trades.
+- Performance table per rating (trades, win %, PF, net, avg) with an "unrated" row.
+- "Cost of mistakes" table ranked by net P&L, with a damage bar per mistake.
+- Contextual note that refuses to draw conclusions under ten rated trades.
+
+**Analytics** `src/lib/analytics.js`
+- `ratingBreakdown(trades)` and `mistakeBreakdown(trades)` join the shared stat helpers.
+
+Still to come in Phase 2: MAE/MFE, configurable breakeven band, trade filters/saved views, commission/swap split.
+
+
