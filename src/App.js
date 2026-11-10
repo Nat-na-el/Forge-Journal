@@ -26,6 +26,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Landing from "./pages/Landing";
 import { db, auth } from "./firebase";
+import { clearAccountData } from "./lib/firestoreData";
 import {
   collection,
   getDocs,
@@ -446,11 +447,7 @@ function AppContent() {
     const user = auth.currentUser;
     if (!user) return;
     try {
-      const subCollections = ["trades", "journals", "notes"];
-      for (const sub of subCollections) {
-        const subSnap = await getDocs(collection(db, "users", user.uid, "accounts", accountId, sub));
-        subSnap.forEach(async (d) => await deleteDoc(d.ref));
-      }
+      await clearAccountData(user.uid, accountId);
 
       await updateDoc(doc(db, "users", user.uid, "accounts", accountId), {
         current_balance: accounts.find(a => a.id === accountId)?.starting_balance || 10000,
@@ -547,7 +544,7 @@ function AppContent() {
                     <Route path="/journal" element={<DailyJournal currentAccount={currentAccount} />} />
                     <Route path="/trades" element={<Trades currentAccount={currentAccount} />} />
                     <Route path="/notebook" element={<Notebook currentAccount={currentAccount} />} />
-                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/reports" element={<Reports currentAccount={currentAccount} />} />
                     <Route path="/challenges" element={<Challenges />} />
                     <Route path="/mentor" element={<MentorMode currentAccount={currentAccount} />} />
                     <Route path="/settings" element={<SettingsPage />} />

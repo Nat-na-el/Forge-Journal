@@ -43,6 +43,7 @@ const emptyForm = () => ({
   exit: "",
   lotSize: "0.1",
   pnlManual: "",
+  strategy: "",
   notes: "",
   screenshotUrl: "",
 });
@@ -190,6 +191,7 @@ export default function AddTrade({ currentAccount }) {
       pnl: finalPnl,
       rr: pending || !calc.rr ? "" : calc.rr.toFixed(2),
       lotSize: Number(form.lotSize) || 0.1,
+      strategy: (form.strategy || "").trim(),
       notes: form.notes.trim(),
       status: form.status,
       confluences: tags,
@@ -471,6 +473,30 @@ export default function AddTrade({ currentAccount }) {
             {/* 3 · Context */}
             <Card className={`${CARD} p-4 sm:p-6 space-y-4`}>
               <h3 className="font-semibold text-lg">3 · Context</h3>
+
+              <div>
+                <Label className="text-sm opacity-70">Strategy / playbook</Label>
+                <input
+                  name="strategy"
+                  value={form.strategy}
+                  onChange={onChange}
+                  list="forge-strategies"
+                  placeholder="e.g. London breakout"
+                  className="w-full mt-1 p-3 rounded-xl border text-sm outline-none focus:ring-2 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
+                  style={{ "--tw-ring-color": ac.hex }}
+                />
+                <datalist id="forge-strategies">
+                  <option value="London breakout" />
+                  <option value="Asian range breakout" />
+                  <option value="Liquidity sweep" />
+                  <option value="Trend continuation" />
+                  <option value="Support/Resistance reversal" />
+                  <option value="News" />
+                </datalist>
+                <p className="mt-1.5 text-xs opacity-60">
+                  Reuse the same name every time — Reports groups performance by strategy.
+                </p>
+              </div>
 
               <div>
                 <Label className="text-sm opacity-70">Confluences</Label>

@@ -321,6 +321,7 @@ export default function Trades({ currentAccount }) {
     status: "executed",
     confluences: [],
     screenshotUrl: "",
+    strategy: "",
     openDateTime: "",
     closeDateTime: "",
   });
@@ -533,6 +534,7 @@ export default function Trades({ currentAccount }) {
       status: trade.status || "executed",
       confluences: trade.confluences || [],
       screenshotUrl: trade.screenshotUrl || "",
+      strategy: trade.strategy || "",
       openDateTime: trade.openDateTime || "",
       closeDateTime: trade.closeDateTime || "",
     });
@@ -1395,6 +1397,26 @@ export default function Trades({ currentAccount }) {
                     <option value="executed">Executed</option>
                     <option value="pending">Pending</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className={`mb-1.5 block text-xs font-semibold ${MUTED}`}>Strategy / playbook</label>
+                  <input
+                    type="text"
+                    value={editForm.strategy || ""}
+                    onChange={(e) => setEditForm({ ...editForm, strategy: e.target.value })}
+                    placeholder="e.g. London breakout"
+                    list="forge-strategies-edit"
+                    className={FIELD}
+                  />
+                  <datalist id="forge-strategies-edit">
+                    <option value="London breakout" />
+                    <option value="Asian range breakout" />
+                    <option value="Liquidity sweep" />
+                    <option value="Trend continuation" />
+                    <option value="Support/Resistance reversal" />
+                    <option value="News" />
+                  </datalist>
                 </div>
 
                 <div>
