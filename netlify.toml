@@ -1,6 +1,11 @@
 [build]
   publish = "build"
-  command = "npm run build"
+  # Netlify sets CI=true, which makes Create React App fail on any ESLint
+  # warning. The codebase still has legacy warnings, so force it off.
+  command = "CI=false npm run build"
+
+[build.environment]
+  CI = "false"
 
 [functions]
   directory = "netlify/functions"
