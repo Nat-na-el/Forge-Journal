@@ -14,7 +14,9 @@ import {
   Zap,
   Save,
   Trash2,
-  Upload
+  Upload,
+  Wand,
+  Loader2
 } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -617,6 +619,8 @@ const runBacktest = (data, strategy, params, initialCapital) => {
   return runner(data, params, initialCapital);
 };
 
+const ENDPOINT = "/.netlify/functions/mentor";
+
 export default function Backtest({ currentAccount }) {
   const { accent, setAccent, ac } = useAccent();
   const { theme } = useTheme();
@@ -644,6 +648,11 @@ export default function Backtest({ currentAccount }) {
   useEffect(() => {
     try { localStorage.setItem('forgexSavedBacktests', JSON.stringify(savedRuns)); } catch {}
   }, [savedRuns]);
+
+  // AI strategy generator state (plain-English → parameters)
+  const [aiStrategyInput, setAiStrategyInput] = useState('');
+  const [aiStrategyResult, setAiStrategyResult] = useState(null);
+  const [aiStrategyLoading, setAiStrategyLoading] = useState(false);
 
   // CSV upload state
   const [fileName, setFileName] = useState('');
@@ -888,6 +897,75 @@ export default function Backtest({ currentAccount }) {
       console.error('Push to journal failed:', err);
       alert('Failed to push trades: ' + (err?.message || err));
     }
+  };
+
+  // ─── AI plain-English strategy generator ────────────────
+  const generateAIStrategy = async () => {
+    if (!aiStrategyInput.trim()) return;
+    const user = auth.currentUser;
+    if (!user) {
+      alert('Please log in again.');
+      return;
+    }
+    setAiStrategyLoading(true);
+    setAiStrategyResult(null);
+    try {
+      const token = await user.getIdToken();
+      const prompt = `Convert this plain-English trading strategy into concrete backtest parameters for the "${currentStrategy?.name || 'selected strategy'}" strategy (${symbol}).
+
+Strategy idea: "${aiStrategyInput}"
+
+Return ONLY a JSON object with these keys (use null for any you cannot determine):
+- sessionStart (0-23)
+- sessionEnd (1-24)
+- breakoutBuffer (number, points)
+- stopType ("rangeHalf" or "fixed")
+- stopValue (number)
+- riskReward (number)
+- direction ("long", "short", or "both")
+- reasoning (short text explaining the parameters)
+
+Do not include any other text.`;
+
+      const res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: prompt }],
+          context: null,
+          agent: 'general',
+          systemPrompt: 'You are a trading strategy architect. Convert plain-English strategy ideas into concrete, safe backtest parameters. Respond only with valid JSON.',
+        }),
+      });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      if (!res.ok) {
+        throw new Error(data.error || 'Request failed (' + res.status + ')');
+      }
+      const text = data.reply || '';
+      // Extract JSON from the response (strip markdown fences if present)
+      const jsonText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(jsonText);
+      setAiStrategyResult(parsed);
+    } catch (err) {
+      setAiStrategyResult({ error: err.message || 'Could not generate strategy.' });
+    } finally {
+      setAiStrategyLoading(false);
+    }
+  };
+
+  const applyAIStrategy = (params) => {
+    const next = { ...params };
+    // Only apply keys that exist in the current param schema to avoid overwriting
+    // unrelated fields. sessionStart/sessionEnd are kept as-is.
+    setParams(next);
+    setAiStrategyResult(null);
+    setAiStrategyInput('');
   };
 
   // ─── Optimization ───────────────────────────────────────
@@ -1304,6 +1382,79 @@ export default function Backtest({ currentAccount }) {
                   </div>
                 );
               })}
+
+              {/* AI plain-English strategy generator */}
+              <div className={`border-t pt-4 space-y-3 ${DIVIDER}`}>
+                <div className="flex items-center gap-2">
+                  <Wand size={14} style={{ color: ac.hex }} />
+                  <span className={`text-xs font-semibold uppercase tracking-wide ${MUTED}`}>
+                    AI strategy generator
+                  </span>
+                </div>
+                <div>
+                  <label className={`mb-1 block text-xs font-semibold ${MUTED}`}>
+                    Describe your strategy in plain English
+                  </label>
+                  <textarea
+                    value={aiStrategyInput}
+                    onChange={(e) => setAiStrategyInput(e.target.value)}
+                    placeholder="e.g. Buy when price breaks above the Asian session high with a 2:1 reward-to-risk"
+                    rows={2}
+                    className={FIELD + " min-h-[48px] resize-y"}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={generateAIStrategy}
+                    disabled={aiStrategyLoading || !aiStrategyInput.trim()}
+                    variant="outline"
+                    className={`flex-1 border font-semibold text-xs ${DIVIDER}`}
+                  >
+                    {aiStrategyLoading ? (
+                      <>
+                        <Loader2 size={14} className="mr-2 animate-spin" /> Generating…
+                      </>
+                    ) : (
+                      <>
+                        <Wand size={14} className="mr-2" /> Generate
+                      </>
+                    )}
+                  </Button>
+                  {aiStrategyResult && (
+                    <Button
+                      onClick={() => applyAIStrategy(aiStrategyResult)}
+                      disabled={!!aiStrategyResult.error}
+                      style={{ backgroundColor: ac.hex }}
+                      className="flex-1 font-semibold text-white text-xs hover:brightness-110"
+                    >
+                      {aiStrategyResult.error ? "Failed" : "Apply to parameters"}
+                    </Button>
+                  )}
+                </div>
+                {aiStrategyResult && !aiStrategyResult.error && (
+                  <div className={`mt-2 rounded-lg border p-3 ${DIVIDER} bg-white dark:bg-[#101024] text-xs`}>
+                    <div className={`mb-1 text-[10px] font-semibold uppercase tracking-wide ${MUTED}`}>
+                      Suggested parameters
+                    </div>
+                    <div className="space-y-1">
+                      {Object.entries(aiStrategyResult).map(([key, value]) => (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between"
+                        >
+                          <span className={MUTED}>{key}</span>
+                          <span className={HEAD}>{String(value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {aiStrategyResult && aiStrategyResult.error && (
+                  <div className={`mt-2 rounded-lg border border-[#f2556e]/40 bg-[#f2556e]/[0.06] p-3 text-xs text-[#d93a57] dark:text-[#ff6b86]`}>
+                    {aiStrategyResult.error}
+                  </div>
+                )}
+              </div>
 
               <div className={`border-t pt-3 text-xs ${DIVIDER} ${MUTED}`}>
                 <p>Initial capital: ${currentAccount?.starting_balance?.toLocaleString() || '10,000'}</p>
