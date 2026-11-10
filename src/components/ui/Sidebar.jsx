@@ -12,6 +12,7 @@ import {
   Users,
   Settings,
   Calculator,
+  Monitor,
   ChevronsLeft,
   ChevronsRight,
   ChevronDown,
@@ -70,6 +71,7 @@ const MORE_NAV = [
   { to: "/challenges", icon: Trophy, label: "Challenges" },
   { to: "/mentor", icon: Users, label: "Mentor Mode" },
   { to: "/backtest", icon: Calculator, label: "Backtest" },
+  { to: "/replay", icon: Monitor, label: "Replay" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 

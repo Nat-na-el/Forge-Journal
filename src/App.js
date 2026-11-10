@@ -21,6 +21,7 @@ import Challenges from "./pages/Challenges";
 import MentorMode from "./pages/MentorMode";
 import SettingsPage from "./pages/SettingsPage";
 import Backtest from "./pages/Backtest";
+import Replay from "./pages/Replay";
 import AddTrade from "./components/ui/AddTrade";
 import QuantitativeAnalysis from "./pages/QuantitativeAnalysis";
 import Login from "./pages/Login";
@@ -551,6 +552,7 @@ function AppContent() {
                     <Route path="/mentor" element={<MentorMode currentAccount={currentAccount} />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/backtest" element={<Backtest currentAccount={currentAccount} />} />
+                    <Route path="/replay" element={<Replay currentAccount={currentAccount} />} />
                     <Route path="/quantitative-analysis" element={<QuantitativeAnalysis />} />
                     <Route path="/edit-balance-pnl" element={<EditBalancePNL />} />
                     <Route path="/trades/new" element={<AddTrade currentAccount={currentAccount} />} />
