@@ -254,7 +254,9 @@ async function actionConnect(body, ip) {
       headers: { "transaction-id": txId },
       body: {
         name: metaName(uid, login),
-        type: "cloud-g2",
+        // G1 is required here: MetaApi does not offer the free "regular" reliability
+        // option on cloud-g2, and would otherwise force high reliability (a paid feature).
+        type: "cloud-g1",
         login,
         password,
         server,

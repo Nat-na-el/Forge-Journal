@@ -22,7 +22,16 @@ async function call(payload) {
     throw new Error("Can't reach the server. Check your connection.");
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const raw = data.error || `Request failed (${res.status})`;
+    // MetaApi forces "high reliability" on cloud-g2 accounts, which needs a funded balance.
+    if (/top up your account/i.test(raw)) {
+      throw new Error(
+        "MetaApi needs credit for high-reliability hosting. This app requests a regular cloud-g1 account, so try again after redeploying the Netlify function — or add credit at app.metaapi.cloud."
+      );
+    }
+    throw new Error(raw);
+  }
   return data;
 }
 
