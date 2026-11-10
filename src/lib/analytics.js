@@ -51,17 +51,22 @@ const safeDiv = (a, b) => (b ? a / b : 0);
 /**
  * Core statistics for a set of trades.
  * Pending trades are ignored everywhere (no realised P&L yet).
+ *
+ * `options.breakevenBand` (R) reclassifies small results as breakeven so a
+ * scratch trade stops counting as a win or a loss. Net P&L always includes
+ * every executed trade, so a band never changes money — only the ratios.
  */
-export function tradeStats(trades = []) {
+export function tradeStats(trades = [], options = {}) {
+  const breakevenBand = Number(options.breakevenBand) || 0;
   const executed = trades.filter(isExecuted);
   const pnls = executed.map(pnlOf);
-  const wins = executed.filter((t) => pnlOf(t) > 0);
-  const losses = executed.filter((t) => pnlOf(t) < 0);
+  const wins = executed.filter((t) => outcomeOf(t, breakevenBand) === "win");
+  const losses = executed.filter((t) => outcomeOf(t, breakevenBand) === "loss");
   const breakeven = executed.length - wins.length - losses.length;
 
   const grossWin = wins.reduce((sum, t) => sum + pnlOf(t), 0);
   const grossLoss = Math.abs(losses.reduce((sum, t) => sum + pnlOf(t), 0));
-  const net = grossWin - grossLoss;
+  const net = executed.reduce((sum, t) => sum + pnlOf(t), 0);
   const avgWin = wins.length ? grossWin / wins.length : 0;
   const avgLoss = losses.length ? grossLoss / losses.length : 0;
 
@@ -72,6 +77,7 @@ export function tradeStats(trades = []) {
     wins: wins.length,
     losses: losses.length,
     breakeven,
+    breakevenBand,
     grossWin,
     grossLoss,
     net,
@@ -149,7 +155,7 @@ export function streaks(trades = []) {
 }
 
 /** Group trades by a key and return stats per group, best net P&L first. */
-export function groupStats(trades = [], keyOf = () => "—") {
+export function groupStats(trades = [], keyOf = () => "—", options = {}) {
   const groups = new Map();
 
   trades.forEach((trade) => {
@@ -160,7 +166,7 @@ export function groupStats(trades = [], keyOf = () => "—") {
   });
 
   return [...groups.entries()]
-    .map(([key, list]) => ({ key, ...tradeStats(list) }))
+    .map(([key, list]) => ({ key, ...tradeStats(list, options) }))
     .sort((a, b) => b.net - a.net);
 }
 
@@ -228,6 +234,29 @@ export function formatDuration(minutes) {
   return h ? `${d}d ${h}h` : `${d}d`;
 }
 
+// ─── Hold-time buckets ───────────────────────────────────────────────────────
+
+export const HOLD_BUCKETS = [
+  { key: "under30m", label: "< 30 min", min: 0, max: 30 },
+  { key: "30m-1h", label: "30 min – 1 h", min: 30, max: 60 },
+  { key: "1h-4h", label: "1 – 4 h", min: 60, max: 240 },
+  { key: "4h-24h", label: "4 – 24 h", min: 240, max: 1440 },
+  { key: "over24h", label: "> 24 h", min: 1440, max: Infinity },
+];
+
+/** Count of executed trades per hold-time bucket. */
+export function holdTimeDistribution(trades = []) {
+  const values = trades
+    .filter(isExecuted)
+    .map(holdMinutes)
+    .filter((v) => v !== null);
+
+  return HOLD_BUCKETS.map((bucket) => ({
+    ...bucket,
+    count: values.filter((v) => v > bucket.min && v <= bucket.max).length,
+  }));
+}
+
 // ─── R multiples ─────────────────────────────────────────────────────────────
 
 export const R_BUCKETS = [
@@ -264,29 +293,156 @@ export const RATING_WORDS = {
 };
 
 /** One row per star rating (5 → 1) plus the unrated remainder. */
-export function ratingBreakdown(trades = []) {
+export function ratingBreakdown(trades = [], options = {}) {
   const buckets = [5, 4, 3, 2, 1].map((rating) => {
     const group = trades.filter((t) => Number(t.rating) === rating);
-    return { key: String(rating), rating, word: RATING_WORDS[rating], ...tradeStats(group) };
+    return { key: String(rating), rating, word: RATING_WORDS[rating], ...tradeStats(group, options) };
   });
 
   const rated = trades.filter((t) => Number(t.rating) > 0);
 
   return {
     buckets,
-    unrated: tradeStats(trades.filter((t) => !Number(t.rating))),
+    unrated: tradeStats(trades.filter((t) => !Number(t.rating)), options),
     ratedCount: rated.length,
     avgRating: rated.length ? avg(rated.map((t) => Number(t.rating))) : 0,
   };
 }
 
 /** Every mistake tag with the trades that carried it, most costly first. */
-export function mistakeBreakdown(trades = []) {
+export function mistakeBreakdown(trades = [], options = {}) {
   const tagged = [];
   trades.forEach((trade) => {
     const mistakes = Array.isArray(trade.mistakes) ? trade.mistakes : [];
     mistakes.forEach((mistake) => tagged.push({ ...trade, __mistake: mistake }));
   });
 
-  return groupStats(tagged, (t) => t.__mistake).sort((a, b) => a.net - b.net);
+  return groupStats(tagged, (t) => t.__mistake, options).sort((a, b) => a.net - b.net);
+}
+
+// ─── Costs, execution quality and breakeven ─────────────────────────────────
+
+/** Signed commission + swap. Broker imports store costs as negative numbers. */
+export const feesOf = (trade) =>
+  (Number(trade?.commission) || 0) + (Number(trade?.swap) || 0);
+
+/** P&L before commission and swap. */
+export const grossPnlOf = (trade) => pnlOf(trade) - feesOf(trade);
+
+/**
+ * Realised R-multiple, derived from the trade's own numbers so broker imports
+ * and hand-logged trades agree: the value of one price unit is inferred from
+ * P&L and the entry→exit move, then applied to the stop distance.
+ */
+export function realisedR(trade) {
+  if (!isExecuted(trade)) return null;
+  const entry = Number(trade?.entry);
+  const exit = Number(trade?.exit);
+  const stop = Number(trade?.stopLoss);
+  const pnl = pnlOf(trade);
+  if (!entry || !exit || !stop || !pnl) return null;
+  const long = /^(long|buy)/i.test(trade?.direction || "");
+  const move = long ? exit - entry : entry - exit;
+  if (!move) return null;
+  const risk = Math.abs(entry - stop) * (pnl / move);
+  if (!Number.isFinite(risk) || risk <= 0) return null;
+  return pnl / risk;
+}
+
+/** "win" | "loss" | "breakeven" | "pending", honouring a breakeven band in R. */
+export function outcomeOf(trade, breakevenBand = 0) {
+  if (!isExecuted(trade)) return "pending";
+  const band = Number(breakevenBand) || 0;
+  const pnl = pnlOf(trade);
+  if (band > 0) {
+    const r = realisedR(trade);
+    if (r !== null) {
+      if (Math.abs(r) <= band) return "breakeven";
+      return r > 0 ? "win" : "loss";
+    }
+  }
+  if (pnl > 0) return "win";
+  if (pnl < 0) return "loss";
+  return "breakeven";
+}
+
+/** Commission / swap totals and the share of gross profit they eat. */
+export function feeStats(trades = []) {
+  const executed = trades.filter(isExecuted);
+  const commission = executed.reduce((sum, t) => sum + (Number(t.commission) || 0), 0);
+  const swap = executed.reduce((sum, t) => sum + (Number(t.swap) || 0), 0);
+  const fees = commission + swap;
+  const net = executed.reduce((sum, t) => sum + pnlOf(t), 0);
+  const gross = net - fees;
+  const recorded = executed.filter((t) => Number(t.commission) || Number(t.swap)).length;
+
+  return {
+    commission,
+    swap,
+    fees,
+    net,
+    gross,
+    recorded,
+    count: executed.length,
+    avgPerTrade: executed.length ? fees / executed.length : 0,
+    shareOfGross: gross > 0 ? (Math.abs(fees) / gross) * 100 : 0,
+  };
+}
+
+/**
+ * MAE / MFE capture. Both are entered in R by the trader:
+ *   mae — how far the trade went against you before working (positive R)
+ *   mfe — how far it went in your favour (positive R)
+ */
+export function excursionStats(trades = []) {
+  const rows = trades
+    .filter(isExecuted)
+    .map((trade) => {
+      const mfe = Number(trade.mfe);
+      const mae = Number(trade.mae);
+      const r = realisedR(trade);
+      return {
+        trade,
+        mfe: Number.isFinite(mfe) ? mfe : null,
+        mae: Number.isFinite(mae) ? mae : null,
+        r,
+        capture: mfe > 0 && r !== null ? r / mfe : null,
+        missed: mfe > 0 && r !== null ? mfe - r : null,
+      };
+    })
+    .filter((row) => (row.mfe !== null && row.mfe !== 0) || (row.mae !== null && row.mae !== 0));
+
+  const withMfe = rows.filter((row) => row.mfe > 0);
+  const withCapture = withMfe.filter((row) => row.capture !== null);
+
+  return {
+    rows,
+    count: rows.length,
+    avgMfe: avg(withMfe.map((row) => row.mfe)),
+    avgMae: avg(rows.filter((row) => row.mae !== null).map((row) => Math.abs(row.mae))),
+    avgCapture: avg(withCapture.map((row) => row.capture)),
+    missedR: withCapture.reduce((sum, row) => sum + Math.max(0, row.missed), 0),
+    worst: withCapture
+      .slice()
+      .sort((a, b) => (b.missed ?? 0) - (a.missed ?? 0))
+      .slice(0, 5),
+  };
+}
+
+/** Day-of-week × time-of-day grid of net P&L and trade counts. */
+export function dayHourHeatmap(trades = []) {
+  const grid = DAYS.map(() => HOUR_BUCKETS.map(() => ({ net: 0, count: 0 })));
+
+  trades.filter(isExecuted).forEach((trade) => {
+    const date = tradeDate(trade);
+    if (!date) return;
+    const dayIndex = DAYS.indexOf(dayOfWeek(date));
+    const bucketIndex = HOUR_BUCKETS.indexOf(hourBucket(date));
+    if (dayIndex < 0 || bucketIndex < 0) return;
+    const cell = grid[dayIndex][bucketIndex];
+    cell.net += pnlOf(trade);
+    cell.count += 1;
+  });
+
+  return { days: DAYS, buckets: HOUR_BUCKETS, grid };
 }

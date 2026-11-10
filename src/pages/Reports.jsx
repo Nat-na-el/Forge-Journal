@@ -20,6 +20,7 @@ import {
   Download,
   Layers,
   Percent,
+  Receipt,
   Shield,
   Tag,
   Target,
@@ -41,17 +42,22 @@ import {
   HOUR_BUCKETS,
   SESSIONS,
   avg,
+  dayHourHeatmap,
   dayOfWeek,
   drawdown,
   equityCurve,
+  excursionStats,
+  feeStats,
   formatDuration,
   groupStats,
   holdMinutes,
+  holdTimeDistribution,
   hourBucket,
   mistakeBreakdown,
   money,
   pct,
   ratio,
+  realisedR,
   rDistribution,
   ratingBreakdown,
   sessionOf,
@@ -69,6 +75,26 @@ const PERIODS = [
   ["this-year", "This year"],
   ["all", "All time"],
 ];
+
+// Breakeven band: results inside ±N R count as a scratch instead of a win/loss.
+const BAND_KEY = "forgexBreakevenBand";
+const BAND_OPTIONS = [
+  [0, "Off"],
+  [0.05, "±0.05R"],
+  [0.1, "±0.10R"],
+  [0.2, "±0.20R"],
+  [0.3, "±0.30R"],
+  [0.5, "±0.50R"],
+];
+
+const readBand = () => {
+  try {
+    const saved = Number(localStorage.getItem(BAND_KEY));
+    return Number.isFinite(saved) && saved > 0 ? saved : 0;
+  } catch {
+    return 0;
+  }
+};
 
 const TABS = [
   ["performance", "Performance", TrendingUp],
@@ -115,6 +141,15 @@ function Empty({ icon: Icon = BarChart3, title, hint }) {
       {hint ? <p className={`mx-auto mt-1 max-w-sm text-xs ${MUTED}`}>{hint}</p> : null}
     </div>
   );
+}
+
+/** Tint a table cell by signed net P&L intensity (0..1 → green / red). */
+function heatTint(net, maxAbs) {
+  const t = Math.max(0, Math.min(1, Math.abs(net) / maxAbs));
+  const g = Math.round(34 + 160 * t);
+  const r = Math.round(242 - 120 * t);
+  const b = Math.round(85 + 80 * t);
+  return net >= 0 ? `rgb(${r},${g},${b})` : `rgb(${r},${g - 40},${b - 30})`;
 }
 
 function EquityChart({ points, color }) {
@@ -181,8 +216,19 @@ export default function Reports({ currentAccount }) {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [tab, setTab] = useState("performance");
+  const [beBand, setBeBand] = useState(readBand);
 
   const accountId = currentAccount?.id;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(BAND_KEY, String(beBand));
+    } catch {
+      // Storage can be blocked; the band simply resets next visit.
+    }
+  }, [beBand]);
+
+  const statOptions = useMemo(() => ({ breakevenBand: beBand }), [beBand]);
 
   useEffect(() => {
     let cancelled = false;
@@ -254,42 +300,45 @@ export default function Reports({ currentAccount }) {
     });
   }, [trades, period, customStart, customEnd]);
 
-  const stats = useMemo(() => tradeStats(filteredTrades), [filteredTrades]);
+  const stats = useMemo(() => tradeStats(filteredTrades, statOptions), [filteredTrades, statOptions]);
   const curve = useMemo(() => equityCurve(filteredTrades), [filteredTrades]);
   const maxDD = useMemo(() => drawdown(filteredTrades), [filteredTrades]);
   const runs = useMemo(() => streaks(filteredTrades), [filteredTrades]);
 
   const symbolRows = useMemo(
-    () => groupStats(filteredTrades, (t) => (t.pair || "").toUpperCase().trim()),
-    [filteredTrades]
+    () => groupStats(filteredTrades, (t) => (t.pair || "").toUpperCase().trim(), statOptions),
+    [filteredTrades, statOptions]
   );
 
   const dayRows = useMemo(() => {
     const groups = groupStats(
       filteredTrades.filter((t) => tradeDate(t)),
-      (t) => dayOfWeek(tradeDate(t))
+      (t) => dayOfWeek(tradeDate(t)),
+      statOptions
     );
     const byKey = Object.fromEntries(groups.map((g) => [g.key, g]));
     return DAYS.map((day) => byKey[day] || { key: day, count: 0, winRate: 0, net: 0 });
-  }, [filteredTrades]);
+  }, [filteredTrades, statOptions]);
 
   const hourRows = useMemo(() => {
     const groups = groupStats(
       filteredTrades.filter((t) => tradeDate(t)),
-      (t) => hourBucket(tradeDate(t))
+      (t) => hourBucket(tradeDate(t)),
+      statOptions
     );
     const byKey = Object.fromEntries(groups.map((g) => [g.key, g]));
     return HOUR_BUCKETS.map((bucket) => byKey[bucket] || { key: bucket, count: 0, winRate: 0, net: 0 });
-  }, [filteredTrades]);
+  }, [filteredTrades, statOptions]);
 
   const sessionRows = useMemo(() => {
     const groups = groupStats(
       filteredTrades.filter((t) => tradeDate(t)),
-      (t) => sessionOf(tradeDate(t))?.key
+      (t) => sessionOf(tradeDate(t))?.key,
+      statOptions
     );
     const byKey = Object.fromEntries(groups.map((g) => [g.key, g]));
     return SESSIONS.map((s) => ({ ...s, ...(byKey[s.key] || { count: 0, winRate: 0, net: 0 }) }));
-  }, [filteredTrades]);
+  }, [filteredTrades, statOptions]);
 
   const tagRows = useMemo(() => {
     const tagged = [];
@@ -297,21 +346,33 @@ export default function Reports({ currentAccount }) {
       const tags = Array.isArray(trade.confluences) ? trade.confluences : [];
       tags.forEach((tag) => tagged.push({ ...trade, __tag: tag }));
     });
-    return groupStats(tagged, (t) => t.__tag).slice(0, 20);
-  }, [filteredTrades]);
+    return groupStats(tagged, (t) => t.__tag, statOptions).slice(0, 20);
+  }, [filteredTrades, statOptions]);
 
   // Prefer the linked playbook name, then fall back to free-text strategy so
   // trades logged before playbooks existed still group sensibly.
   const playbookRows = useMemo(
-    () => groupStats(filteredTrades, (t) => (t.playbook || t.strategy || "").trim()),
-    [filteredTrades]
+    () => groupStats(filteredTrades, (t) => (t.playbook || t.strategy || "").trim(), statOptions),
+    [filteredTrades, statOptions]
   );
 
   const rRows = useMemo(() => rDistribution(filteredTrades), [filteredTrades]);
   const maxRBucket = Math.max(1, ...rRows.map((b) => b.count));
 
-  const ratingData = useMemo(() => ratingBreakdown(filteredTrades), [filteredTrades]);
-  const mistakeRows = useMemo(() => mistakeBreakdown(filteredTrades), [filteredTrades]);
+  const ratingData = useMemo(
+    () => ratingBreakdown(filteredTrades, statOptions),
+    [filteredTrades, statOptions]
+  );
+  const mistakeRows = useMemo(
+    () => mistakeBreakdown(filteredTrades, statOptions),
+    [filteredTrades, statOptions]
+  );
+  const heatmap = useMemo(() => dayHourHeatmap(filteredTrades), [filteredTrades]);
+  const heatMax = Math.max(1, ...heatmap.grid.flat().map((cell) => Math.abs(cell.net)));
+  const fees = useMemo(() => feeStats(filteredTrades), [filteredTrades]);
+  const excursions = useMemo(() => excursionStats(filteredTrades), [filteredTrades]);
+  const holdRows = useMemo(() => holdTimeDistribution(filteredTrades), [filteredTrades]);
+  const maxHoldBucket = Math.max(1, ...holdRows.map((b) => b.count));
   const goodNet = ratingData.buckets
     .filter((b) => b.rating >= 4)
     .reduce((sum, b) => sum + b.net, 0);
@@ -322,10 +383,10 @@ export default function Reports({ currentAccount }) {
   const longShort = useMemo(() => {
     const side = (label, re) => {
       const group = filteredTrades.filter((t) => re.test(t.direction || ""));
-      return { label, ...tradeStats(group) };
+      return { label, ...tradeStats(group, statOptions) };
     };
     return [side("Long", /^(long|buy)/i), side("Short", /^(short|sell)/i)];
-  }, [filteredTrades]);
+  }, [filteredTrades, statOptions]);
 
   const avgHold = useMemo(() => {
     const durations = filteredTrades.map(holdMinutes).filter((v) => v !== null);
@@ -362,6 +423,11 @@ export default function Reports({ currentAccount }) {
       "Take profit",
       "PnL",
       "R",
+      "Realised R",
+      "Commission",
+      "Swap",
+      "MAE (R)",
+      "MFE (R)",
       "Playbook",
       "Strategy",
       "Tags",
@@ -374,6 +440,7 @@ export default function Reports({ currentAccount }) {
 
     const rows = filteredTrades.map((t) => {
       const date = tradeDate(t);
+      const r = realisedR(t);
       return [
         date ? format(date, "yyyy-MM-dd HH:mm") : "",
         t.pair || "",
@@ -384,6 +451,11 @@ export default function Reports({ currentAccount }) {
         t.takeProfit ?? "",
         t.pnl ?? 0,
         t.rr ?? "",
+        r === null ? "" : r.toFixed(2),
+        t.commission ?? "",
+        t.swap ?? "",
+        t.mae ?? "",
+        t.mfe ?? "",
         escape(t.playbook || ""),
         escape(t.strategy || ""),
         escape((t.confluences || []).join(" | ")),
@@ -481,6 +553,22 @@ export default function Reports({ currentAccount }) {
                   aria-label="Custom end date"
                 />
               </div>
+
+              <label className="flex items-center gap-1.5 text-xs">
+                <span className={`font-semibold ${MUTED}`}>Breakeven band</span>
+                <select
+                  value={beBand}
+                  onChange={(e) => setBeBand(Number(e.target.value))}
+                  className={`h-9 rounded-lg border ${DIVIDER} bg-white px-2 text-xs outline-none focus:ring-2 focus:ring-[#6C47FF] dark:bg-[#101024]`}
+                  aria-label="Breakeven band in R"
+                >
+                  {BAND_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <span className={`ml-auto text-xs font-medium ${MUTED}`}>
                 {filteredTrades.length} trades in range
@@ -746,6 +834,57 @@ export default function Reports({ currentAccount }) {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </Panel>
+
+                {/* Day × hour heatmap of net P&L */}
+                <Panel title="Day × hour heatmap" icon={BarChart3} accent={ac.hex} right="Local trade time">
+                  <div className="p-4">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[640px] border-collapse text-[11px]">
+                        <thead>
+                          <tr className={`border-b ${DIVIDER}`}>
+                            <th className={TH}>Day \ Hour</th>
+                            {heatmap.buckets.map((b) => (
+                              <th key={b} className={`${TH} text-right`}>{b}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {heatmap.days.map((day, di) => (
+                            <tr key={day} className={`border-b last:border-0 ${DIVIDER}`}>
+                              <th className={`${TD} font-semibold ${HEAD}`}>{day}</th>
+                              {heatmap.grid[di].map((cell, bi) => {
+                                const label = `${day} ${cell.count === 0 ? "no trades" : `${cell.count} trade${cell.count === 1 ? "" : "s"} · ${money(cell.net)}`}`;
+                                return (
+                                  <td
+                                    key={bi}
+                                    className={`${TD} text-right h-8`}
+                                    title={label}
+                                  >
+                                  {cell.count > 0 ? (
+                                    <div
+                                      className="flex items-center justify-end pr-1"
+                                      style={{
+                                        backgroundColor: heatTint(cell.net, heatMax),
+                                        opacity: cell.count ? 0.9 : 0.35,
+                                      }}
+                                    >
+                                      <span className="tabular-nums font-semibold">{money(cell.net, false)}</span>
+                                    </div>
+                                  ) : (
+                                    <span className={MUTED}>—</span>
+                                  )}
+                                </td>
+                              )})}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className={`mt-2 text-[10px] ${MUTED}`}>
+                      Cell colour shows net P&L (green up, red down). Empty cells had no trades in that bucket.
+                    </p>
                   </div>
                 </Panel>
               </>
@@ -1104,6 +1243,104 @@ export default function Reports({ currentAccount }) {
                       ? `Only ${stats.count} closed trades in this period — treat these numbers as directional, not proven.`
                       : "Sample size is workable. Compare this period with the previous one before changing your rules."}
                   </div>
+                </Panel>
+
+                {/* Costs and execution quality */}
+                <Panel title="Costs & execution" icon={Receipt} accent={ac.hex} right="Commission + swap">
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4 p-4">
+                    {[
+                      ["Commission", money(fees.commission), fees.commission < 0 ? NEG_T : HEAD],
+                      ["Swap", money(fees.swap), fees.swap < 0 ? NEG_T : HEAD],
+                      ["Total fees", money(fees.fees), fees.fees < 0 ? NEG_T : HEAD],
+                      ["Share of gross profit", pct(fees.shareOfGross, 1), HEAD],
+                    ].map(([label, value, tone]) => (
+                      <div key={label} className={`rounded-xl border p-3 ${DIVIDER}`}>
+                        <div className={`text-[11px] font-medium ${MUTED}`}>{label}</div>
+                        <div className={`mt-0.5 text-lg font-bold tabular-nums ${tone}`}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className={`border-t px-4 py-3 text-[11px] ${DIVIDER} ${MUTED}`}>
+                    {fees.recorded} of {fees.count} executed trades record commission or swap. Average cost per trade:
+                    {money(fees.avgPerTrade)}. Gross P&L is P&L before fees ({money(fees.gross)}); net is after fees
+                    ({money(fees.net)}).
+                  </div>
+                </Panel>
+
+                {/* MAE / MFE capture */}
+                <Panel title="MAE / MFE capture" icon={Target} accent={ac.hex} right="How much of the move you keep">
+                  {excursions.count === 0 ? (
+                    <Empty
+                      icon={Target}
+                      title="No MAE / MFE data yet"
+                      hint="Enter MAE and MFE (in R) when you log or edit a trade to see capture and missed R."
+                    />
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 p-4">
+                        {[
+                          ["Avg MFE (R)", ratio(excursions.avgMfe), HEAD],
+                          ["Avg MAE (R)", ratio(excursions.avgMae), HEAD],
+                          ["Avg capture", pct(excursions.avgCapture * 100), HEAD],
+                          ["Missed R", money(excursions.missedR, true), HEAD],
+                        ].map(([label, value, tone]) => (
+                          <div key={label} className={`rounded-xl border p-3 ${DIVIDER}`}>
+                            <div className={`text-[11px] font-medium ${MUTED}`}>{label}</div>
+                            <div className={`mt-0.5 text-lg font-bold tabular-nums ${tone}`}>{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className={`border-t px-4 py-3 text-[11px] ${DIVIDER} ${MUTED}`}>
+                        {excursions.worst.length > 0 ? (
+                          <>
+                            Biggest missed move:{" "}
+                            <span className={`font-semibold ${NEG_T}`}>
+                              {money(excursions.worst[0].missed, true)}
+                            </span>{" "}
+                            ({excursions.worst[0].trade.pair || "—"}). Capture is realised R ÷ MFE; missed R is MFE −
+                            realised R.
+                          </>
+                        ) : (
+                          "Log MAE / MFE on your trades to see which winners you cut too early."
+                        )}
+                      </div>
+                    </>
+                  )
+                }
+                </Panel>
+
+                {/* Hold-time buckets */}
+                <Panel title="Hold-time distribution" icon={Clock} accent={ac.hex} right="Entry → close duration">
+                  {holdRows.every((b) => b.count === 0) ? (
+                    <Empty
+                      icon={Clock}
+                      title="No hold-time data yet"
+                      hint="Enter close times on your trades to see how long you typically hold positions."
+                    />
+                  ) : (
+                    <div className="space-y-2.5 p-4">
+                      {holdRows.map((bucket) => (
+                        <div key={bucket.key} className="flex items-center gap-3">
+                          <span className={`w-20 shrink-0 text-right text-[11px] tabular-nums ${MUTED}`}>
+                            {bucket.label}
+                          </span>
+                          <div className="h-5 flex-1 overflow-hidden rounded bg-[#eef0f8] dark:bg-[#101024]">
+                            <div
+                              className="h-full rounded"
+                              style={{
+                                width: `${(bucket.count / maxHoldBucket) * 100}%`,
+                                backgroundColor: POS,
+                                opacity: bucket.count ? 0.9 : 0,
+                              }}
+                            />
+                          </div>
+                          <span className={`w-8 shrink-0 text-xs font-semibold tabular-nums ${HEAD}`}>
+                            {bucket.count}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </Panel>
               </>
             )}

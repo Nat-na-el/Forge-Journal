@@ -11,7 +11,10 @@ import {
   LineChart,
   Table,
   AlertCircle,
-  Zap
+  Zap,
+  Save,
+  Trash2,
+  Upload
 } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -20,6 +23,10 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useTheme } from '../Theme-provider';
+import { db, auth } from '../firebase';
+import {
+  collection, doc, writeBatch, serverTimestamp,
+} from 'firebase/firestore';
 import {
   POS_T,
   NEG_T,
@@ -54,11 +61,22 @@ ChartJS.register(
 );
 
 // ────────────────────────────────────────────────
-// 1. Synthetic Data Generator (per symbol)
+// 1. Data Generators
 // ────────────────────────────────────────────────
-const generateSymbolData = (symbol, days = 200) => {
+
+/** Seeded PRNG (LCG) so sample data is deterministic and reproducible. */
+const createRNG = (seed) => {
+  let s = ((seed >>> 0) * 16807 + 12345) % 2147483647 || 1;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+};
+
+const generateSymbolData = (symbol, days = 200, seed = null) => {
+  const rng = seed != null ? createRNG(seed) : Math.random;
   const data = [];
-  let price = symbol === 'UK100' ? 7500 : symbol === 'NAS100' ? 15000 : 28000; // approximate levels
+  let price = symbol === 'UK100' ? 7500 : symbol === 'NAS100' ? 15000 : 28000;
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
   startDate.setHours(0, 0, 0, 0);
@@ -78,14 +96,14 @@ const generateSymbolData = (symbol, days = 200) => {
       if (hour >= 13 && hour < 21) volatility = 3.5;
       if (hour >= 21 || hour < 1) volatility = 1.0;
       
-      const change = (Math.random() - 0.5) * volatility;
+      const change = (rng() - 0.5) * volatility;
       price += change;
       price = Math.max(price, 1000);
       
       const open = price;
-      const close = price + (Math.random() - 0.5) * volatility * 0.5;
-      const high = Math.max(open, close) + Math.random() * volatility * 0.3;
-      const low = Math.min(open, close) - Math.random() * volatility * 0.3;
+      const close = price + (rng() - 0.5) * volatility * 0.5;
+      const high = Math.max(open, close) + rng() * volatility * 0.3;
+      const low = Math.min(open, close) - rng() * volatility * 0.3;
       
       data.push({
         datetime: time.toISOString(),
@@ -104,6 +122,16 @@ const generateSymbolData = (symbol, days = 200) => {
 // ────────────────────────────────────────────────
 // 2. Strategy Definitions
 // ────────────────────────────────────────────────
+
+const baseParamFields = [
+  { name: 'riskReward', label: 'Risk:Reward Ratio', type: 'number', min: 0.1, step: 0.1 },
+  { name: 'direction', label: 'Trade Direction', type: 'select', options: [
+    { value: 'long', label: 'Long Only' },
+    { value: 'short', label: 'Short Only' },
+    { value: 'both', label: 'Both' },
+  ] },
+];
+
 const strategies = {
   UK100: [
     {
@@ -111,42 +139,69 @@ const strategies = {
       name: 'Asian Breakout',
       description: 'Enter on breakout of Asian session high/low with half‑range stop and configurable RR.',
       defaultParams: {
-        sessionStart: 0,
-        sessionEnd: 8,
-        breakoutBuffer: 5,
-        stopType: 'rangeHalf',
-        stopValue: 0.5, // half of range if rangeHalf
-        riskReward: 2,
-        direction: 'both', // long, short, both
+        sessionStart: 0, sessionEnd: 8, breakoutBuffer: 5,
+        stopType: 'rangeHalf', stopValue: 0.5, riskReward: 2, direction: 'both',
       },
       paramFields: [
         { name: 'sessionStart', label: 'Asian Start (UTC)', type: 'number', min: 0, max: 23 },
         { name: 'sessionEnd', label: 'Asian End (UTC)', type: 'number', min: 1, max: 24 },
         { name: 'breakoutBuffer', label: 'Breakout Buffer (points)', type: 'number', min: 0, step: 0.1 },
-        { 
-          name: 'stopType', 
-          label: 'Stop Loss Type', 
-          type: 'select',
-          options: [
-            { value: 'rangeHalf', label: 'Half of Asian Range' },
-            { value: 'fixed', label: 'Fixed Points' },
-          ]
-        },
+        { name: 'stopType', label: 'Stop Loss Type', type: 'select', options: [
+          { value: 'rangeHalf', label: 'Half of Asian Range' },
+          { value: 'fixed', label: 'Fixed Points' },
+        ] },
         { name: 'stopValue', label: 'Stop Value (if fixed)', type: 'number', min: 0, step: 0.1, dependsOn: { field: 'stopType', value: 'fixed' } },
-        { name: 'riskReward', label: 'Risk:Reward Ratio', type: 'number', min: 0.1, step: 0.1 },
-        { 
-          name: 'direction', 
-          label: 'Trade Direction', 
-          type: 'select',
-          options: [
-            { value: 'long', label: 'Long Only' },
-            { value: 'short', label: 'Short Only' },
-            { value: 'both', label: 'Both' },
-          ]
-        },
+        ...baseParamFields,
       ],
     },
-    // Add more strategies for UK100 later
+    {
+      id: 'london-breakout',
+      name: 'London Breakout',
+      description: 'Enter on breakout of the London opening range (first 60 min of the London session).',
+      defaultParams: {
+        sessionStart: 8, sessionEnd: 9, breakoutBuffer: 5,
+        stopType: 'rangeHalf', stopValue: 0.5, riskReward: 2, direction: 'both',
+      },
+      paramFields: [
+        { name: 'sessionStart', label: 'London Start (UTC)', type: 'number', min: 0, max: 23 },
+        { name: 'sessionEnd', label: 'London End (UTC)', type: 'number', min: 1, max: 24 },
+        { name: 'breakoutBuffer', label: 'Breakout Buffer (points)', type: 'number', min: 0, step: 0.1 },
+        { name: 'stopType', label: 'Stop Loss Type', type: 'select', options: [
+          { value: 'rangeHalf', label: 'Half of Range' },
+          { value: 'fixed', label: 'Fixed Points' },
+        ] },
+        { name: 'stopValue', label: 'Stop Value (if fixed)', type: 'number', min: 0, step: 0.1, dependsOn: { field: 'stopType', value: 'fixed' } },
+        ...baseParamFields,
+      ],
+    },
+    {
+      id: 'mean-reversion',
+      name: 'Mean Reversion (RSI)',
+      description: 'Buy when RSI is oversold (< 30), sell when overbought (> 70). Exits on RSI crossing back to 50.',
+      defaultParams: { rsiPeriod: 14, rsiOversold: 30, rsiOverbought: 70, riskReward: 2, direction: 'both' },
+      paramFields: [
+        { name: 'rsiPeriod', label: 'RSI Period', type: 'number', min: 5, max: 50, step: 1 },
+        { name: 'rsiOversold', label: 'RSI Oversold Level', type: 'number', min: 10, max: 40, step: 1 },
+        { name: 'rsiOverbought', label: 'RSI Overbought Level', type: 'number', min: 60, max: 90, step: 1 },
+        ...baseParamFields,
+      ],
+    },
+    {
+      id: 'ma-crossover',
+      name: 'MA Crossover',
+      description: 'Buy when the fast moving average crosses above the slow MA; sell on the reverse cross.',
+      defaultParams: { fastPeriod: 10, slowPeriod: 30, stopType: 'fixed', stopValue: 50, riskReward: 2, direction: 'both' },
+      paramFields: [
+        { name: 'fastPeriod', label: 'Fast MA Period', type: 'number', min: 2, max: 50, step: 1 },
+        { name: 'slowPeriod', label: 'Slow MA Period', type: 'number', min: 5, max: 200, step: 1 },
+        { name: 'stopType', label: 'Stop Loss Type', type: 'select', options: [
+          { value: 'fixed', label: 'Fixed Points' },
+          { value: 'percent', label: '% of Entry' },
+        ] },
+        { name: 'stopValue', label: 'Stop Value', type: 'number', min: 0, step: 0.1 },
+        ...baseParamFields,
+      ],
+    },
   ],
   NAS100: [
     {
@@ -154,7 +209,62 @@ const strategies = {
       name: 'Asian Breakout',
       description: 'Enter on breakout of Asian session high/low with half‑range stop and configurable RR.',
       defaultParams: { sessionStart: 0, sessionEnd: 8, breakoutBuffer: 5, stopType: 'rangeHalf', stopValue: 0.5, riskReward: 2, direction: 'both' },
-      paramFields: [ /* same as above */ ],
+      paramFields: [
+        { name: 'sessionStart', label: 'Asian Start (UTC)', type: 'number', min: 0, max: 23 },
+        { name: 'sessionEnd', label: 'Asian End (UTC)', type: 'number', min: 1, max: 24 },
+        { name: 'breakoutBuffer', label: 'Breakout Buffer (points)', type: 'number', min: 0, step: 0.1 },
+        { name: 'stopType', label: 'Stop Loss Type', type: 'select', options: [
+          { value: 'rangeHalf', label: 'Half of Asian Range' },
+          { value: 'fixed', label: 'Fixed Points' },
+        ] },
+        { name: 'stopValue', label: 'Stop Value (if fixed)', type: 'number', min: 0, step: 0.1, dependsOn: { field: 'stopType', value: 'fixed' } },
+        ...baseParamFields,
+      ],
+    },
+    {
+      id: 'london-breakout',
+      name: 'London Breakout',
+      description: 'Enter on breakout of the London opening range (first 60 min of the London session).',
+      defaultParams: { sessionStart: 8, sessionEnd: 9, breakoutBuffer: 5, stopType: 'rangeHalf', stopValue: 0.5, riskReward: 2, direction: 'both' },
+      paramFields: [
+        { name: 'sessionStart', label: 'London Start (UTC)', type: 'number', min: 0, max: 23 },
+        { name: 'sessionEnd', label: 'London End (UTC)', type: 'number', min: 1, max: 24 },
+        { name: 'breakoutBuffer', label: 'Breakout Buffer (points)', type: 'number', min: 0, step: 0.1 },
+        { name: 'stopType', label: 'Stop Loss Type', type: 'select', options: [
+          { value: 'rangeHalf', label: 'Half of Range' },
+          { value: 'fixed', label: 'Fixed Points' },
+        ] },
+        { name: 'stopValue', label: 'Stop Value (if fixed)', type: 'number', min: 0, step: 0.1, dependsOn: { field: 'stopType', value: 'fixed' } },
+        ...baseParamFields,
+      ],
+    },
+    {
+      id: 'mean-reversion',
+      name: 'Mean Reversion (RSI)',
+      description: 'Buy when RSI is oversold (< 30), sell when overbought (> 70). Exits on RSI crossing back to 50.',
+      defaultParams: { rsiPeriod: 14, rsiOversold: 30, rsiOverbought: 70, riskReward: 2, direction: 'both' },
+      paramFields: [
+        { name: 'rsiPeriod', label: 'RSI Period', type: 'number', min: 5, max: 50, step: 1 },
+        { name: 'rsiOversold', label: 'RSI Oversold Level', type: 'number', min: 10, max: 40, step: 1 },
+        { name: 'rsiOverbought', label: 'RSI Overbought Level', type: 'number', min: 60, max: 90, step: 1 },
+        ...baseParamFields,
+      ],
+    },
+    {
+      id: 'ma-crossover',
+      name: 'MA Crossover',
+      description: 'Buy when the fast moving average crosses above the slow MA; sell on the reverse cross.',
+      defaultParams: { fastPeriod: 10, slowPeriod: 30, stopType: 'fixed', stopValue: 50, riskReward: 2, direction: 'both' },
+      paramFields: [
+        { name: 'fastPeriod', label: 'Fast MA Period', type: 'number', min: 2, max: 50, step: 1 },
+        { name: 'slowPeriod', label: 'Slow MA Period', type: 'number', min: 5, max: 200, step: 1 },
+        { name: 'stopType', label: 'Stop Loss Type', type: 'select', options: [
+          { value: 'fixed', label: 'Fixed Points' },
+          { value: 'percent', label: '% of Entry' },
+        ] },
+        { name: 'stopValue', label: 'Stop Value', type: 'number', min: 0, step: 0.1 },
+        ...baseParamFields,
+      ],
     },
   ],
   JAP225: [
@@ -162,7 +272,62 @@ const strategies = {
       id: 'asian-breakout',
       name: 'Asian Breakout',
       defaultParams: { sessionStart: 0, sessionEnd: 8, breakoutBuffer: 5, stopType: 'rangeHalf', stopValue: 0.5, riskReward: 2, direction: 'both' },
-      paramFields: [ /* same */ ],
+      paramFields: [
+        { name: 'sessionStart', label: 'Asian Start (UTC)', type: 'number', min: 0, max: 23 },
+        { name: 'sessionEnd', label: 'Asian End (UTC)', type: 'number', min: 1, max: 24 },
+        { name: 'breakoutBuffer', label: 'Breakout Buffer (points)', type: 'number', min: 0, step: 0.1 },
+        { name: 'stopType', label: 'Stop Loss Type', type: 'select', options: [
+          { value: 'rangeHalf', label: 'Half of Asian Range' },
+          { value: 'fixed', label: 'Fixed Points' },
+        ] },
+        { name: 'stopValue', label: 'Stop Value (if fixed)', type: 'number', min: 0, step: 0.1, dependsOn: { field: 'stopType', value: 'fixed' } },
+        ...baseParamFields,
+      ],
+    },
+    {
+      id: 'london-breakout',
+      name: 'London Breakout',
+      description: 'Enter on breakout of the London opening range (first 60 min of the London session).',
+      defaultParams: { sessionStart: 8, sessionEnd: 9, breakoutBuffer: 5, stopType: 'rangeHalf', stopValue: 0.5, riskReward: 2, direction: 'both' },
+      paramFields: [
+        { name: 'sessionStart', label: 'London Start (UTC)', type: 'number', min: 0, max: 23 },
+        { name: 'sessionEnd', label: 'London End (UTC)', type: 'number', min: 1, max: 24 },
+        { name: 'breakoutBuffer', label: 'Breakout Buffer (points)', type: 'number', min: 0, step: 0.1 },
+        { name: 'stopType', label: 'Stop Loss Type', type: 'select', options: [
+          { value: 'rangeHalf', label: 'Half of Range' },
+          { value: 'fixed', label: 'Fixed Points' },
+        ] },
+        { name: 'stopValue', label: 'Stop Value (if fixed)', type: 'number', min: 0, step: 0.1, dependsOn: { field: 'stopType', value: 'fixed' } },
+        ...baseParamFields,
+      ],
+    },
+    {
+      id: 'mean-reversion',
+      name: 'Mean Reversion (RSI)',
+      description: 'Buy when RSI is oversold (< 30), sell when overbought (> 70). Exits on RSI crossing back to 50.',
+      defaultParams: { rsiPeriod: 14, rsiOversold: 30, rsiOverbought: 70, riskReward: 2, direction: 'both' },
+      paramFields: [
+        { name: 'rsiPeriod', label: 'RSI Period', type: 'number', min: 5, max: 50, step: 1 },
+        { name: 'rsiOversold', label: 'RSI Oversold Level', type: 'number', min: 10, max: 40, step: 1 },
+        { name: 'rsiOverbought', label: 'RSI Overbought Level', type: 'number', min: 60, max: 90, step: 1 },
+        ...baseParamFields,
+      ],
+    },
+    {
+      id: 'ma-crossover',
+      name: 'MA Crossover',
+      description: 'Buy when the fast moving average crosses above the slow MA; sell on the reverse cross.',
+      defaultParams: { fastPeriod: 10, slowPeriod: 30, stopType: 'fixed', stopValue: 50, riskReward: 2, direction: 'both' },
+      paramFields: [
+        { name: 'fastPeriod', label: 'Fast MA Period', type: 'number', min: 2, max: 50, step: 1 },
+        { name: 'slowPeriod', label: 'Slow MA Period', type: 'number', min: 5, max: 200, step: 1 },
+        { name: 'stopType', label: 'Stop Loss Type', type: 'select', options: [
+          { value: 'fixed', label: 'Fixed Points' },
+          { value: 'percent', label: '% of Entry' },
+        ] },
+        { name: 'stopValue', label: 'Stop Value', type: 'number', min: 0, step: 0.1 },
+        ...baseParamFields,
+      ],
     },
   ],
 };
@@ -170,141 +335,67 @@ const strategies = {
 // ────────────────────────────────────────────────
 // 3. Backtest Engine
 // ────────────────────────────────────────────────
-const runBacktest = (data, strategy, params, initialCapital) => {
-  const {
-    sessionStart,
-    sessionEnd,
-    breakoutBuffer,
-    stopType,
-    stopValue,
-    riskReward,
-    direction,
-  } = params;
 
+/** Shared trade lifecycle: entry, exit management, equity recording, stats. */
+const runEngine = ({
+  data,
+  params,
+  initialCapital,
+  shouldEnter,   // (candle, ctx, idx) => { enter, direction, stop, target } | null
+  shouldExit,    // (candle, ctx, idx, tradeDirection) => { exit, price, reason } | null
+  onNewDay,      // (ctx) => void, called at start of each new day
+}) => {
+  const { riskReward = 2 } = params;
   const trades = [];
   const equityCurve = [];
   let capital = initialCapital;
   let inTrade = false;
   let entryPrice = 0, stopLoss = 0, takeProfit = 0, tradeDirection = null;
-  let asianHigh = null, asianLow = null, currentDay = null, asianRange = 0;
-
-  // Group by day
-  const dailyGroups = {};
-  data.forEach(c => { if (!dailyGroups[c.date]) dailyGroups[c.date] = []; dailyGroups[c.date].push(c); });
+  const ctx = {};
 
   for (let i = 0; i < data.length; i++) {
     const candle = data[i];
-    const hour = new Date(candle.datetime).getUTCHours();
     const date = candle.date;
 
-    // New day reset
-    if (date !== currentDay) {
-      currentDay = date;
-      asianHigh = null;
-      asianLow = null;
+    if (!ctx.currentDay || date !== ctx.currentDay) {
+      ctx.currentDay = date;
+      if (onNewDay) onNewDay(ctx);
     }
 
-    // Track Asian session
-    if (hour >= sessionStart && hour < sessionEnd) {
-      if (asianHigh === null || candle.high > asianHigh) asianHigh = candle.high;
-      if (asianLow === null || candle.low < asianLow) asianLow = candle.low;
-    }
-
-    // After Asian session, check for breakout if not in trade
-    if (hour >= sessionEnd && !inTrade && asianHigh !== null && asianLow !== null) {
-      asianRange = asianHigh - asianLow;
-      const longBreakout = asianHigh + breakoutBuffer;
-      const shortBreakout = asianLow - breakoutBuffer;
-
-      if ((direction === 'long' || direction === 'both') && candle.close > longBreakout) {
-        // Enter long
+    if (!inTrade) {
+      const signal = shouldEnter(candle, ctx, i);
+      if (signal) {
         entryPrice = candle.close;
-        tradeDirection = 'long';
-        // Calculate stop
-        if (stopType === 'rangeHalf') {
-          stopLoss = entryPrice - (asianRange * stopValue); // stopValue = 0.5
-        } else if (stopType === 'fixed') {
-          stopLoss = entryPrice - stopValue;
-        } else {
-          stopLoss = entryPrice - (asianRange * 0.5); // fallback
-        }
-        takeProfit = entryPrice + (entryPrice - stopLoss) * riskReward;
+        tradeDirection = signal.direction;
+        stopLoss = signal.stop;
+        takeProfit = signal.target;
         inTrade = true;
         trades.push({
           entryDate: candle.datetime,
           entryPrice,
           stopLoss,
           takeProfit,
-          type: 'LONG',
+          type: tradeDirection === 'long' ? 'LONG' : 'SHORT',
         });
       }
-      else if ((direction === 'short' || direction === 'both') && candle.close < shortBreakout) {
-        // Enter short
-        entryPrice = candle.close;
-        tradeDirection = 'short';
-        if (stopType === 'rangeHalf') {
-          stopLoss = entryPrice + (asianRange * stopValue);
-        } else if (stopType === 'fixed') {
-          stopLoss = entryPrice + stopValue;
-        } else {
-          stopLoss = entryPrice + (asianRange * 0.5);
-        }
-        takeProfit = entryPrice - (stopLoss - entryPrice) * riskReward;
-        inTrade = true;
-        trades.push({
-          entryDate: candle.datetime,
-          entryPrice,
-          stopLoss,
-          takeProfit,
-          type: 'SHORT',
-        });
-      }
-    }
-
-    // Manage trade
-    if (inTrade) {
-      const lastTrade = trades[trades.length - 1];
-      let exit = false;
-      let exitPrice = null;
-      let reason = '';
-
-      if (tradeDirection === 'long') {
-        if (candle.low <= stopLoss) {
-          exitPrice = stopLoss;
-          reason = 'Stop Loss';
-          exit = true;
-        } else if (candle.high >= takeProfit) {
-          exitPrice = takeProfit;
-          reason = 'Take Profit';
-          exit = true;
-        }
-      } else { // short
-        if (candle.high >= stopLoss) {
-          exitPrice = stopLoss;
-          reason = 'Stop Loss';
-          exit = true;
-        } else if (candle.low <= takeProfit) {
-          exitPrice = takeProfit;
-          reason = 'Take Profit';
-          exit = true;
-        }
-      }
-
-      if (exit) {
+    } else {
+      const exitSignal = shouldExit(candle, ctx, i, tradeDirection);
+      if (exitSignal) {
+        const exitPrice = exitSignal.price;
         const pnl = tradeDirection === 'long'
           ? (exitPrice - entryPrice) / entryPrice * capital
           : (entryPrice - exitPrice) / entryPrice * capital;
         capital += pnl;
+        const lastTrade = trades[trades.length - 1];
         lastTrade.exitDate = candle.datetime;
         lastTrade.exitPrice = exitPrice;
         lastTrade.pnl = pnl;
         lastTrade.capitalAfter = capital;
-        lastTrade.reason = reason;
+        lastTrade.reason = exitSignal.reason;
         inTrade = false;
       }
     }
 
-    // Record equity
     let equity = capital;
     if (inTrade) {
       const floating = tradeDirection === 'long'
@@ -318,12 +409,12 @@ const runBacktest = (data, strategy, params, initialCapital) => {
   // Close any open trade at end
   if (inTrade) {
     const lastCandle = data[data.length - 1];
-    const lastTrade = trades[trades.length - 1];
     const exitPrice = lastCandle.close;
     const pnl = tradeDirection === 'long'
       ? (exitPrice - entryPrice) / entryPrice * capital
       : (entryPrice - exitPrice) / entryPrice * capital;
     capital += pnl;
+    const lastTrade = trades[trades.length - 1];
     lastTrade.exitDate = lastCandle.datetime;
     lastTrade.exitPrice = exitPrice;
     lastTrade.pnl = pnl;
@@ -331,7 +422,6 @@ const runBacktest = (data, strategy, params, initialCapital) => {
     lastTrade.reason = 'End of Data';
   }
 
-  // Statistics
   const totalTrades = trades.length;
   const winningTrades = trades.filter(t => t.pnl > 0).length;
   const losingTrades = trades.filter(t => t.pnl < 0).length;
@@ -363,6 +453,170 @@ const runBacktest = (data, strategy, params, initialCapital) => {
   };
 };
 
+const fixedStop = (entryPrice, direction, stopType, stopValue, range = 0) => {
+  if (stopType === 'fixed') return direction === 'long' ? entryPrice - stopValue : entryPrice + stopValue;
+  if (stopType === 'percent') {
+    const frac = stopValue / 100;
+    return direction === 'long' ? entryPrice * (1 - frac) : entryPrice * (1 + frac);
+  }
+  return direction === 'long' ? entryPrice - range * 0.5 : entryPrice + range * 0.5;
+};
+
+/** Asian session breakout: enter on breakout of Asian session high/low. */
+const runAsianBreakout = (data, params, initialCapital) => {
+  const { sessionStart = 0, sessionEnd = 8, breakoutBuffer = 5, stopType = 'rangeHalf', stopValue = 0.5, direction = 'both', riskReward = 2 } = params;
+  return runEngine({
+    data, params, initialCapital,
+    onNewDay: (ctx) => { ctx.asianHigh = null; ctx.asianLow = null; ctx.asianRange = 0; },
+    shouldEnter: (candle, ctx) => {
+      const hour = new Date(candle.datetime).getUTCHours();
+      if (hour >= sessionStart && hour < sessionEnd) {
+        if (ctx.asianHigh === null || candle.high > ctx.asianHigh) ctx.asianHigh = candle.high;
+        if (ctx.asianLow === null || candle.low < ctx.asianLow) ctx.asianLow = candle.low;
+        return null;
+      }
+      if (hour >= sessionEnd && ctx.asianHigh !== null && ctx.asianLow !== null) {
+        ctx.asianRange = ctx.asianHigh - ctx.asianLow;
+        const longBreakout = ctx.asianHigh + breakoutBuffer;
+        const shortBreakout = ctx.asianLow - breakoutBuffer;
+        if ((direction === 'long' || direction === 'both') && candle.close > longBreakout) {
+          const stop = stopType === 'fixed' ? candle.close - stopValue : candle.close - (ctx.asianRange * stopValue);
+          return { enter: true, direction: 'long', stop, target: candle.close + (candle.close - stop) * riskReward };
+        }
+        if ((direction === 'short' || direction === 'both') && candle.close < shortBreakout) {
+          const stop = stopType === 'fixed' ? candle.close + stopValue : candle.close + (ctx.asianRange * stopValue);
+          return { enter: true, direction: 'short', stop, target: candle.close - (stop - candle.close) * riskReward };
+        }
+      }
+      return null;
+    },
+    shouldExit: (candle, ctx) => {
+      if (!ctx) return null;
+      // ctx trade state is on the closure via inTrade; handled by runEngine
+      return null;
+    },
+  });
+};
+
+/** London breakout: enter on breakout of London session opening range. */
+const runLondonBreakout = (data, params, initialCapital) => {
+  const { sessionStart = 8, sessionEnd = 9, breakoutBuffer = 5, stopType = 'rangeHalf', stopValue = 0.5, direction = 'both', riskReward = 2 } = params;
+  return runEngine({
+    data, params, initialCapital,
+    onNewDay: (ctx) => { ctx.londonHigh = null; ctx.londonLow = null; ctx.londonRange = 0; },
+    shouldEnter: (candle, ctx) => {
+      const hour = new Date(candle.datetime).getUTCHours();
+      if (hour >= sessionStart && hour < sessionEnd) {
+        if (ctx.londonHigh === null || candle.high > ctx.londonHigh) ctx.londonHigh = candle.high;
+        if (ctx.londonLow === null || candle.low < ctx.londonLow) ctx.londonLow = candle.low;
+        return null;
+      }
+      if (hour >= sessionEnd && ctx.londonHigh !== null && ctx.londonLow !== null) {
+        ctx.londonRange = ctx.londonHigh - ctx.londonLow;
+        const longBreakout = ctx.londonHigh + breakoutBuffer;
+        const shortBreakout = ctx.londonLow - breakoutBuffer;
+        if ((direction === 'long' || direction === 'both') && candle.close > longBreakout) {
+          const stop = stopType === 'fixed' ? candle.close - stopValue : candle.close - (ctx.londonRange * stopValue);
+          return { enter: true, direction: 'long', stop, target: candle.close + (candle.close - stop) * riskReward };
+        }
+        if ((direction === 'short' || direction === 'both') && candle.close < shortBreakout) {
+          const stop = stopType === 'fixed' ? candle.close + stopValue : candle.close + (ctx.londonRange * stopValue);
+          return { enter: true, direction: 'short', stop, target: candle.close - (stop - candle.close) * riskReward };
+        }
+      }
+      return null;
+    },
+  });
+};
+
+/** RSI mean reversion: buy oversold, sell overbought, exit at RSI 50. */
+const runMeanReversion = (data, params, initialCapital) => {
+  const { rsiPeriod = 14, rsiOversold = 30, rsiOverbought = 70, direction = 'both', riskReward = 2, stopType = 'fixed', stopValue = 50 } = params;
+  const closes = data.map(c => c.close);
+  const rsi = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < rsiPeriod) { rsi.push(50); continue; }
+    let gains = 0, losses = 0;
+    for (let j = i - rsiPeriod + 1; j <= i; j++) {
+      const ch = closes[j] - closes[j - 1];
+      if (ch > 0) gains += ch; else losses -= ch;
+    }
+    const avgGain = gains / rsiPeriod;
+    const avgLoss = losses / rsiPeriod;
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    rsi.push(100 - 100 / (1 + rs));
+  }
+  return runEngine({
+    data, params, initialCapital,
+    shouldEnter: (candle, ctx, idx) => {
+      const r = rsi[idx];
+      if ((direction === 'long' || direction === 'both') && r < rsiOversold) {
+        const stop = fixedStop(candle.close, 'long', stopType, stopValue);
+        return { enter: true, direction: 'long', stop, target: candle.close + (candle.close - stop) * riskReward };
+      }
+      if ((direction === 'short' || direction === 'both') && r > rsiOverbought) {
+        const stop = fixedStop(candle.close, 'short', stopType, stopValue);
+        return { enter: true, direction: 'short', stop, target: candle.close - (stop - candle.close) * riskReward };
+      }
+      return null;
+    },
+    shouldExit: (candle, ctx, idx, tradeDirection) => {
+      const r = rsi[idx];
+      if (tradeDirection === 'long' && r >= 50) {
+        return { exit: true, price: candle.close, reason: 'RSI 50' };
+      }
+      if (tradeDirection === 'short' && r <= 50) {
+        return { exit: true, price: candle.close, reason: 'RSI 50' };
+      }
+      return null;
+    },
+  });
+};
+
+/** Moving Average crossover: buy when fast MA crosses above slow MA. */
+const runMACrossover = (data, params, initialCapital) => {
+  const { fastPeriod = 10, slowPeriod = 30, direction = 'both', riskReward = 2, stopType = 'fixed', stopValue = 50 } = params;
+  const closes = data.map(c => c.close);
+  const ma = (period, i) => {
+    if (i < period - 1) return null;
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) sum += closes[j];
+    return sum / period;
+  };
+  return runEngine({
+    data, params, initialCapital,
+    shouldEnter: (candle, ctx, idx) => {
+      const fast = ma(fastPeriod, idx);
+      const slow = ma(slowPeriod, idx);
+      const prevFast = ma(fastPeriod, idx - 1);
+      const prevSlow = ma(slowPeriod, idx - 1);
+      if (!fast || !slow || !prevFast || !prevSlow) return null;
+      if ((direction === 'long' || direction === 'both') && prevFast <= prevSlow && fast > slow) {
+        const stop = fixedStop(candle.close, 'long', stopType, stopValue);
+        return { enter: true, direction: 'long', stop, target: candle.close + (candle.close - stop) * riskReward };
+      }
+      if ((direction === 'short' || direction === 'both') && prevFast >= prevSlow && fast < slow) {
+        const stop = fixedStop(candle.close, 'short', stopType, stopValue);
+        return { enter: true, direction: 'short', stop, target: candle.close - (stop - candle.close) * riskReward };
+      }
+      return null;
+    },
+  });
+};
+
+const STRATEGY_RUNNERS = {
+  'asian-breakout': runAsianBreakout,
+  'london-breakout': runLondonBreakout,
+  'mean-reversion': runMeanReversion,
+  'ma-crossover': runMACrossover,
+};
+
+const runBacktest = (data, strategy, params, initialCapital) => {
+  const runner = STRATEGY_RUNNERS[strategy.id];
+  if (!runner) throw new Error(`Unknown strategy: ${strategy.id}`);
+  return runner(data, params, initialCapital);
+};
+
 export default function Backtest({ currentAccount }) {
   const { accent, setAccent, ac } = useAccent();
   const { theme } = useTheme();
@@ -378,6 +632,18 @@ export default function Backtest({ currentAccount }) {
   const [optimizationResults, setOptimizationResults] = useState([]);
   const [optimizationRunning, setOptimizationRunning] = useState(false);
   const [optimizationProgress, setOptimizationProgress] = useState(0);
+
+  // Saved backtest runs (persisted to localStorage)
+  const [savedRuns, setSavedRuns] = useState(() => {
+    try {
+      const raw = localStorage.getItem('forgexSavedBacktests');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('forgexSavedBacktests', JSON.stringify(savedRuns)); } catch {}
+  }, [savedRuns]);
 
   // CSV upload state
   const [fileName, setFileName] = useState('');
@@ -491,6 +757,13 @@ export default function Backtest({ currentAccount }) {
     setAllData(synthetic);
   };
 
+  const generateSampleData = () => {
+    setFileName('');
+    // Fixed seed → deterministic "sample" dataset that behaves like real market data
+    const sample = generateSymbolData(symbol, 200, `sample-${symbol}`);
+    setAllData(sample);
+  };
+
   // ─── Run Single Backtest ───────────────────────────────
   const runBacktestHandler = () => {
     if (!allData.length || !currentStrategy) return;
@@ -518,6 +791,103 @@ export default function Backtest({ currentAccount }) {
       setResults(result);
       setRunning(false);
     }, 400);
+  };
+
+  const saveRun = () => {
+    if (!results || !currentStrategy) return;
+    const name = window.prompt('Save this backtest run as:', `${currentStrategy.name} · ${symbol}`);
+    if (!name) return;
+    const run = {
+      id: Date.now().toString(),
+      name,
+      symbol,
+      strategyId: currentStrategy.id,
+      strategyName: currentStrategy.name,
+      params: { ...params },
+      stats: { ...results.stats },
+      startDate, endDate,
+      savedAt: new Date().toISOString(),
+    };
+    setSavedRuns(prev => [run, ...prev.slice(0, 49)]);
+  };
+
+  const loadSavedRun = (run) => {
+    setSymbol(run.symbol);
+    setStrategyId(run.strategyId);
+    setParams(run.params);
+    setStartDate(run.startDate);
+    setEndDate(run.endDate);
+    setResults({
+      trades: [],
+      equityCurve: [],
+      stats: run.stats,
+    });
+  };
+
+  const deleteSavedRun = (id) => {
+    if (!window.confirm('Delete this saved run?')) return;
+    setSavedRuns(prev => prev.filter(r => r.id !== id));
+  };
+
+  // ─── Push backtest trades into the journal ──────────────
+  const pushToJournal = async () => {
+    if (!results?.trades?.length) return;
+    const user = auth.currentUser;
+    if (!user || !currentAccount?.id) {
+      alert('No account selected.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Push ${results.trades.length} backtest trades into the journal for "${currentAccount.name}"?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const tradesCol = collection(db, "users", user.uid, "accounts", currentAccount.id, "trades");
+      const batch = writeBatch(db);
+      let ops = 0;
+
+      results.trades.forEach((t, i) => {
+        const direction = t.type === 'LONG' ? 'long' : 'short';
+        const pnl = Number(t.pnl || 0);
+        const rr = Number((t.takeProfit - t.entryPrice) / (t.entryPrice - t.stopLoss).toFixed(4) || 0);
+        batch.set(doc(tradesCol), {
+          pair: symbol,
+          direction,
+          entry: t.entryPrice,
+          exit: t.exitPrice,
+          stopLoss: t.stopLoss,
+          takeProfit: t.takeProfit,
+          pnl,
+          rr: isFinite(rr) ? rr : undefined,
+          status: 'executed',
+          openDateTime: t.entryDate,
+          closeDateTime: t.exitDate || t.entryDate,
+          lotSize: 1,
+          confluences: ['backtest'],
+          screenshotUrl: '',
+          playbook: 'Backtest',
+          playbookId: null,
+          strategy: currentStrategy?.name || 'Backtest',
+          notes: `Backtest: ${currentStrategy?.name || 'Backtest'} · exit: ${t.reason || '—'}`,
+          rating: 0,
+          mistakes: [],
+          createdAt: serverTimestamp(),
+          source: 'backtest',
+        });
+        ops++;
+        if (ops >= 400) {
+          // batch.commit() is handled below; Firestore writeBatch auto-commits on call
+        }
+      });
+
+      await batch.commit();
+      alert(`Pushed ${results.trades.length} trades to the journal.`);
+    } catch (err) {
+      console.error('Push to journal failed:', err);
+      alert('Failed to push trades: ' + (err?.message || err));
+    }
   };
 
   // ─── Optimization ───────────────────────────────────────
@@ -772,13 +1142,29 @@ export default function Backtest({ currentAccount }) {
             </Button>
 
             {results && (
-              <Button
-                onClick={exportToCSV}
-                variant="outline"
-                className={`border font-semibold ${DIVIDER}`}
-              >
-                <Download className="mr-2 h-4 w-4" /> Export CSV
-              </Button>
+              <>
+                <Button
+                  onClick={saveRun}
+                  variant="outline"
+                  className={`border font-semibold ${DIVIDER}`}
+                >
+                  <Save className="mr-2 h-4 w-4" /> Save run
+                </Button>
+                <Button
+                  onClick={exportToCSV}
+                  variant="outline"
+                  className={`border font-semibold ${DIVIDER}`}
+                >
+                  <Download className="mr-2 h-4 w-4" /> Export CSV
+                </Button>
+                <Button
+                  onClick={pushToJournal}
+                  variant="outline"
+                  className={`border font-semibold ${DIVIDER}`}
+                >
+                  <Upload className="mr-2 h-4 w-4" /> Push to journal
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -867,9 +1253,14 @@ export default function Backtest({ currentAccount }) {
                 </div>
               </div>
 
-              <Button onClick={generateSyntheticData} variant="outline" className={`w-full border font-semibold ${DIVIDER}`}>
-                Use synthetic data
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={generateSampleData} variant="outline" className={`flex-1 border font-semibold ${DIVIDER}`}>
+                  Load sample data
+                </Button>
+                <Button onClick={generateSyntheticData} variant="outline" className={`flex-1 border font-semibold ${DIVIDER}`}>
+                  Use synthetic data
+                </Button>
+              </div>
 
               {/* Dynamic Parameters */}
               {paramFields.map(field => {
@@ -961,6 +1352,61 @@ export default function Backtest({ currentAccount }) {
                           <td className="px-4 py-2.5 tabular-nums">{res.totalTrades}</td>
                           <td className="px-4 py-2.5 text-right">
                             <Button size="sm" onClick={() => loadOptimizationResult(res.params)}>Load</Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+
+            {/* Saved runs comparison */}
+            {savedRuns.length > 0 && (
+              <Card className={`${CARD} p-0`}>
+                <div className={`flex items-center justify-between border-b px-4 py-3 ${DIVIDER}`}>
+                  <h2 className={`text-[15px] font-semibold ${HEAD}`}>Saved runs</h2>
+                  <span className={`ml-auto text-xs ${MUTED}`}>Compare side by side</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className={`border-b text-left text-[11px] font-semibold uppercase tracking-wide ${DIVIDER} ${MUTED}`}>
+                        <th className="px-4 py-2.5">Name</th>
+                        <th className="px-4 py-2.5">Symbol</th>
+                        <th className="px-4 py-2.5">Strategy</th>
+                        <th className="px-4 py-2.5">Return %</th>
+                        <th className="px-4 py-2.5">Win rate</th>
+                        <th className="px-4 py-2.5">Max DD</th>
+                        <th className="px-4 py-2.5">Trades</th>
+                        <th className="px-4 py-2.5 text-right" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedRuns.map((run) => (
+                        <tr
+                          key={run.id}
+                          className={`border-b transition-colors last:border-0 hover:bg-[#f7f8fc] dark:hover:bg-[#101024] ${DIVIDER}`}
+                        >
+                          <td className="px-4 py-2.5 font-semibold">{run.name}</td>
+                          <td className="px-4 py-2.5 tabular-nums">{run.symbol}</td>
+                          <td className="px-4 py-2.5">{run.strategyName}</td>
+                          <td className={`px-4 py-2.5 font-semibold tabular-nums ${parseFloat(run.stats.returnPercent) >= 0 ? POS_T : NEG_T}`}>
+                            {run.stats.returnPercent}%
+                          </td>
+                          <td className="px-4 py-2.5 tabular-nums">{run.stats.winRate}%</td>
+                          <td className="px-4 py-2.5 tabular-nums">{run.stats.maxDrawdown}%</td>
+                          <td className="px-4 py-2.5 tabular-nums">{run.stats.totalTrades}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <Button size="sm" onClick={() => loadSavedRun(run)}>Load</Button>
+                            <Button
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); deleteSavedRun(run.id); }}
+                              variant="outline"
+                              className={`border border-[#f2556e]/40 text-[#d93a57] hover:bg-[#f2556e]/10`}
+                            >
+                              <Trash2 size={13} />
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -1112,7 +1558,7 @@ export default function Backtest({ currentAccount }) {
         </div>
 
         <p className={`mt-6 text-center text-xs ${MUTED}`}>
-          * Synthetic data – replace with real CSV for accurate backtesting.
+          * Sample (seeded) or synthetic data – upload a real CSV for accurate backtesting.
         </p>
       </div>
     </div>

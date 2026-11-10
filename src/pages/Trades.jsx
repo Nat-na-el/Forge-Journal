@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTheme } from "../Theme-provider";
 import {
   Trash2,
+  Target,
   Eye,
   Download,
   Upload,
@@ -1254,6 +1255,48 @@ export default function Trades({ currentAccount }) {
                         {selectedTrade.status === "pending" ? "Pending" : money(Number(selectedTrade.pnl || 0), true)}
                       </div>
                     </div>
+
+                      {(selectedTrade.mae != null || selectedTrade.mfe != null || selectedTrade.rr != null) && (
+                        <div className={`rounded-xl border p-4 ${DIVIDER}`}>
+                          <div className={`mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide ${MUTED}`}>
+                            <Target size={13} /> Risk & trade management
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            {selectedTrade.rr != null && (
+                              <div className={`rounded-lg border px-3 py-2 ${DIVIDER}`}>
+                                <div className={`text-[10px] font-medium ${MUTED}`}>Realised R</div>
+                                <div className={`mt-0.5 text-lg font-bold tabular-nums ${HEAD}`}>
+                                  {Number(selectedTrade.rr).toFixed(2)}R
+                                </div>
+                              </div>
+                            )}
+                            {selectedTrade.mae != null && (
+                              <div className={`rounded-lg border px-3 py-2 ${DIVIDER}`}>
+                                <div className={`text-[10px] font-medium ${MUTED}`}>MAE (R)</div>
+                                <div className={`mt-0.5 text-lg font-bold tabular-nums ${NEG_T}`}>
+                                  {Number(selectedTrade.mae).toFixed(2)}R
+                                </div>
+                              </div>
+                            )}
+                            {selectedTrade.mfe != null && (
+                              <div className={`rounded-lg border px-3 py-2 ${DIVIDER}`}>
+                                <div className={`text-[10px] font-medium ${MUTED}`}>MFE (R)</div>
+                                <div className={`mt-0.5 text-lg font-bold tabular-nums ${POS_T}`}>
+                                  {Number(selectedTrade.mfe).toFixed(2)}R
+                                </div>
+                              </div>
+                            )}
+                            {selectedTrade.mfe != null && selectedTrade.rr != null && (
+                              <div className={`rounded-lg border px-3 py-2 ${DIVIDER}`}>
+                                <div className={`text-[10px] font-medium ${MUTED}`}>Capture</div>
+                                <div className={`mt-0.5 text-lg font-bold tabular-nums ${HEAD}`}>
+                                  {(Number(selectedTrade.rr) / Number(selectedTrade.mfe) * 100).toFixed(0)}%
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                     {(Number(selectedTrade.rating) > 0 || selectedTrade.mistakes?.length > 0) && (
                       <div className={`rounded-xl border p-4 ${DIVIDER}`}>
