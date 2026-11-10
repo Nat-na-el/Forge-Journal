@@ -309,6 +309,7 @@ export default function Dashboard({ currentAccount }) {
   const [error, setError] = useState(null);
   const [viewDate, setViewDate] = useState(new Date());
   const [showQuickAnalysis, setShowQuickAnalysis] = useState(false);
+  const [bottomTab, setBottomTab] = useState("recent");
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState({ text: "", type: "" });
   const [accent, setAccent] = useState(() => {
@@ -765,6 +766,13 @@ export default function Dashboard({ currentAccount }) {
     return [...trades].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8);
   }, [trades]);
 
+  // ─── Open positions (trades that have not been closed yet) ────
+  const openPositions = useMemo(() => {
+    return [...trades]
+      .filter((t) => /open|pending|active/i.test(String(t.status || "")))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [trades]);
+
   // ─── All-time total PnL ──────────────────────────────────────
   const allTimePnL = useMemo(() => {
     if (!trades.length) return 0;
@@ -1102,7 +1110,8 @@ export default function Dashboard({ currentAccount }) {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div className="min-w-0">
             <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${HEAD}`}>Dashboard</h1>
-            <p className={`mt-1 text-sm flex flex-wrap items-center gap-x-2 gap-y-1 ${MUTED}`}>
+            <p className={`mt-1 text-sm font-semibold ${HEAD}`}>Good morning!</p>
+            <p className={`mt-0.5 text-sm flex flex-wrap items-center gap-x-2 gap-y-1 ${MUTED}`}>
               <span>Forgex</span>
               <span aria-hidden="true">/</span>
               <span className="font-medium">{currentAccount?.name || "Account"}</span>
@@ -1155,7 +1164,15 @@ export default function Dashboard({ currentAccount }) {
               className={`flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
             >
               <Zap size={15} />
-              Quick analysis
+              Ask Zella AI
+            </button>
+
+            <button
+              onClick={() => navigate("/trades/new")}
+              className={`flex items-center gap-2 rounded-lg bg-[#6C47FF] px-3.5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#5b37e8] ${FOCUS}`}
+            >
+              <Plus size={15} />
+              Import your trades
             </button>
 
             {/* Accent picker */}
@@ -1222,7 +1239,7 @@ export default function Dashboard({ currentAccount }) {
         ) : (
           <>
             {/* ───────── KPI row ───────── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4 mb-4">
               <Kpi
                 title="Net P&L"
                 hint="Total profit and loss for the selected month"
@@ -1329,6 +1346,33 @@ export default function Dashboard({ currentAccount }) {
                   <span className={NEG_T}>-{money(perf.avgLoss, false)}</span>
                 </div>
               </Kpi>
+
+              <Kpi
+                title="Current streak"
+                hint="Consecutive winning or losing trades"
+                value={
+                  currentStreak.type === "None"
+                    ? "—"
+                    : `${currentStreak.count} ${currentStreak.type}${currentStreak.count === 1 ? "" : "s"}`
+                }
+                valueClass={
+                  currentStreak.type === "Win" ? POS_T : currentStreak.type === "Loss" ? NEG_T : HEAD
+                }
+                visual={
+                  <Flame
+                    size={26}
+                    className={
+                      currentStreak.type === "Win"
+                        ? "text-[#22c493]"
+                        : currentStreak.type === "Loss"
+                        ? "text-[#f2556e]"
+                        : "opacity-30"
+                    }
+                  />
+                }
+              >
+                <div className={`text-xs ${MUTED}`}>Most recent closed trades</div>
+              </Kpi>
             </div>
 
             {/* ───────── Month at a glance ───────── */}
@@ -1344,9 +1388,10 @@ export default function Dashboard({ currentAccount }) {
               </div>
             </div>
 
-            {/* ───────── Radar + Cumulative P&L ───────── */}
+            {/* ───────── Cumulative P&L + side widget column ───────── */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4">
-              <Card className={`${CARD} xl:col-span-4 p-0`}>
+              <div className="order-2 flex flex-col gap-4 xl:order-2 xl:col-span-4">
+              <Card className={`${CARD} p-0`}>
                 <CardHead
                   icon={Target}
                   accent={ac.hex}
@@ -1386,7 +1431,86 @@ export default function Dashboard({ currentAccount }) {
                 </div>
               </Card>
 
-              <Card className={`${CARD} xl:col-span-8 p-0`}>
+              {/* Account balance & P&L */}
+              <Card className={`${CARD} p-0`}>
+                <CardHead
+                  icon={Wallet}
+                  accent={ac.hex}
+                  title="Account balance"
+                  sub="Live account equity"
+                  right={
+                    <span
+                      className={`rounded-md px-2 py-1 text-[11px] font-semibold tabular-nums ${
+                        Number(accountGrowth) >= 0
+                          ? "bg-[#22c493]/15 text-[#0e9f77] dark:text-[#2dd4a0]"
+                          : "bg-[#f2556e]/15 text-[#d93a57] dark:text-[#ff6b86]"
+                      }`}
+                    >
+                      {Number(accountGrowth) >= 0 ? "+" : ""}
+                      {accountGrowth}%
+                    </span>
+                  }
+                />
+                <div className="p-4 sm:p-5">
+                  <div className={`text-2xl font-bold tabular-nums ${HEAD}`}>${formatNumber(currentBalance)}</div>
+                  <div className={`mt-4 flex items-center justify-between border-t pt-3 text-sm ${DIVIDER}`}>
+                    <div>
+                      <div className={`text-[11px] ${MUTED}`}>Period P&L</div>
+                      <div className={`font-semibold tabular-nums ${pnlClass(netPnl)}`}>{money(netPnl)}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-[11px] ${MUTED}`}>All-time P&L</div>
+                      <div className={`font-semibold tabular-nums ${pnlClass(allTimePnL)}`}>{money(allTimePnL)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className={`flex items-center gap-1.5 text-xs ${MUTED}`}>
+                      <Flame
+                        size={14}
+                        className={
+                          currentStreak.type === "Win"
+                            ? "text-[#22c493]"
+                            : currentStreak.type === "Loss"
+                            ? "text-[#f2556e]"
+                            : ""
+                        }
+                      />
+                      Current streak
+                    </span>
+                    <span
+                      className={`text-xs font-bold ${
+                        currentStreak.type === "Win" ? POS_T : currentStreak.type === "Loss" ? NEG_T : MUTED
+                      }`}
+                    >
+                      {currentStreak.type === "None" ? "—" : `${currentStreak.count} ${currentStreak.type}`}
+                    </span>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Win % + expectancy mini cards */}
+              <div className="grid grid-cols-2 gap-4">
+                <Card className={`${CARD} p-4`}>
+                  <div className={`text-[11px] font-medium ${MUTED}`}>Trade win %</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <div className="h-[44px] w-[64px] shrink-0">
+                      <Gauge half isDark={isDark} values={[perf.wins, perf.breakeven, perf.losses]} colors={[POS, NEUTRAL, NEG]} />
+                    </div>
+                    <div className={`text-xl font-bold tabular-nums ${HEAD}`}>{Number(monthlyStats.winRate).toFixed(0)}%</div>
+                  </div>
+                  <div className={`mt-1 text-[10px] ${MUTED}`}>{perf.wins}W · {perf.losses}L</div>
+                </Card>
+                <Card className={`${CARD} p-4`}>
+                  <div className={`text-[11px] font-medium ${MUTED}`}>Trade expectancy</div>
+                  <div className={`mt-1 text-xl font-bold tabular-nums ${pnlClass(monthlyStats.expectancy)}`}>
+                    {money(monthlyStats.expectancy)}
+                  </div>
+                  <div className={`mt-1 text-[10px] ${MUTED}`}>avg R:R {monthlyStats.avgRR}</div>
+                </Card>
+              </div>
+              </div>
+
+              <Card className={`${CARD} order-1 xl:order-1 xl:col-span-8 p-0`}>
                 <CardHead
                   icon={LineChartIcon}
                   accent={ac.hex}
@@ -1457,16 +1581,18 @@ export default function Dashboard({ currentAccount }) {
               </Card>
 
               <Card className={`${CARD} xl:col-span-4 p-0`}>
-                <CardHead icon={Wallet} accent={ac.hex} title="Account overview" />
+                <CardHead icon={Activity} accent={ac.hex} title="Trade expectancy" />
                 <div className="p-4 sm:p-5">
-                  <div className={`text-xs ${MUTED}`}>Current balance</div>
-                  <div className={`mt-1 text-3xl font-bold tabular-nums ${HEAD}`}>${formatNumber(currentBalance)}</div>
+                  <div className={`text-xs ${MUTED}`}>Expected value per trade</div>
+                  <div className={`mt-1 text-3xl font-bold tabular-nums ${pnlClass(monthlyStats.expectancy)}`}>
+                    {money(monthlyStats.expectancy)}
+                  </div>
                   <div className="mt-5 space-y-3.5 text-sm">
                     {[
-                      ["Starting balance", `$${formatNumber(initialBalance)}`, HEAD],
-                      ["Total P&L (all-time)", money(allTimePnL), pnlClass(allTimePnL)],
-                      ["Account growth", `${Number(accountGrowth) >= 0 ? "+" : ""}${accountGrowth}%`, pnlClass(accountGrowth)],
-                      ["Created", format(accountCreatedAt, "dd MMM yyyy"), HEAD],
+                      ["Average win", money(perf.avgWin, false), POS_T],
+                      ["Average loss", `-${money(perf.avgLoss, false)}`, NEG_T],
+                      ["Win / loss ratio", payoffText, HEAD],
+                      ["Profit factor", monthlyStats.profitFactor, HEAD],
                     ].map(([label, value, cls]) => (
                       <div key={label} className={`flex items-center justify-between border-b pb-3 last:border-0 last:pb-0 ${DIVIDER}`}>
                         <span className={MUTED}>{label}</span>
@@ -1710,23 +1836,48 @@ export default function Dashboard({ currentAccount }) {
 
             {/* ───────── Recent trades ───────── */}
             <Card className={`${CARD} p-0 mb-10`}>
-              <CardHead
-                icon={Activity}
-                accent={ac.hex}
-                title="Recent trades"
-                right={
+              <div className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 ${DIVIDER}`}>
+                <div className="flex items-center gap-1">
                   <button
-                    onClick={() => navigate("/trades")}
-                    className={`flex items-center gap-1 text-sm font-semibold hover:underline ${FOCUS} rounded`}
-                    style={{ color: ac.hex }}
+                    onClick={() => setBottomTab("recent")}
+                    aria-pressed={bottomTab === "recent"}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${FOCUS} ${
+                      bottomTab === "recent"
+                        ? "bg-[#f1f2f8] dark:bg-[#1e1e3a] " + HEAD
+                        : MUTED + " hover:text-[#14142b] dark:hover:text-white"
+                    }`}
                   >
-                    View all
-                    <ChevronRight size={15} />
+                    Recent trades
                   </button>
-                }
-              />
+                  <button
+                    onClick={() => setBottomTab("open")}
+                    aria-pressed={bottomTab === "open"}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${FOCUS} ${
+                      bottomTab === "open"
+                        ? "bg-[#f1f2f8] dark:bg-[#1e1e3a] " + HEAD
+                        : MUTED + " hover:text-[#14142b] dark:hover:text-white"
+                    }`}
+                  >
+                    Open positions
+                    {openPositions.length > 0 && (
+                      <span className="ml-1.5 rounded-md bg-[#22c493]/15 px-1.5 py-0.5 text-[10px] tabular-nums text-[#0e9f77] dark:text-[#2dd4a0]">
+                        {openPositions.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+                <button
+                  onClick={() => navigate("/trades")}
+                  className={`flex items-center gap-1 rounded text-sm font-semibold hover:underline ${FOCUS}`}
+                  style={{ color: ac.hex }}
+                >
+                  View all
+                  <ChevronRight size={15} />
+                </button>
+              </div>
 
-              {recentTrades.length === 0 ? (
+              {bottomTab === "recent" ? (
+                recentTrades.length === 0 ? (
                 <div className={`py-14 text-center text-sm ${MUTED}`}>No trades yet. Add one with the + button.</div>
               ) : (
                 <div className="overflow-x-auto">
@@ -1743,6 +1894,64 @@ export default function Dashboard({ currentAccount }) {
                     </thead>
                     <tbody>
                       {recentTrades.map((trade, i) => {
+                        const p = Number(trade.pnl) || 0;
+                        const isLong = /buy|long/i.test(String(trade.direction || ""));
+                        return (
+                          <tr
+                            key={trade.id || i}
+                            onClick={() => navigate(`/trades?date=${format(new Date(trade.date), "yyyy-MM-dd")}`)}
+                            className={`cursor-pointer border-b last:border-0 transition-colors hover:bg-[#f7f8fc] dark:hover:bg-[#1b1b36] ${DIVIDER}`}
+                          >
+                            <td className={`px-4 sm:px-5 py-3.5 whitespace-nowrap ${MUTED}`}>
+                              {format(new Date(trade.date), "dd MMM yyyy, HH:mm")}
+                            </td>
+                            <td className={`px-3 py-3.5 font-semibold ${HEAD}`}>{trade.pair || "—"}</td>
+                            <td className="px-3 py-3.5">
+                              <span
+                                className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
+                                  isLong
+                                    ? "bg-[#22c493]/15 text-[#0e9f77] dark:text-[#2dd4a0]"
+                                    : "bg-[#f2556e]/15 text-[#d93a57] dark:text-[#ff6b86]"
+                                }`}
+                              >
+                                {trade.direction || "—"}
+                              </span>
+                            </td>
+                            <td className={`px-3 py-3.5 hidden sm:table-cell text-right tabular-nums ${MUTED}`}>
+                              {trade.lotSize ?? "—"}
+                            </td>
+                            <td className={`px-3 py-3.5 hidden sm:table-cell text-right tabular-nums ${MUTED}`}>
+                              {trade.rr ? Number(trade.rr).toFixed(2) : "—"}
+                            </td>
+                            <td className={`px-4 sm:px-5 py-3.5 text-right font-bold tabular-nums ${pnlClass(p)}`}>
+                              {money(p)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+              ) : openPositions.length === 0 ? (
+                <div className={`py-14 text-center text-sm ${MUTED}`}>
+                  No open positions. Trades appear here while they are still running.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead>
+                      <tr className={`border-b text-left text-xs font-medium ${MUTED} ${DIVIDER}`}>
+                        <th className="px-4 sm:px-5 py-3 font-medium">Opened</th>
+                        <th className="px-3 py-3 font-medium">Symbol</th>
+                        <th className="px-3 py-3 font-medium">Side</th>
+                        <th className="px-3 py-3 font-medium hidden sm:table-cell text-right">Lots</th>
+                        <th className="px-3 py-3 font-medium hidden sm:table-cell text-right">R:R</th>
+                        <th className="px-4 sm:px-5 py-3 font-medium text-right">Unrealised</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {openPositions.map((trade, i) => {
                         const p = Number(trade.pnl) || 0;
                         const isLong = /buy|long/i.test(String(trade.direction || ""));
                         return (
