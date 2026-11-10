@@ -8,6 +8,14 @@ import { auth, db } from "../firebase";
 const ENDPOINT = "/.netlify/functions/mt5";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Netlify caps each function call at a few seconds, and MetaApi can occasionally take
+// longer than that while a fresh account is being provisioned. Those replies are
+// transient: the safe move is to retry the same request instead of failing the flow.
+const isTransient = (e) =>
+  /did not respond in time|Failed to fetch|NetworkError|Request failed \(5(02|03|04)\)/i.test(
+    e?.message || ""
+  );
+
 async function call(payload) {
   const user = auth.currentUser;
   if (!user) throw new Error("Please sign in first.");
@@ -45,7 +53,21 @@ export const mt5AccountId = (login) => `mt5-${login}`;
 export async function connectMT5Account({ server, login, password }, onProgress = () => {}) {
   const payload = { action: "connect", server: server.trim(), login: String(login).trim(), password };
   onProgress("Checking credentials…");
-  let r = await call(payload);
+  let r;
+  const firstStart = Date.now();
+  for (;;) {
+    try {
+      r = await call(payload);
+      break;
+    } catch (e) {
+      // A slow cold start / broker lookup can exceed Netlify's per-call limit. The
+      // request uses a fixed transaction id, so retrying cannot create duplicates.
+      if (!isTransient(e)) throw e;
+      if (Date.now() - firstStart > 4 * 60 * 1000) throw e;
+      onProgress("MetaApi is slow to respond — still checking…");
+      await sleep(5000);
+    }
+  }
 
   // MetaApi may need a while to look up the broker server; keep asking (same request, safe to repeat)
   const setupStart = Date.now();
@@ -55,7 +77,12 @@ export async function connectMT5Account({ server, login, password }, onProgress 
     }
     onProgress("Setting up your account with MetaApi… this can take a minute the first time.");
     await sleep(5000);
-    r = await call(payload);
+    try {
+      r = await call(payload);
+    } catch (e) {
+      if (!isTransient(e)) throw e;
+      onProgress("MetaApi is slow to respond — still trying…");
+    }
   }
 
   if (r.status === "pending") {
@@ -68,7 +95,12 @@ export async function connectMT5Account({ server, login, password }, onProgress 
           throw new Error("Couldn't connect. Check the server name, account number and investor password.");
         }
         await sleep(4000);
-        r = await call({ action: "status", ticket });
+        try {
+          r = await call({ action: "status", ticket });
+        } catch (e) {
+          if (!isTransient(e)) throw e;
+          onProgress("MetaApi is slow to respond — still connecting…");
+        }
       }
     } catch (e) {
       call({ action: "cancel", ticket }).catch(() => {});
@@ -92,7 +124,13 @@ export async function syncMT5Account({ login, server }, onProgress = () => {}) {
   const startedAt = Date.now();
   for (;;) {
     onProgress("Fetching trades from MetaTrader…");
-    result = await call({ action: "sync", login: String(login) });
+    try {
+      result = await call({ action: "sync", login: String(login) });
+    } catch (e) {
+      if (!isTransient(e)) throw e;
+      result = { status: "warming" };
+      onProgress("MetaApi is slow to respond — still fetching…");
+    }
     if (result.status === "ok") break;
     if (Date.now() - startedAt > 2 * 60 * 1000) throw new Error("MetaTrader is taking too long to respond. Try again shortly.");
     onProgress("Waking up your MetaTrader connection…");

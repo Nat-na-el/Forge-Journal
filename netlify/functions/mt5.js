@@ -235,9 +235,11 @@ async function actionConnect(body, ip) {
     return { status: "pending", ticket: signTicket({ uid, login, accountId: saved.accountId }) };
   }
 
-  if (!resuming) {
-    // clear leftovers from earlier attempts so we never pile up duplicate MetaApi accounts
-    if (saved && saved.accountId) await deleteMetaAccount(saved.accountId);
+  if (!resuming && saved) {
+    // Clear leftovers from earlier attempts so we never pile up duplicate MetaApi accounts.
+    // Skipped on the very first attempt: a fresh (user, login) can't have leftovers, and the
+    // extra lookup would eat into Netlify's per-request time budget.
+    if (saved.accountId) await deleteMetaAccount(saved.accountId);
     try {
       const { data } = await meta(`${PROVISIONING}/users/current/accounts?query=${encodeURIComponent(metaName(uid, login))}`);
       const list = Array.isArray(data) ? data : (data && data.items) || [];
