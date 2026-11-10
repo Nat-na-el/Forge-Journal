@@ -1217,6 +1217,13 @@ export default function Trades({ currentAccount }) {
                       ["Stop loss", selectedTrade.stopLoss || "—"],
                       ["Take profit", selectedTrade.takeProfit || "—"],
                       ["Risk : reward", selectedTrade.status === "pending" ? "—" : selectedTrade.rr || "—"],
+                      [
+                        "Playbook / strategy",
+                        [selectedTrade.playbook, selectedTrade.strategy]
+                          .map((value) => (value || "").trim())
+                          .filter((value, index, all) => value && all.indexOf(value) === index)
+                          .join(" · ") || "—",
+                      ],
                     ].map(([label, value]) => (
                       <div key={label}>
                         <div className={`text-[11px] font-medium ${MUTED}`}>{label}</div>
