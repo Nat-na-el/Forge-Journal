@@ -1,2184 +1,1372 @@
-import React, { useEffect, useMemo, useState } from "react";
+// src/pages/Dashboard.jsx
+// TradeZella-style dashboard: KPI strip, cumulative P&L, Zella score radar,
+// monthly P&L calendar and the recent-trade strip. The reference dashboard is
+// dark in every theme, so this page keeps its own dark surface.
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   addMonths,
-  subMonths,
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
   eachDayOfInterval,
+  endOfMonth,
   format,
-  isSameMonth,
-  isToday,
-  subWeeks,
+  isWithinInterval,
+  startOfMonth,
+  subDays,
 } from "date-fns";
-import { Card } from "../components/ui/card";
-import { useNavigate } from "react-router-dom";
-import { syncMT5Account } from "../lib/mt5client";
-import { useTheme } from "../Theme-provider";
+import { collection, getDocs } from "firebase/firestore";
+import { auth, db } from "../firebase";
 import {
-  TrendingUp,
-  Activity,
-  Zap,
-  BarChart3,
-  DollarSign,
-  X,
-  Lightbulb,
-  AlertCircle,
-  CheckCircle,
   ArrowUpRight,
-  ArrowDownRight,
-  RefreshCw,
-  Palette,
-  SlidersHorizontal,
-  Target,
-  LineChart as LineChartIcon,
+  BarChart3,
+  BookMarked,
+  Calculator,
+  CalendarDays,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Flame,
-  Wallet,
-  CalendarDays,
-  Plus,
+  Copy,
+  ExternalLink,
+  Filter,
+  FolderOpen,
+  Info,
+  Settings,
+  Sparkles,
+  Sunrise,
 } from "lucide-react";
-import {
-  Chart as ChartJS,
-  RadialLinearScale,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Filler,
-  Tooltip,
-  Legend,
-} from "chart.js";
-import { Radar, Line, Bar, Doughnut } from "react-chartjs-2";
-import { db, auth } from "../firebase";
-import {
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  doc,
-  getDoc,
-} from "firebase/firestore";
+import useAccent from "../hooks/useAccent";
 
-ChartJS.register(
-  RadialLinearScale,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Filler,
-  Tooltip,
-  Legend
-);
-
-// ────────────────────────────────────────────────
-// Design tokens – Tradezella-style surfaces
-// ────────────────────────────────────────────────
+// ─── Palette (matches the reference dashboard) ───────────────────────────────
+const BG = "#08080d";
+const CARD = "#101016";
+const CARD_ALT = "#15151d";
+const BORDER = "#1e1e28";
+const TEXT = "#e9e9f2";
+const MUTED = "#8b8ba3";
+const FAINT = "#66667c";
 const POS = "#22c493";
 const NEG = "#f2556e";
-const NEUTRAL = "#7c8cf8";
+const BE = "#6C47FF";
 
-const POS_T = "text-[#0e9f77] dark:text-[#2dd4a0]";
-const NEG_T = "text-[#d93a57] dark:text-[#ff6b86]";
-const MUTED = "text-[#6b7090] dark:text-[#8a8fb5]";
-const HEAD = "text-[#14142b] dark:text-white";
-const DIVIDER = "border-[#e6e8f2] dark:border-[#262645]";
-const CARD =
-  "gap-0 rounded-xl bg-white dark:bg-[#15152b] border border-[#e6e8f2] dark:border-[#262645] shadow-sm dark:shadow-none";
-const PANEL =
-  "rounded-xl border border-[#e6e8f2] dark:border-[#262645] bg-[#f7f8fc] dark:bg-[#101024]";
-const FOCUS =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF]";
-
-// Accent themes (the light / dark mode still follows the app theme)
-const ACCENTS = {
-  zella: { name: "Zella", hex: "#6C47FF", hex2: "#9b7bff" },
-  indigo: { name: "Indigo", hex: "#6366f1", hex2: "#a855f7" },
-  emerald: { name: "Emerald", hex: "#10b981", hex2: "#06b6d4" },
-  cyan: { name: "Ocean", hex: "#06b6d4", hex2: "#3b82f6" },
-  amber: { name: "Amber", hex: "#f59e0b", hex2: "#ef4444" },
-  rose: { name: "Rose", hex: "#f43f5e", hex2: "#ec4899" },
-};
-
-const RADAR_LABELS = ["Win Rate", "Profit Factor", "Avg R:R", "Payoff", "Green Days", "Recovery"];
-
-// Right-hand widget column: user-customisable, persisted locally.
-const WIDGET_STORAGE_KEY = "forgexDashboardWidgets";
-const DEFAULT_WIDGETS = { radar: true, balance: true, winrate: true, expectancy: true };
-const WIDGET_OPTIONS = [
-  { key: "radar", label: "Zella score radar", desc: "Edge score across six dimensions" },
-  { key: "balance", label: "Account balance & P&L", desc: "Live equity, period and all-time P&L" },
-  { key: "winrate", label: "Trade win %", desc: "Win / breakeven / loss split" },
-  { key: "expectancy", label: "Trade expectancy", desc: "Average expected value per trade" },
+const PERIODS = [
+  ["this-month", "This month"],
+  ["last-30", "Last 30 days"],
+  ["this-year", "This year"],
+  ["all", "All time"],
 ];
 
-// A trade's date, whichever field the page that saved it used
-const tDate = (t) => t?.date || t?.openDateTime || t?.closeDateTime || "";
+const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF]";
+const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 rounded-lg border border-[#242433] bg-[#101016] px-3 text-[12px] font-medium text-[#c7c7d6] transition-colors hover:border-[#33334a] hover:text-white ${FOCUS}`;
+const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg border border-[#242433] bg-[#101016] text-[#8b8ba3] transition-colors hover:text-white ${FOCUS}`;
+const PANEL = `rounded-xl border border-[#1e1e28] bg-[#101016]`;
 
-// ────────────────────────────────────────────────
-// Small helpers
-// ────────────────────────────────────────────────
-const formatNumber = (num) => {
-  if (num === undefined || num === null || Number.isNaN(Number(num))) return "0.00";
-  return Number(num).toLocaleString("en-US", {
+// ─── Numbers & dates ─────────────────────────────────────────────────────────
+const clamp = (value, min = 0, max = 100) => Math.min(max, Math.max(min, Number(value) || 0));
+
+const usd = (value, signed = false) => {
+  const n = Number(value) || 0;
+  const sign = n < 0 ? "-" : signed && n > 0 ? "+" : "";
+  return `${sign}$${Math.abs(n).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  });
+  })}`;
 };
 
-const money = (v, signed = true) => {
-  const n = Number(v) || 0;
-  const sign = n < 0 ? "-" : signed && n > 0 ? "+" : "";
-  return `${sign}$${formatNumber(Math.abs(n))}`;
+const usdAxis = (value) => {
+  const n = Number(value) || 0;
+  const sign = n < 0 ? "-" : "";
+  return `${sign}$${Math.round(Math.abs(n)).toLocaleString("en-US")}`;
 };
 
-const pnlClass = (v) => (Number(v) >= 0 ? POS_T : NEG_T);
-
-const fmtAxis = (v) => {
-  const a = Math.abs(v);
-  const s = a >= 1000 ? `${(a / 1000).toFixed(a >= 10000 ? 0 : 1)}k` : a;
-  return `${v < 0 ? "-" : ""}$${s}`;
+// "$1.05K", "-$638", "$37.5" — the calendar / weekly rail style.
+const usdCell = (value) => {
+  const n = Number(value) || 0;
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs >= 1000) {
+    return `${sign}$${(abs / 1000).toFixed(2).replace(/\.?0+$/, "")}K`;
+  }
+  if (abs >= 100) return `${sign}$${Math.round(abs)}`;
+  return `${sign}$${abs.toFixed(1).replace(/\.0$/, "")}`;
 };
 
-// ────────────────────────────────────────────────
-// Animated number component
-// ────────────────────────────────────────────────
-const AnimatedNumber = ({ value, duration = 1200, decimals = 2 }) => {
-  const [display, setDisplay] = useState(0);
+const pct = (value, digits = 2) => `${(Number(value) || 0).toFixed(digits)}%`;
 
-  useEffect(() => {
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
-      setDisplay(value);
-      return undefined;
-    }
-    let raf;
-    const start = performance.now();
-    const step = (timestamp) => {
-      const progress = Math.min((timestamp - start) / duration, 1);
-      setDisplay(value * progress);
-      if (progress < 1) raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [value, duration]);
-
-  return (
-    <>
-      {Number(display).toLocaleString("en-US", {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
-      })}
-    </>
-  );
+const parseDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value?.toDate === "function") {
+    const d = value.toDate();
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const text = String(value);
+  const d = new Date(text.length <= 10 ? `${text}T12:00:00` : text);
+  return Number.isNaN(d.getTime()) ? null : d;
 };
 
-// Half / full ring built on a doughnut chart
-const Gauge = ({ values, colors, isDark, half = false }) => {
-  const total = values.reduce((a, b) => a + b, 0);
-  const empty = isDark ? "#262645" : "#e6e8f2";
-  const data = {
-    datasets: [
-      {
-        data: total ? values : [1],
-        backgroundColor: total ? colors : [empty],
-        borderWidth: 0,
-        spacing: total ? 2 : 0,
-        borderRadius: total ? 3 : 0,
-      },
-    ],
-  };
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: "78%",
-    rotation: half ? -90 : 0,
-    circumference: half ? 180 : 360,
-    events: [],
-    animation: { duration: 800 },
-    plugins: { legend: { display: false }, tooltip: { enabled: false } },
-  };
-  return <Doughnut data={data} options={options} />;
-};
+const tradeDateOf = (trade) =>
+  parseDate(trade?.closeDateTime) || parseDate(trade?.openDateTime) || parseDate(trade?.date);
 
-const Chip = ({ color, children }) => (
-  <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tabular-nums bg-[#f1f2f8] dark:bg-[#1e1e3a] text-[#3b3f5e] dark:text-[#c9ccea]">
-    <i className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
-    {children}
-  </span>
-);
-
-const CardHead = ({ icon: Icon, title, sub, right, accent }) => (
-  <div className={`flex items-start justify-between gap-3 border-b px-4 sm:px-5 py-3.5 ${DIVIDER}`}>
-    <div className="min-w-0">
-      <h3 className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
-        {Icon && <Icon className="h-4 w-4 shrink-0" style={{ color: accent }} />}
-        {title}
-      </h3>
-      {sub && <p className={`mt-0.5 text-xs ${MUTED}`}>{sub}</p>}
-    </div>
-    {right}
-  </div>
-);
-
-const Kpi = ({ title, hint, badge, value, valueClass, visual, children }) => (
-  <Card className={`${CARD} p-4`}>
-    <div className="flex items-center justify-between gap-2">
-      <span className={`text-[13px] font-medium ${MUTED}`} title={hint}>
-        {title}
-      </span>
-      {badge}
-    </div>
-    <div className="mt-3 flex items-end justify-between gap-2">
-      <div className={`text-[26px] leading-none font-bold tabular-nums ${valueClass}`}>{value}</div>
-      {visual}
-    </div>
-    {children && <div className="mt-3.5">{children}</div>}
-  </Card>
-);
-
-// Scores a list of trades on six axes (each 0–100) for the spider-web chart
-function computeEdge(list) {
-  const n = list.length;
-  if (!n) return null;
-  const sorted = [...list].sort((a, b) => new Date(a.date) - new Date(b.date));
-  const pnls = sorted.map((t) => Number(t.pnl) || 0);
+// ─── Aggregation ─────────────────────────────────────────────────────────────
+function summarize(trades) {
+  const executed = trades.filter((t) => t && t.status !== "pending");
+  const pnls = executed.map((t) => Number(t.pnl) || 0);
   const wins = pnls.filter((p) => p > 0);
   const losses = pnls.filter((p) => p < 0);
-  const grossW = wins.reduce((a, b) => a + b, 0);
-  const grossL = Math.abs(losses.reduce((a, b) => a + b, 0));
-  const net = grossW - grossL;
+  const grossWin = wins.reduce((a, b) => a + b, 0);
+  const grossLoss = Math.abs(losses.reduce((a, b) => a + b, 0));
+  const net = pnls.reduce((a, b) => a + b, 0);
+  const avgWin = wins.length ? grossWin / wins.length : 0;
+  const avgLoss = losses.length ? grossLoss / losses.length : 0;
 
-  const winRate = (wins.length / n) * 100;
-  const pf = grossL ? grossW / grossL : grossW > 0 ? 3 : 0;
-  const avgRR = sorted.reduce((a, t) => a + (Number(t.rr) || 0), 0) / n;
-  const avgW = wins.length ? grossW / wins.length : 0;
-  const avgL = losses.length ? grossL / losses.length : 0;
-  const payoff = avgL ? avgW / avgL : avgW > 0 ? 3 : 0;
-
-  const days = {};
-  sorted.forEach((t) => {
-    const k = String(t.date).slice(0, 10);
-    days[k] = (days[k] || 0) + (Number(t.pnl) || 0);
-  });
-  const dayVals = Object.values(days);
-  const greenDays = (dayVals.filter((v) => v > 0).length / dayVals.length) * 100;
-
-  let cum = 0;
-  let peak = 0;
-  let maxDD = 0;
-  pnls.forEach((p) => {
-    cum += p;
-    peak = Math.max(peak, cum);
-    maxDD = Math.max(maxDD, peak - cum);
-  });
-  const recovery = maxDD ? net / maxDD : net > 0 ? 3 : 0;
-
-  const cap = (v) => Math.min(100, Math.max(0, v));
-  const scores = [
-    cap(winRate),
-    cap((pf / 3) * 100),
-    cap((avgRR / 3) * 100),
-    cap((payoff / 3) * 100),
-    cap(greenDays),
-    cap((recovery / 3) * 100),
-  ];
   return {
-    scores,
-    edge: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
-    raw: [
-      `${winRate.toFixed(0)}%`,
-      pf >= 3 ? "3+" : pf.toFixed(2),
-      avgRR.toFixed(2),
-      payoff >= 3 ? "3+" : payoff.toFixed(2),
-      `${greenDays.toFixed(0)}%`,
-      recovery >= 3 ? "3+" : recovery.toFixed(2),
-    ],
+    count: executed.length,
+    wins: wins.length,
+    losses: losses.length,
+    breakeven: executed.length - wins.length - losses.length,
+    winRate: executed.length ? (wins.length / executed.length) * 100 : 0,
+    net,
+    grossWin,
+    grossLoss,
+    avgWin,
+    avgLoss,
+    avgPnl: executed.length ? net / executed.length : 0,
+    payoff: avgLoss ? avgWin / avgLoss : avgWin ? 3 : 0,
+    profitFactor: grossLoss ? grossWin / grossLoss : grossWin ? 3 : 0,
+    best: pnls.length ? Math.max(...pnls) : 0,
+    worst: pnls.length ? Math.min(...pnls) : 0,
   };
 }
 
-// ────────────────────────────────────────────────
-// Main Dashboard Component – Forgex
-// ────────────────────────────────────────────────
-export default function Dashboard({ currentAccount }) {
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
-  const navigate = useNavigate();
-
-  const [trades, setTrades] = useState([]);
-  const [accountMeta, setAccountMeta] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [viewDate, setViewDate] = useState(new Date());
-  const [showQuickAnalysis, setShowQuickAnalysis] = useState(false);
-  const [bottomTab, setBottomTab] = useState("recent");
-  const [widgetPanelOpen, setWidgetPanelOpen] = useState(false);
-  const [widgets, setWidgets] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(WIDGET_STORAGE_KEY) || "null");
-      return saved && typeof saved === "object" ? { ...DEFAULT_WIDGETS, ...saved } : DEFAULT_WIDGETS;
-    } catch {
-      return DEFAULT_WIDGETS;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(widgets));
-    } catch {}
-  }, [widgets]);
-
-  const toggleWidget = (key) => setWidgets((prev) => ({ ...prev, [key]: !prev[key] }));
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState({ text: "", type: "" });
-  const [accent, setAccent] = useState(() => {
-    try {
-      const saved = localStorage.getItem("forgexAccent");
-      return ACCENTS[saved] ? saved : "zella";
-    } catch {
-      return "zella";
-    }
-  });
-  const [curveRange, setCurveRange] = useState("month");
-  const ac = ACCENTS[accent] || ACCENTS.zella;
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("forgexAccent", accent);
-    } catch {}
-  }, [accent]);
-
-  useEffect(() => {
-    if (!showQuickAnalysis && !widgetPanelOpen) return undefined;
-    const onKey = (e) => {
-      if (e.key !== "Escape") return;
-      if (widgetPanelOpen) setWidgetPanelOpen(false);
-      else setShowQuickAnalysis(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showQuickAnalysis, widgetPanelOpen]);
-
-  // ─── Fetch account metadata ───────────────────────────────────────
-  const fetchAccountMeta = async (user, accountId) => {
-    if (!user || !accountId) return null;
-    try {
-      const docRef = doc(db, "users", user.uid, "accounts", accountId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() };
-      }
-    } catch (err) {
-      console.error("Error fetching account meta:", err);
-    }
-    return null;
-  };
-
-  // ─── Fetch trades from the selected account's subcollection ───────
-  const refreshTrades = async () => {
-    const user = auth.currentUser;
-    if (!user) {
-      setTrades([]);
-      setAccountMeta(null);
-      setLoading(false);
-      setError("Please log in to view dashboard data");
-      return;
-    }
-
-    if (!currentAccount?.id) {
-      setTrades([]);
-      setAccountMeta(null);
-      setLoading(false);
-      setError("No account selected. Please create or select an account.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const meta = await fetchAccountMeta(user, currentAccount.id);
-      setAccountMeta(meta);
-
-      const q = query(
-        collection(db, "users", user.uid, "accounts", currentAccount.id, "trades"),
-        orderBy("createdAt", "desc")
-      );
-      const snapshot = await getDocs(q);
-      const loadedTrades = snapshot.docs.map((d) => {
-        const data = d.data();
-        const created = data.createdAt?.toDate?.();
-        return {
-          id: d.id,
-          ...data,
-          // works for trades saved with `date` or with openDateTime/closeDateTime
-          date: tDate(data) || (created ? created.toISOString() : new Date().toISOString()),
-        };
-      });
-      setTrades(loadedTrades);
-    } catch (err) {
-      console.error("❌ Dashboard fetch error:", err);
-      setError("Failed to load trades. " + (err.message || "Check connection"));
-      setTrades([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ─── Sync trades from MT5 using stored credentials ─────────────────
-  const syncFromMT5 = async () => {
-    if (!currentAccount?.id) {
-      setSyncMessage({ text: "No account selected", type: "error" });
-      setTimeout(() => setSyncMessage({ text: "", type: "" }), 3000);
-      return;
-    }
-
-    if (!currentAccount.mt5Connected) {
-      setSyncMessage({
-        text: "Please connect your MT5 account first (open the account menu and tap 'Connect MT5 account')",
-        type: "error",
-      });
-      setTimeout(() => setSyncMessage({ text: "", type: "" }), 5000);
-      return;
-    }
-
-    const user = auth.currentUser;
-    if (!user) {
-      setSyncMessage({ text: "Please log in first", type: "error" });
-      setTimeout(() => setSyncMessage({ text: "", type: "" }), 3000);
-      return;
-    }
-
-    setSyncing(true);
-    setSyncMessage({ text: "Syncing trades from MT5...", type: "info" });
-
-    try {
-      // MetaApi-based sync (read-only investor connection). Never creates duplicates.
-      const r = await syncMT5Account({ login: currentAccount.mt5Login, server: currentAccount.mt5Server });
-
-      setSyncMessage({
-        text: `Synced from MT5: ${r.added} new trade${r.added === 1 ? "" : "s"}, ${r.updated} updated.`,
-        type: "success",
-      });
-
-      await refreshTrades();
-    } catch (err) {
-      console.error("Sync failed:", err);
-      setSyncMessage({
-        text: err.message || "Failed to sync trades from MT5",
-        type: "error",
-      });
-    } finally {
-      setSyncing(false);
-      setTimeout(() => setSyncMessage({ text: "", type: "" }), 5000);
-    }
-  };
-
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        refreshTrades();
-      } else {
-        setTrades([]);
-        setAccountMeta(null);
-        setLoading(false);
-      }
+function equitySeries(trades) {
+  const points = [];
+  let running = 0;
+  trades
+    .filter((t) => t && t.status !== "pending" && tradeDateOf(t))
+    .slice()
+    .sort((a, b) => tradeDateOf(a) - tradeDateOf(b))
+    .forEach((trade) => {
+      running += Number(trade.pnl) || 0;
+      points.push({ date: tradeDateOf(trade), value: Number(running.toFixed(2)) });
     });
-    return () => unsubscribe();
-  }, [currentAccount]);
+  return points;
+}
 
-  // ─── Calendar month navigation ───────────────────────────────
-  const prevMonth = () => setViewDate((d) => subMonths(d, 1));
-  const nextMonth = () => setViewDate((d) => addMonths(d, 1));
-  const jumpTo = (y, m) => setViewDate(new Date(y, m - 1, 1));
-  const monthStart = startOfMonth(viewDate);
-  const monthEnd = endOfMonth(viewDate);
+function maxDrawdown(points) {
+  let peak = 0;
+  let worst = 0;
+  points.forEach((point) => {
+    peak = Math.max(peak, point.value);
+    worst = Math.max(worst, peak - point.value);
+  });
+  return worst;
+}
 
-  // ─── Monthly trades filtering & sorting ─────────────────────
-  const monthlyTrades = useMemo(() => {
-    return trades
-      .filter((t) => {
-        const td = new Date(t.date);
-        return td >= monthStart && td <= monthEnd;
-      })
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [trades, viewDate]);
-
-  // ─── Weekly trades for streak calculation ────────────────────
-  const weeklyTrades = useMemo(() => {
-    const ws = startOfWeek(new Date(), { weekStartsOn: 1 });
-    const we = endOfWeek(new Date(), { weekStartsOn: 1 });
-    return trades
-      .filter((t) => {
-        const td = new Date(t.date);
-        return td >= ws && td <= we;
-      })
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [trades]);
-
-  // ─── Current streak calculation ──────────────────────────────
-  const currentStreak = useMemo(() => {
-    let streak = { type: "None", count: 0 };
-    let current = null;
-    for (const trade of [...weeklyTrades].reverse()) {
+/** Net P&L, trade count and wins per calendar day. */
+function dayPnL(trades) {
+  const map = new Map();
+  trades
+    .filter((t) => t && t.status !== "pending")
+    .forEach((trade) => {
+      const date = tradeDateOf(trade);
+      if (!date) return;
+      const key = format(date, "yyyy-MM-dd");
+      const cell = map.get(key) || { net: 0, count: 0, wins: 0 };
       const pnl = Number(trade.pnl) || 0;
-      if (pnl === 0) continue;
-      if (current === null) {
-        current = pnl > 0 ? "Win" : "Loss";
-        streak = { type: current, count: 1 };
-      } else if ((pnl > 0 && current === "Win") || (pnl < 0 && current === "Loss")) {
-        streak.count += 1;
-      } else {
-        break;
-      }
-    }
-    return streak;
-  }, [weeklyTrades]);
-
-  // ─── Monthly stats calculation (core metrics) ────────────────
-  const monthlyStats = useMemo(() => {
-    if (!monthlyTrades.length) {
-      return {
-        totalPnL: 0,
-        winRate: "0.0",
-        profitFactor: "—",
-        expectancy: "0.00",
-        winCount: 0,
-        lossCount: 0,
-        totalTrades: 0,
-        avgPnL: "0.00",
-        bestDayPnL: 0,
-        bestDayDate: "—",
-        worstDayPnL: 0,
-        worstDayDate: "—",
-        avgRR: "0.00",
-        consistencyScore: 0,
-      };
-    }
-
-    const profits = monthlyTrades
-      .filter((t) => Number(t.pnl || 0) > 0)
-      .reduce((a, b) => a + Number(b.pnl || 0), 0);
-    const losses = monthlyTrades
-      .filter((t) => Number(t.pnl || 0) < 0)
-      .reduce((a, b) => a + Math.abs(Number(b.pnl || 0)), 0);
-    const profitFactor = losses ? (profits / losses).toFixed(2) : "∞";
-    const wins = monthlyTrades.filter((t) => Number(t.pnl || 0) > 0).length;
-    const total = monthlyTrades.length;
-    const winRate = ((wins / total) * 100).toFixed(1);
-    const expectancy = (
-      monthlyTrades.reduce((a, b) => a + Number(b.pnl || 0), 0) / total
-    ).toFixed(2);
-    const dailyPnL = {};
-    monthlyTrades.forEach((t) => {
-      const day = format(new Date(t.date), "yyyy-MM-dd");
-      dailyPnL[day] = (dailyPnL[day] || 0) + Number(t.pnl || 0);
+      cell.net += pnl;
+      cell.count += 1;
+      if (pnl > 0) cell.wins += 1;
+      map.set(key, cell);
     });
-    let bestDayPnL = 0;
-    let bestDayDate = "—";
-    let worstDayPnL = 0;
-    let worstDayDate = "—";
-    let bestWinningDayPnl = 0;
+  return map;
+}
 
-    if (Object.keys(dailyPnL).length > 0) {
-      const entries = Object.entries(dailyPnL);
-      const bestEntry = entries.reduce((max, curr) => (curr[1] > max[1] ? curr : max));
-      const worstEntry = entries.reduce((min, curr) => (curr[1] < min[1] ? curr : min));
-      bestDayPnL = bestEntry[1].toFixed(2);
-      bestDayDate = format(new Date(bestEntry[0]), "dd MMM");
-      worstDayPnL = worstEntry[1].toFixed(2);
-      worstDayDate = format(new Date(worstEntry[0]), "dd MMM");
+function streakStats(trades) {
+  const ordered = trades
+    .filter((t) => t && t.status !== "pending" && tradeDateOf(t))
+    .slice()
+    .sort((a, b) => tradeDateOf(a) - tradeDateOf(b));
 
-      const winningDays = entries.filter(([, pnl]) => pnl > 0);
-      if (winningDays.length) {
-        bestWinningDayPnl = Math.max(...winningDays.map(([, pnl]) => pnl));
-      }
-    }
-
-    const totalRR = monthlyTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0);
-    const avgRR = total ? (totalRR / total).toFixed(2) : "0.00";
-
-    const totalPnLNum = profits - losses;
-    let consistencyScore = 0;
-    if (totalPnLNum > 0 && bestWinningDayPnl > 0) {
-      consistencyScore = Math.min(100, (bestWinningDayPnl / totalPnLNum) * 100);
-    }
-
-    return {
-      totalPnL: totalPnLNum.toFixed(2),
-      winRate,
-      profitFactor,
-      expectancy,
-      winCount: wins,
-      lossCount: total - wins,
-      totalTrades: total,
-      avgPnL: (monthlyTrades.reduce((a, b) => a + Number(b.pnl || 0), 0) / total).toFixed(2),
-      bestDayPnL,
-      bestDayDate,
-      worstDayPnL,
-      worstDayDate,
-      avgRR,
-      consistencyScore: consistencyScore.toFixed(1),
-    };
-  }, [monthlyTrades]);
-
-  // ─── Detailed breakdown used by the gauges and the daily bar chart ───
-  const perf = useMemo(() => {
-    const pnls = monthlyTrades.map((t) => Number(t.pnl) || 0);
-    const winsArr = pnls.filter((p) => p > 0);
-    const lossArr = pnls.filter((p) => p < 0);
-    const grossW = winsArr.reduce((a, b) => a + b, 0);
-    const grossL = Math.abs(lossArr.reduce((a, b) => a + b, 0));
-    const avgWin = winsArr.length ? grossW / winsArr.length : 0;
-    const avgLoss = lossArr.length ? grossL / lossArr.length : 0;
-
-    const dayMap = {};
-    monthlyTrades.forEach((t) => {
-      const k = format(new Date(t.date), "yyyy-MM-dd");
-      dayMap[k] = (dayMap[k] || 0) + (Number(t.pnl) || 0);
-    });
-    const daily = Object.entries(dayMap)
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([key, pnl]) => ({ key, label: format(new Date(key), "dd MMM"), pnl: Number(pnl.toFixed(2)) }));
-    const greenDays = daily.filter((d) => d.pnl > 0).length;
-    const redDays = daily.filter((d) => d.pnl < 0).length;
-    const flatDays = daily.length - greenDays - redDays;
-
-    return {
-      wins: winsArr.length,
-      losses: lossArr.length,
-      breakeven: pnls.length - winsArr.length - lossArr.length,
-      grossW,
-      grossL,
-      avgWin,
-      avgLoss,
-      payoff: avgLoss ? avgWin / avgLoss : avgWin > 0 ? Infinity : 0,
-      daily,
-      greenDays,
-      redDays,
-      flatDays,
-      dayWinRate: daily.length ? (greenDays / daily.length) * 100 : 0,
-    };
-  }, [monthlyTrades]);
-
-  // ─── Monthly asset‑specific stats ─────────────────────────────
-  const monthlyAssetStats = useMemo(() => {
-    if (!monthlyTrades.length) {
-      return { topPair: "—", topPairCount: 0, totalLots: 0, assetPnL: [] };
-    }
-
-    const pairCount = {};
-    const pairPnL = {};
-    let totalLots = 0;
-
-    monthlyTrades.forEach((t) => {
-      const pair = t.pair || "Unknown";
-      pairCount[pair] = (pairCount[pair] || 0) + 1;
-      pairPnL[pair] = (pairPnL[pair] || 0) + Number(t.pnl || 0);
-      totalLots += Number(t.lotSize) || 0;
-    });
-
-    let topPair = "—";
-    let maxCount = 0;
-    Object.entries(pairCount).forEach(([p, c]) => {
-      if (c > maxCount) {
-        maxCount = c;
-        topPair = p;
-      }
-    });
-
-    const assetPnL = Object.entries(pairPnL)
-      .map(([pair, pnl]) => ({ pair, pnl }))
-      .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
-      .slice(0, 5);
-
-    return {
-      topPair,
-      topPairCount: maxCount,
-      totalLots: totalLots.toFixed(2),
-      assetPnL,
-    };
-  }, [monthlyTrades]);
-
-  // ─── Weekly Wins/Losses/Breakeven (last 4 weeks) ───────────────
-  const weeklyBreakdown = useMemo(() => {
-    const weeks = [];
-    const today = new Date();
-    for (let i = 0; i < 4; i++) {
-      const weekStart = startOfWeek(subWeeks(today, i), { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-      const weekTrades = trades.filter((t) => {
-        const td = new Date(t.date);
-        return td >= weekStart && td <= weekEnd;
-      });
-      const wins = weekTrades.filter((t) => Number(t.pnl) > 0).length;
-      const losses = weekTrades.filter((t) => Number(t.pnl) < 0).length;
-      const breakeven = weekTrades.filter((t) => Number(t.pnl) === 0).length;
-      const pnl = weekTrades.reduce((s, t) => s + (Number(t.pnl) || 0), 0);
-      weeks.push({
-        label: format(weekStart, "dd MMM"),
-        wins,
-        losses,
-        breakeven,
-        pnl,
-        total: weekTrades.length,
-      });
-    }
-    return weeks.reverse();
-  }, [trades]);
-
-  // ─── Trades grouped by date for calendar ─────────────────────
-  const tradesByDate = useMemo(() => {
-    return monthlyTrades.reduce((acc, t) => {
-      const d = t.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
-      if (!acc[d]) acc[d] = [];
-      acc[d].push(t);
-      return acc;
-    }, {});
-  }, [monthlyTrades]);
-
-  // ─── Day summary helper ──────────────────────────────────────
-  function daySummary(dateObj) {
-    const key = format(dateObj, "yyyy-MM-dd");
-    const list = tradesByDate[key] || [];
-    if (!list.length) return null;
-    const pnl = list.reduce((s, t) => s + Number(t.pnl || 0), 0);
-    const count = list.length;
-    const wins = list.filter((t) => Number(t.pnl || 0) > 0).length;
-    const winRate = Math.round((wins / count) * 100) || 0;
-    return { date: key, pnl, count, winRate };
+  let win = 0;
+  let loss = 0;
+  for (let i = ordered.length - 1; i >= 0; i -= 1) {
+    const pnl = Number(ordered[i].pnl) || 0;
+    if (pnl > 0 && loss === 0) win += 1;
+    else if (pnl < 0 && win === 0) loss += 1;
+    else break;
   }
 
-  // ─── Week summary helper ─────────────────────────────────────
-  function weekSummary(weekArray) {
-    const sums = weekArray.reduce(
-      (acc, d) => {
-        const ds = daySummary(d);
-        if (!ds) return acc;
-        acc.count += ds.count;
-        acc.pnl += ds.pnl;
-        acc.wins += Math.round((ds.winRate / 100) * ds.count);
-        return acc;
-      },
-      { pnl: 0, count: 0, wins: 0 }
-    );
-    const winRate = sums.count ? Math.round((sums.wins / sums.count) * 100) : 0;
-    return { pnl: +sums.pnl.toFixed(2), count: sums.count, winRate };
+  const days = [...dayPnL(ordered).entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  let greenDays = 0;
+  let redDays = 0;
+  for (const [, cell] of days) {
+    if (cell.net > 0 && redDays === 0) greenDays += 1;
+    else if (cell.net < 0 && greenDays === 0) redDays += 1;
+    else break;
   }
 
-  // ─── Calendar weeks generation ───────────────────────────────
-  const calendarWeeks = useMemo(() => {
-    const start = startOfWeek(startOfMonth(viewDate), { weekStartsOn: 1 });
-    const end = endOfWeek(endOfMonth(viewDate), { weekStartsOn: 1 });
-    const days = eachDayOfInterval({ start, end });
-    const weeks = [];
-    for (let i = 0; i < days.length; i += 7) {
-      weeks.push(days.slice(i, i + 7));
-    }
-    return weeks;
-  }, [viewDate]);
+  return { win, loss, greenDays, redDays };
+}
 
-  // ─── Open day detail ─────────────────────────────────────────
-  const openDay = (dayObj) => {
-    const formattedDate = format(dayObj, "yyyy-MM-dd");
-    navigate("/trades?date=" + formattedDate);
-  };
+function scoreMetrics(trades, curve) {
+  const stats = summarize(trades);
+  const drawdown = maxDrawdown(curve);
+  const recovery = drawdown ? stats.net / drawdown : stats.net > 0 ? 3 : 0;
+  const ddScore = stats.grossWin > 0
+    ? clamp(100 - (drawdown / stats.grossWin) * 100)
+    : drawdown > 0
+    ? 20
+    : 100;
 
-  // ─── Recent trades preview ───────────────────────────────────
-  const recentTrades = useMemo(() => {
-    return [...trades].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 8);
-  }, [trades]);
+  const days = [...dayPnL(trades).values()];
+  const greenShare = days.length ? (days.filter((d) => d.net > 0).length / days.length) * 100 : 0;
 
-  // ─── Open positions (trades that have not been closed yet) ────
-  const openPositions = useMemo(() => {
-    return [...trades]
-      .filter((t) => /open|pending|active/i.test(String(t.status || "")))
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [trades]);
-
-  // ─── All-time total PnL ──────────────────────────────────────
-  const allTimePnL = useMemo(() => {
-    if (!trades.length) return 0;
-    return trades.reduce((sum, t) => sum + Number(t.pnl || 0), 0).toFixed(2);
-  }, [trades]);
-
-  // ─── Account data ────────────────────────────────────────────
-  const initialBalance = accountMeta?.starting_balance || 10000;
-  const accountCreatedAt = accountMeta?.createdAt?.toDate?.() || new Date("2024-01-01");
-  const currentBalance = initialBalance + Number(allTimePnL);
-
-  const accountGrowth = useMemo(() => {
-    if (initialBalance <= 0) return 0;
-    return ((allTimePnL / initialBalance) * 100).toFixed(1);
-  }, [allTimePnL, initialBalance]);
-
-  // ─── Spider-web (radar) data: this month vs all-time ─────────
-  const radarMonth = useMemo(() => computeEdge(monthlyTrades), [monthlyTrades]);
-  const radarAll = useMemo(() => computeEdge(trades), [trades]);
-  const radarMain = radarMonth || radarAll;
-
-  // ─── Equity curve ────────────────────────────────────────────
-  const equity = useMemo(() => {
-    const src =
-      curveRange === "month"
-        ? monthlyTrades
-        : [...trades].sort((a, b) => new Date(a.date) - new Date(b.date));
-    let running = curveRange === "month" ? 0 : initialBalance;
-    const labels = ["Start"];
-    const values = [running];
-    src.forEach((t) => {
-      running += Number(t.pnl) || 0;
-      labels.push(format(new Date(t.date), "dd MMM"));
-      values.push(Number(running.toFixed(2)));
-    });
-    return { labels, values, count: src.length };
-  }, [curveRange, monthlyTrades, trades, initialBalance]);
-
-  // ─── Chart theming ───────────────────────────────────────────
-  const chartText = isDark ? "#8a8fb5" : "#6b7090";
-  const chartGrid = isDark ? "rgba(138,143,181,0.14)" : "rgba(107,112,144,0.16)";
-  const tooltipBase = {
-    backgroundColor: isDark ? "#0b0b19" : "#ffffff",
-    titleColor: isDark ? "#ffffff" : "#14142b",
-    bodyColor: isDark ? "#c9ccea" : "#3b3f5e",
-    borderColor: isDark ? "#262645" : "#e6e8f2",
-    borderWidth: 1,
-    padding: 10,
-    cornerRadius: 8,
-    displayColors: false,
-  };
-
-  const radarChartData = {
-    labels: RADAR_LABELS,
-    datasets: [
-      radarAll && {
-        label: "All-time",
-        data: radarAll.scores,
-        borderColor: isDark ? "rgba(138,143,181,0.85)" : "rgba(107,112,144,0.85)",
-        backgroundColor: "rgba(138,143,181,0.07)",
-        borderDash: [5, 4],
-        borderWidth: 1.5,
-        pointRadius: 0,
-      },
-      radarMonth && {
-        label: format(viewDate, "MMM yyyy"),
-        data: radarMonth.scores,
-        borderColor: ac.hex,
-        backgroundColor: ac.hex + "38",
-        borderWidth: 2.5,
-        pointBackgroundColor: ac.hex,
-        pointBorderColor: isDark ? "#15152b" : "#fff",
-        pointRadius: 4,
-        pointHoverRadius: 6,
-      },
-    ].filter(Boolean),
-  };
-
-  const radarOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      r: {
-        min: 0,
-        max: 100,
-        ticks: { display: false, stepSize: 25 },
-        grid: { color: chartGrid },
-        angleLines: { color: chartGrid },
-        pointLabels: { color: chartText, font: { size: 11, weight: "600" } },
-      },
-    },
-    plugins: {
-      legend: {
-        position: "bottom",
-        labels: { color: chartText, usePointStyle: true, boxWidth: 8, padding: 14 },
-      },
-      tooltip: {
-        ...tooltipBase,
-        displayColors: true,
-        callbacks: { label: (c) => ` ${c.dataset.label}: ${Math.round(c.parsed.r)}/100` },
-      },
-    },
-  };
-
-  const equityChartData = {
-    labels: equity.labels,
-    datasets: [
-      {
-        data: equity.values,
-        borderColor: ac.hex,
-        backgroundColor: (ctx) => {
-          const { chart } = ctx;
-          const { ctx: c, chartArea } = chart;
-          if (!chartArea) return ac.hex + "22";
-          const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          g.addColorStop(0, ac.hex + "55");
-          g.addColorStop(1, ac.hex + "00");
-          return g;
-        },
-        fill: true,
-        tension: 0.3,
-        borderWidth: 2.5,
-        pointRadius: equity.count > 40 ? 0 : 3,
-        pointHoverRadius: 5,
-        pointBackgroundColor: ac.hex,
-        pointBorderColor: isDark ? "#15152b" : "#fff",
-      },
-    ],
-  };
-
-  const equityOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: "index", intersect: false },
-    plugins: {
-      legend: { display: false },
-      tooltip: { ...tooltipBase, callbacks: { label: (c) => ` ${money(c.parsed.y, false)}` } },
-    },
-    scales: {
-      x: { grid: { display: false }, border: { display: false }, ticks: { color: chartText, maxTicksLimit: 7, maxRotation: 0 } },
-      y: { grid: { color: chartGrid }, border: { display: false }, ticks: { color: chartText, maxTicksLimit: 5, callback: fmtAxis } },
-    },
-  };
-
-  const dailyBarData = {
-    labels: perf.daily.map((d) => d.label),
-    datasets: [
-      {
-        data: perf.daily.map((d) => d.pnl),
-        backgroundColor: perf.daily.map((d) => (d.pnl >= 0 ? POS : NEG)),
-        borderRadius: 4,
-        maxBarThickness: 28,
-      },
-    ],
-  };
-
-  const dailyBarOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: { ...tooltipBase, callbacks: { label: (c) => ` ${money(c.parsed.y)}` } },
-    },
-    scales: {
-      x: { grid: { display: false }, border: { display: false }, ticks: { color: chartText, maxTicksLimit: 8, maxRotation: 0 } },
-      y: { grid: { color: chartGrid }, border: { display: false }, ticks: { color: chartText, maxTicksLimit: 5, callback: fmtAxis } },
-    },
-  };
-
-  const equityNet = equity.values[equity.values.length - 1] - equity.values[0];
-  const maxAssetAbs = Math.max(1, ...monthlyAssetStats.assetPnL.map((a) => Math.abs(a.pnl)));
-
-  // ─── Quick Analysis Modal Content ────────────────────────────
-  const quickAnalysisContent = () => {
-    if (!monthlyTrades.length) {
-      return (
-        <div className="text-center py-10 px-4">
-          <AlertCircle size={56} className="mx-auto mb-5" style={{ color: ac.hex }} />
-          <h3 className={`text-xl font-semibold mb-3 ${HEAD}`}>No trades recorded this month</h3>
-          <p className={`${MUTED} max-w-lg mx-auto leading-relaxed`}>
-            Add some trades to unlock performance insights, pattern detection, and coaching suggestions.
-          </p>
-          <button
-            onClick={() => {
-              setShowQuickAnalysis(false);
-              navigate("/trades/new");
-            }}
-            style={{ backgroundColor: ac.hex }}
-            className={`mt-7 rounded-lg px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110 transition ${FOCUS}`}
-          >
-            Add your first trade
-          </button>
-        </div>
-      );
-    }
-
-    const winRate = Number(monthlyStats.winRate);
-    const totalPnL = Number(monthlyStats.totalPnL);
-    const avgRR = Number(monthlyStats.avgRR);
-    const totalTrades = monthlyStats.totalTrades;
-
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className={`${PANEL} p-5`}>
-            <div className={`text-sm mb-2 ${MUTED}`}>Win rate</div>
-            <div className={`text-3xl font-bold tabular-nums ${HEAD}`}>{winRate}%</div>
-            <div className={`mt-3 text-sm flex items-start gap-2 ${MUTED}`}>
-              {winRate >= 60 ? (
-                <CheckCircle className="mt-0.5 shrink-0 text-[#22c493]" size={16} />
-              ) : (
-                <AlertCircle className={`mt-0.5 shrink-0 ${winRate >= 45 ? "text-amber-500" : "text-[#f2556e]"}`} size={16} />
-              )}
-              {winRate >= 60
-                ? "Strong performance. Protect your edge."
-                : winRate >= 45
-                ? "Solid base. Improve reward to risk."
-                : "Needs attention. Focus on high-probability entries."}
-            </div>
-          </div>
-
-          <div className={`${PANEL} p-5`}>
-            <div className={`text-sm mb-2 ${MUTED}`}>Net result</div>
-            <div className={`text-3xl font-bold tabular-nums ${pnlClass(totalPnL)}`}>{money(totalPnL)}</div>
-            <div className={`mt-3 text-sm flex items-start gap-2 ${MUTED}`}>
-              {totalPnL >= 0 ? (
-                <ArrowUpRight className="mt-0.5 shrink-0 text-[#22c493]" size={16} />
-              ) : (
-                <ArrowDownRight className="mt-0.5 shrink-0 text-[#f2556e]" size={16} />
-              )}
-              {totalPnL >= 0 ? "Positive month. Manage greed." : "Drawdown. Tighten risk now."}
-            </div>
-          </div>
-
-          <div className={`${PANEL} p-5`}>
-            <div className={`text-sm mb-2 ${MUTED}`}>Average R:R</div>
-            <div className="text-3xl font-bold tabular-nums" style={{ color: ac.hex }}>{avgRR}</div>
-            <div className={`mt-3 text-sm flex items-start gap-2 ${MUTED}`}>
-              {avgRR >= 2.5 ? (
-                <CheckCircle className="mt-0.5 shrink-0 text-[#22c493]" size={16} />
-              ) : (
-                <AlertCircle className="mt-0.5 shrink-0 text-amber-500" size={16} />
-              )}
-              {avgRR >= 2.5 ? "Excellent asymmetry. Keep hunting." : "Can improve. Aim for 1:3+ setups."}
-            </div>
-          </div>
-        </div>
-
-        <div className={`${PANEL} p-5 sm:p-6`}>
-          <h4 className={`text-base font-semibold mb-4 flex items-center gap-2 ${HEAD}`}>
-            <Lightbulb size={18} className="text-amber-500" />
-            Coaching insights
-          </h4>
-          <div className={`space-y-3.5 text-sm leading-relaxed ${isDark ? "text-[#c9ccea]" : "text-[#3b3f5e]"}`}>
-            {totalTrades < 15 && (
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-amber-500 mt-0.5 shrink-0" size={16} />
-                <p>Sample size is still small ({totalTrades} trades). Aim for 20–30 trades before drawing strong conclusions.</p>
-              </div>
-            )}
-            {winRate < 50 && (
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-[#f2556e] mt-0.5 shrink-0" size={16} />
-                <p>Win rate is below 50%. Be extra selective this week and only take A+ setups.</p>
-              </div>
-            )}
-            {avgRR < 2 && (
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-amber-500 mt-0.5 shrink-0" size={16} />
-                <p>Average reward to risk is low ({avgRR}). Focus on trades with a minimum of 1:2.5.</p>
-              </div>
-            )}
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-[#22c493] mt-0.5 shrink-0" size={16} />
-              <p>Review your last 5 losing trades in detail and fix one repeating mistake.</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-[#22c493] mt-0.5 shrink-0" size={16} />
-              <p>Keep risk at 1% per trade or less until your win rate exceeds 55%.</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-[#22c493] mt-0.5 shrink-0" size={16} />
-              <p>Journal every trade’s emotion and confidence level (1–10).</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ─── No account selected ─────────────────────────────────────
-  if (!currentAccount) {
-    return (
-      <div
-        className={`${isDark ? "dark bg-[#0b0b19]" : "bg-[#f4f5fa]"} min-h-screen w-full p-8 flex items-center justify-center`}
-      >
-        <Card className={`${CARD} p-8 max-w-md text-center`}>
-          <AlertCircle size={44} className="mx-auto text-amber-500 mb-4" />
-          <h2 className={`text-xl font-bold mb-2 ${HEAD}`}>No account selected</h2>
-          <p className={`${MUTED} mb-6`}>
-            Create or select an account from the sidebar to view your dashboard.
-          </p>
-          <button
-            onClick={() => {}}
-            style={{ backgroundColor: ACCENTS.zella.hex }}
-            className={`px-5 py-2.5 text-sm font-semibold text-white rounded-lg hover:brightness-110 transition ${FOCUS}`}
-          >
-            Create account
-          </button>
-        </Card>
-      </div>
-    );
-  }
-
-  // ─── Derived display values ──────────────────────────────────
-  const netPnl = Number(monthlyStats.totalPnL);
-  const payoffText = perf.payoff === Infinity ? "∞" : perf.payoff.toFixed(2);
-  const avgTotal = perf.avgWin + perf.avgLoss;
-
-  const glance = [
-    { label: "Total trades", value: monthlyStats.totalTrades, sub: `${perf.wins} wins, ${perf.losses} losses` },
-    { label: "Expectancy", value: money(monthlyStats.expectancy), sub: "per trade", cls: pnlClass(monthlyStats.expectancy) },
-    { label: "Average R:R", value: monthlyStats.avgRR, sub: "reward to risk" },
-    { label: "Consistency", value: `${monthlyStats.consistencyScore}%`, sub: "best day vs net P&L" },
-    { label: "Best day", value: money(monthlyStats.bestDayPnL), sub: monthlyStats.bestDayDate, cls: pnlClass(monthlyStats.bestDayPnL) },
-    { label: "Worst day", value: money(monthlyStats.worstDayPnL), sub: monthlyStats.worstDayDate, cls: pnlClass(monthlyStats.worstDayPnL) },
+  const metrics = [
+    { label: "Win %", value: clamp(stats.winRate) },
+    { label: "Profit factor", value: clamp((stats.profitFactor / 3) * 100) },
+    { label: "Avg win/loss", value: clamp((stats.payoff / 3) * 100) },
+    { label: "Recovery factor", value: clamp((recovery / 3) * 100) },
+    { label: "Max drawdown", value: ddScore },
+    { label: "Consistency", value: clamp(greenShare) },
   ];
 
+  return { metrics };
+}
+
+// ─── Small UI pieces ─────────────────────────────────────────────────────────
+function Dropdown({ label, icon: Icon, items, align = "right", width = "w-52" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointer = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    return () => document.removeEventListener("mousedown", onPointer);
+  }, [open]);
+
   return (
-    <div
-      className={`${isDark ? "dark bg-[#0b0b19] text-[#e8e9f7]" : "bg-[#f4f5fa] text-[#14142b]"} relative min-h-screen w-full p-3 sm:p-6 lg:p-8`}
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={TOOLBAR_BTN}
+      >
+        {Icon ? <Icon size={14} /> : null}
+        <span>{label}</span>
+        <ChevronDown size={12} className="opacity-60" />
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          className={`absolute ${align === "right" ? "right-0" : "left-0"} z-40 mt-1.5 ${width} overflow-hidden rounded-lg border border-[#26263a] bg-[#12121b] py-1 shadow-2xl shadow-black/60`}
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                item.onClick?.();
+              }}
+              className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#1c1c28] ${
+                item.active ? "text-white" : "text-[#b9b9cc]"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                {item.icon ? <item.icon size={13} /> : null}
+                {item.label}
+              </span>
+              {item.active ? <Check size={13} style={{ color: item.accent || BE }} /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function KpiCard({ title, hint, value, tone = TEXT, children, className = "" }) {
+  return (
+    <div className={`${PANEL} px-4 py-3.5 sm:px-5 ${className}`}>
+      <div className="flex items-center gap-1.5 text-[11.5px] font-medium" style={{ color: MUTED }}>
+        <span title={hint}>{title}</span>
+        {hint ? <Info size={12} className="opacity-50" aria-hidden="true" /> : null}
+      </div>
+      <div className="mt-2 flex items-end justify-between gap-3">
+        <div className="text-[24px] font-bold leading-none tracking-tight sm:text-[26px]" style={{ color: tone }}>
+          {value}
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Half-donut win / breakeven / loss split with counts underneath. */
+function SemiGauge({ win, be, loss }) {
+  const total = Math.max(1, win + be + loss);
+  const cx = 58;
+  const cy = 56;
+  const r = 40;
+  const width = 9;
+  const arc = (from, to) => {
+    const steps = Math.max(2, Math.ceil((to - from) * 60));
+    const points = [];
+    for (let i = 0; i <= steps; i += 1) {
+      const t = from + ((to - from) * i) / steps;
+      const angle = Math.PI * (1 - t);
+      points.push(`${(cx + r * Math.cos(angle)).toFixed(2)},${(cy - r * Math.sin(angle)).toFixed(2)}`);
+    }
+    return `M${points.join(" L")}`;
+  };
+
+  const parts = [
+    { value: win, color: POS },
+    { value: be, color: BE },
+    { value: loss, color: NEG },
+  ].filter((part) => part.value > 0);
+
+  let acc = 0;
+  const arcs = parts.map((part) => {
+    const from = acc / total;
+    acc += part.value;
+    return { ...part, from, to: acc / total };
+  });
+
+  return (
+    <div className="flex shrink-0 flex-col items-center">
+      <svg width="116" height="62" viewBox="0 0 116 62" aria-hidden="true">
+        <path d={arc(0, 1)} fill="none" stroke="#1e1e28" strokeWidth={width} strokeLinecap="round" />
+        {arcs.map((part) => (
+          <path
+            key={part.color}
+            d={arc(part.from, part.to)}
+            fill="none"
+            stroke={part.color}
+            strokeWidth={width}
+          />
+        ))}
+      </svg>
+      <div className="mt-0.5 flex w-[102px] items-center justify-between text-[11px] font-semibold tabular-nums">
+        <span style={{ color: POS }}>{win}</span>
+        <span style={{ color: BE }}>{be}</span>
+        <span style={{ color: NEG }}>{loss}</span>
+      </div>
+    </div>
+  );
+}
+
+function PfRing({ value }) {
+  const ratio = Math.max(0, Math.min(1, (Number(value) || 0) / 3));
+  const r = 25;
+  const circumference = 2 * Math.PI * r;
+  return (
+    <svg width="60" height="60" viewBox="0 0 62 62" aria-hidden="true" className="shrink-0">
+      <circle cx="31" cy="31" r={r} fill="none" stroke="#23232f" strokeWidth="7" />
+      <circle
+        cx="31"
+        cy="31"
+        r={r}
+        fill="none"
+        stroke={POS}
+        strokeWidth="7"
+        strokeLinecap="round"
+        strokeDasharray={`${circumference * ratio} ${circumference}`}
+        transform="rotate(-90 31 31)"
+      />
+      <circle
+        cx="31"
+        cy="31"
+        r={r}
+        fill="none"
+        stroke={BE}
+        strokeWidth="7"
+        strokeLinecap="round"
+        strokeDasharray={`${circumference * 0.08} ${circumference}`}
+        strokeDashoffset={-circumference * ratio}
+        transform="rotate(-90 31 31)"
+      />
+    </svg>
+  );
+}
+
+function StreakRing({ count, label, tone }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-bold tabular-nums"
+        style={{ color: tone, boxShadow: `inset 0 0 0 1.5px ${tone}80` }}
+      >
+        {count}
+      </span>
+      <span className="whitespace-nowrap text-[11px]" style={{ color: MUTED }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function EquityChart({ points }) {
+  const W = 640;
+  const H = 250;
+  const PAD = { left: 54, right: 10, top: 14, bottom: 26 };
+
+  if (!points || points.length < 2) {
+    return (
+      <div className="flex h-[250px] items-center justify-center px-6 text-center text-[12px]" style={{ color: MUTED }}>
+        Close at least two trades to see your cumulative P&L.
+      </div>
+    );
+  }
+
+  const values = points.map((point) => point.value);
+  const low = Math.min(0, ...values);
+  const high = Math.max(0, ...values);
+  const span = high - low || 1;
+  const x = (index) => PAD.left + (index / (points.length - 1)) * (W - PAD.left - PAD.right);
+  const y = (value) => PAD.top + (1 - (value - low) / span) * (H - PAD.top - PAD.bottom);
+  const line = points
+    .map((point, index) => `${index ? "L" : "M"}${x(index).toFixed(1)},${y(point.value).toFixed(1)}`)
+    .join(" ");
+  const area = `${line} L${x(points.length - 1).toFixed(1)},${y(low).toFixed(1)} L${x(0).toFixed(1)},${y(low).toFixed(1)} Z`;
+  const ticks = [0, 1, 2, 3, 4].map((index) => low + (span * index) / 4);
+  const labelIndexes = [
+    0,
+    Math.floor((points.length - 1) / 3),
+    Math.floor((2 * (points.length - 1)) / 3),
+    points.length - 1,
+  ].filter((value2, index, all) => all.indexOf(value2) === index);
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="h-[250px] w-full"
+      role="img"
+      aria-label="Daily net cumulative profit and loss"
     >
-      <div className="mx-auto max-w-[1600px]">
-        {/* ───────── Header ───────── */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-          <div className="min-w-0">
-            <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${HEAD}`}>Dashboard</h1>
-            <p className={`mt-1 text-sm font-semibold ${HEAD}`}>Good morning!</p>
-            <p className={`mt-0.5 text-sm flex flex-wrap items-center gap-x-2 gap-y-1 ${MUTED}`}>
-              <span>Forgex</span>
-              <span aria-hidden="true">/</span>
-              <span className="font-medium">{currentAccount?.name || "Account"}</span>
-              {currentAccount.mt5Connected && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#22c493]/15 px-2.5 py-0.5 text-xs font-semibold text-[#0e9f77] dark:text-[#2dd4a0]">
-                  <i className="h-1.5 w-1.5 rounded-full bg-[#22c493]" />
-                  MT5 connected
-                </span>
-              )}
-            </p>
+      <defs>
+        <linearGradient id="dashEquityFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={POS} stopOpacity="0.34" />
+          <stop offset="100%" stopColor={POS} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {ticks.map((tick) => (
+        <g key={tick}>
+          <line
+            x1={PAD.left}
+            x2={W - PAD.right}
+            y1={y(tick)}
+            y2={y(tick)}
+            stroke="#20202c"
+            strokeDasharray="3 4"
+          />
+          <text x={PAD.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="10" fill={FAINT}>
+            {usdAxis(tick)}
+          </text>
+        </g>
+      ))}
+
+      <path d={area} fill="url(#dashEquityFill)" />
+      <path
+        d={line}
+        fill="none"
+        stroke={POS}
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx={x(points.length - 1)} cy={y(values[values.length - 1])} r="3.5" fill={POS} />
+
+      {labelIndexes.map((index) => (
+        <text
+          key={index}
+          x={x(index)}
+          y={H - 6}
+          textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}
+          fontSize="10"
+          fill={FAINT}
+        >
+          {format(points[index].date, "MM/dd/yy")}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+function RadarChart({ metrics, accent }) {
+  const size = 300;
+  const cx = size / 2;
+  const cy = size / 2 - 2;
+  const radius = 86;
+  const count = metrics.length;
+  const angleOf = (index) => -Math.PI / 2 + (index * 2 * Math.PI) / count;
+  const pointAt = (index, value) => [
+    cx + Math.cos(angleOf(index)) * radius * (value / 100),
+    cy + Math.sin(angleOf(index)) * radius * (value / 100),
+  ];
+  const polygon = (values) =>
+    values
+      .map((value, index) => pointAt(index, value).map((n) => n.toFixed(1)).join(","))
+      .join(" ");
+
+  return (
+    <svg
+      viewBox={`0 0 ${size} ${size}`}
+      className="h-[256px] w-full"
+      role="img"
+      aria-label="Zella score across six categories"
+    >
+      {[20, 40, 60, 80, 100].map((ring) => (
+        <polygon
+          key={ring}
+          points={polygon(metrics.map(() => ring))}
+          fill="none"
+          stroke="#26263a"
+          strokeWidth="1"
+        />
+      ))}
+
+      {metrics.map((metric, index) => {
+        const [px, py] = pointAt(index, 100);
+        return <line key={metric.label} x1={cx} y1={cy} x2={px} y2={py} stroke="#26263a" strokeWidth="1" />;
+      })}
+
+      <polygon
+        points={polygon(metrics.map((metric) => Math.max(6, metric.value)))}
+        fill={accent}
+        fillOpacity="0.42"
+        stroke={accent}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+
+      {metrics.map((metric, index) => {
+        const [px, py] = pointAt(index, metric.value);
+        return <circle key={metric.label} cx={px} cy={py} r="2.6" fill="#cbbcff" />;
+      })}
+
+      {metrics.map((metric, index) => {
+        const [px, py] = pointAt(index, 122);
+        const angle = angleOf(index);
+        const anchor = Math.abs(Math.cos(angle)) < 0.2 ? "middle" : Math.cos(angle) > 0 ? "start" : "end";
+        return (
+          <text key={metric.label} x={px} y={py + 3} textAnchor={anchor} fontSize="10.5" fill={MUTED}>
+            {metric.label}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+function ScoreBar({ score }) {
+  const value = clamp(score);
+  return (
+    <div className="mt-auto">
+      <div className="text-[11px] font-medium" style={{ color: MUTED }}>
+        Your Zella Score
+      </div>
+      <div className="mt-2 flex items-center gap-3">
+        <span className="text-[24px] font-bold leading-none" style={{ color: TEXT }}>
+          {Number(score).toFixed(2)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div
+            className="relative h-2.5 rounded-full"
+            style={{ background: "linear-gradient(90deg,#ef4444,#f59e0b 45%,#22c493 74%,#a3e635)" }}
+          >
+            <span
+              className="absolute -top-[3px] h-[16px] w-[2px] rounded bg-white"
+              style={{ left: `${value}%` }}
+            />
+          </div>
+          <div className="mt-1 flex justify-between text-[9px]" style={{ color: FAINT }}>
+            {[0, 20, 40, 60, 80, 100].map((tick) => (
+              <span key={tick}>{tick}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Dashboard({ currentAccount }) {
+  const navigate = useNavigate();
+  const { ac } = useAccent();
+  const accent = ac.hex;
+
+  const [trades, setTrades] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [period, setPeriod] = useState("all");
+  const [viewDate, setViewDate] = useState(() => new Date());
+  const [bottomTab, setBottomTab] = useState("recent");
+  const [copied, setCopied] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const accountId = currentAccount?.id;
+  const currency = currentAccount?.currency || "USD";
+
+  const load = async () => {
+    const user = auth.currentUser;
+    if (!user || !accountId) {
+      setTrades([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      // No orderBy: Firestore drops documents that lack the ordered field, and
+      // older trades have no createdAt. Everything is sorted client-side.
+      const snap = await getDocs(collection(db, "users", user.uid, "accounts", accountId, "trades"));
+      setTrades(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setError("");
+    } catch (err) {
+      console.error("Dashboard load failed:", err);
+      setError("Could not load your dashboard. Check your connection and try again.");
+      setTrades([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId]);
+
+  // Rotate the "copied" tick back to the copy icon.
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const handleResync = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  const executed = useMemo(() => trades.filter((t) => t.status !== "pending"), [trades]);
+  const openPositions = useMemo(() => trades.filter((t) => t.status === "pending"), [trades]);
+
+  const periodTrades = useMemo(() => {
+    if (period === "all") return trades;
+    const now = new Date();
+    const start =
+      period === "this-month"
+        ? startOfMonth(now)
+        : period === "this-year"
+        ? new Date(now.getFullYear(), 0, 1)
+        : subDays(now, 29);
+    const end = period === "this-month" ? endOfMonth(now) : now;
+    return trades.filter((trade) => {
+      const date = tradeDateOf(trade);
+      return date && isWithinInterval(date, { start, end });
+    });
+  }, [trades, period]);
+
+  const stats = useMemo(() => summarize(periodTrades), [periodTrades]);
+  const curve = useMemo(() => equitySeries(periodTrades), [periodTrades]);
+  const streak = useMemo(() => streakStats(executed), [executed]);
+  const board = useMemo(() => scoreMetrics(trades, curve), [trades, curve]);
+  const score = board.metrics.reduce((sum, metric) => sum + metric.value, 0) / board.metrics.length;
+
+  const daysMap = useMemo(() => dayPnL(trades), [trades]);
+
+  const weeks = useMemo(() => {
+    const start = startOfMonth(viewDate);
+    const end = endOfMonth(viewDate);
+    const days = eachDayOfInterval({ start, end });
+    const cells = Array(start.getDay()).fill(null).concat(days);
+    while (cells.length % 7 !== 0) cells.push(null);
+    const rows = [];
+    for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+    return rows;
+  }, [viewDate]);
+
+  const monthDays = useMemo(() => weeks.flat().filter(Boolean), [weeks]);
+  const monthNet = monthDays.reduce((sum, day) => {
+    const cell = daysMap.get(format(day, "yyyy-MM-dd"));
+    return sum + (cell?.net || 0);
+  }, 0);
+  const monthTraded = monthDays.filter((day) => daysMap.has(format(day, "yyyy-MM-dd"))).length;
+  const monthMax = Math.max(
+    1,
+    ...monthDays.map((day) => Math.abs(daysMap.get(format(day, "yyyy-MM-dd"))?.net || 0))
+  );
+
+  const lastImport = useMemo(() => {
+    const stamps = trades
+      .map((trade) => parseDate(trade.updatedAt) || parseDate(trade.createdAt) || tradeDateOf(trade))
+      .filter(Boolean);
+    if (!stamps.length) return null;
+    return new Date(Math.max(...stamps.map((date) => date.getTime())));
+  }, [trades]);
+
+  const recent = useMemo(
+    () =>
+      executed
+        .slice()
+        .sort((a, b) => (tradeDateOf(b)?.getTime() || 0) - (tradeDateOf(a)?.getTime() || 0))
+        .slice(0, 6),
+    [executed]
+  );
+
+  const dailyBars = useMemo(() => {
+    const bars = [];
+    for (let i = 13; i >= 0; i -= 1) {
+      const day = subDays(new Date(), i);
+      const cell = daysMap.get(format(day, "yyyy-MM-dd"));
+      bars.push({ date: day, net: cell?.net || 0, count: cell?.count || 0 });
+    }
+    return bars;
+  }, [daysMap]);
+
+  const maxDaily = Math.max(1, ...dailyBars.map((bar) => Math.abs(bar.net)));
+  const bestDay = dailyBars.reduce((best, bar) => (bar.net > best.net ? bar : best), dailyBars[0]);
+  const worstDay = dailyBars.reduce((worst, bar) => (bar.net < worst.net ? bar : worst), dailyBars[0]);
+
+  const avgTotal = stats.avgWin + stats.avgLoss;
+  const winShare = avgTotal ? (stats.avgWin / avgTotal) * 100 : 50;
+
+  const copyNet = async () => {
+    try {
+      await navigator.clipboard.writeText(usd(stats.net));
+      setCopied(true);
+    } catch {
+      // Clipboard can be blocked; leave the icon untouched.
+    }
+  };
+
+  const cellBg = (net, maxAbs) => {
+    if (!net) return CARD_ALT;
+    const ratio = Math.min(1, Math.abs(net) / (maxAbs || 1));
+    if (ratio < 0.18) return net > 0 ? "rgba(34,196,147,0.10)" : "rgba(74,110,196,0.22)";
+    return net > 0
+      ? `rgba(34,196,147,${(0.12 + ratio * 0.3).toFixed(2)})`
+      : `rgba(242,85,110,${(0.12 + ratio * 0.3).toFixed(2)})`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center" style={{ backgroundColor: BG }}>
+        <div
+          className="h-10 w-10 animate-spin rounded-full border-2"
+          style={{ borderColor: BORDER, borderTopColor: accent }}
+          role="progressbar"
+          aria-label="Loading dashboard"
+        />
+      </div>
+    );
+  }
+
+  const rows = bottomTab === "recent" ? recent : openPositions.slice(0, 6);
+
+  return (
+    <div className="-m-1 min-h-screen sm:-m-3" style={{ backgroundColor: BG, color: TEXT }}>
+      <div className="mx-auto max-w-[1600px] p-3 sm:p-5">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-[21px] font-semibold tracking-tight sm:text-[22px]">Dashboard</h1>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={TOOLBAR_BTN} title={`Account currency: ${currency}`}>
+              <span className="text-[13px] font-semibold">$</span>
+              <span className="hidden text-[11px] sm:inline" style={{ color: MUTED }}>
+                {currency}
+              </span>
+              <ChevronDown size={12} className="opacity-60" />
+            </button>
+
+            <button type="button" className={TOOLBAR_BTN} onClick={() => navigate("/trades")}>
+              <Filter size={14} />
+              Filters
+            </button>
+
+            <Dropdown
+              label="Date range"
+              icon={CalendarDays}
+              items={PERIODS.map(([key, label]) => ({
+                label,
+                active: period === key,
+                accent,
+                onClick: () => setPeriod(key),
+              }))}
+            />
+
+            <Dropdown
+              label="Demo Data"
+              icon={FolderOpen}
+              items={[
+                { label: "Open Backtest lab", icon: Calculator, onClick: () => navigate("/backtest") },
+                { label: "Import trades (CSV)", icon: FolderOpen, onClick: () => navigate("/trades") },
+              ]}
+            />
+
+            <button
+              type="button"
+              onClick={() => navigate("/mentor")}
+              className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[12px] font-semibold transition-colors ${FOCUS}`}
+              style={{ borderColor: "#4b3a9e", backgroundColor: "#1b1436", color: "#cbbcff" }}
+            >
+              <Sparkles size={14} />
+              <span>Ask Zella AI</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate("/journal")}
+              className={`flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12px] font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
+              style={{ backgroundColor: accent }}
+            >
+              <Sunrise size={14} />
+              Start my day
+            </button>
+
+            <button
+              type="button"
+              className={ICON_BTN}
+              onClick={() => navigate("/settings")}
+              aria-label="Dashboard settings"
+            >
+              <Settings size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* Import line */}
+        <div className="mb-4 mt-2 flex flex-wrap items-center gap-2 text-[11px]" style={{ color: MUTED }}>
+          <span>
+            Last import:{" "}
+            <span style={{ color: "#b9b9cc" }}>
+              {lastImport ? format(lastImport, "MMM d, yyyy hh:mm a") : "no trades yet"}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={handleResync}
+            disabled={refreshing}
+            className={`font-semibold transition-opacity hover:underline disabled:opacity-50 ${FOCUS}`}
+            style={{ color: "#b7a6ff" }}
+          >
+            {refreshing ? "Resyncing…" : "Resync"}
+          </button>
+          <span className="hidden text-[10.5px] sm:inline" style={{ color: FAINT }}>
+            · Synced from your broker once a day
+          </span>
+        </div>
+
+        {error ? (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-[#f2556e]/40 bg-[#f2556e]/10 px-3 py-2 text-[12px]">
+            <span style={{ color: "#ff9bad" }}>{error}</span>
+            <button type="button" className="font-semibold text-white hover:underline" onClick={handleResync}>
+              Retry
+            </button>
+          </div>
+        ) : null}
+
+        {/* KPI strip */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+          <KpiCard
+            title="Net P&L"
+            hint="Realised profit and loss for the selected period."
+            value={usd(stats.net)}
+            tone={stats.net >= 0 ? POS : NEG}
+          >
+            <button
+              type="button"
+              onClick={copyNet}
+              aria-label="Copy net P&L"
+              className="flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:brightness-125"
+              style={{ borderColor: "#2f2560", backgroundColor: "#1a1433", color: "#a78bfa" }}
+            >
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+            </button>
+          </KpiCard>
+
+          <KpiCard
+            title="Trade win %"
+            hint="Winning trades as a share of closed trades in the period."
+            value={pct(stats.winRate)}
+          >
+            <SemiGauge win={stats.wins} be={stats.breakeven} loss={stats.losses} />
+          </KpiCard>
+
+          <KpiCard
+            title="Avg win/loss trade"
+            hint="Average winner divided by average loser. Above 1 is healthy."
+            value={(Number(stats.payoff) || 0).toFixed(2)}
+          >
+            <div className="w-[46%] min-w-[104px]">
+              <div className="flex h-2 overflow-hidden rounded-full" style={{ backgroundColor: "#1e1e28" }}>
+                <span style={{ width: `${winShare}%`, backgroundColor: POS }} />
+                <span style={{ flex: 1, backgroundColor: NEG }} />
+              </div>
+              <div className="mt-1.5 flex justify-between text-[10px] font-semibold tabular-nums">
+                <span style={{ color: POS }}>{usdCell(stats.avgWin)}</span>
+                <span style={{ color: NEG }}>{`-${usdCell(stats.avgLoss)}`}</span>
+              </div>
+            </div>
+          </KpiCard>
+
+          <KpiCard
+            title="Profit factor"
+            hint="Gross profit divided by gross loss."
+            value={(Number(stats.profitFactor) || 0).toFixed(2)}
+          >
+            <PfRing value={stats.profitFactor} />
+          </KpiCard>
+
+          <div className={`${PANEL} px-4 py-3.5 sm:px-5`}>
+            <div className="flex items-center gap-1.5 text-[11.5px] font-medium" style={{ color: MUTED }}>
+              <span title="Consecutive green days and winning trades at the end of the period.">
+                Current streak
+              </span>
+              <Info size={12} className="opacity-50" aria-hidden="true" />
+            </div>
+            <div className="mt-2.5 grid grid-cols-[auto_1px_auto] items-center gap-3">
+              <div>
+                <div className="text-[9px] font-semibold uppercase tracking-[0.08em]" style={{ color: FAINT }}>
+                  Days
+                </div>
+                <div className="mt-1.5 space-y-1.5">
+                  <StreakRing
+                    count={streak.greenDays}
+                    label={`${streak.greenDays} day${streak.greenDays === 1 ? "" : "s"}`}
+                    tone={POS}
+                  />
+                  <StreakRing
+                    count={streak.redDays}
+                    label={`${streak.redDays} day${streak.redDays === 1 ? "" : "s"}`}
+                    tone="#7c8cf8"
+                  />
+                </div>
+              </div>
+              <div className="h-14 w-px" style={{ backgroundColor: BORDER }} />
+              <div>
+                <div className="text-[9px] font-semibold uppercase tracking-[0.08em]" style={{ color: FAINT }}>
+                  Trades
+                </div>
+                <div className="mt-1.5 space-y-1.5">
+                  <StreakRing
+                    count={streak.win}
+                    label={`${streak.win} trade${streak.win === 1 ? "" : "s"}`}
+                    tone={POS}
+                  />
+                  <StreakRing
+                    count={streak.loss}
+                    label={`${streak.loss} trade${streak.loss === 1 ? "" : "s"}`}
+                    tone="#7c8cf8"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart + radar + calendar */}
+        <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          <div className="space-y-3">
+            <div className={`${PANEL} p-4`}>
+              <div className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold">
+                Daily net cumulative P&L
+                <Info size={12} style={{ color: FAINT }} aria-hidden="true" />
+              </div>
+              <EquityChart points={curve} />
+            </div>
+
+            <div className={`${PANEL} flex flex-col p-4`}>
+              <div className="flex items-center gap-1.5 text-[13px] font-semibold">
+                Zella score
+                <Info size={12} style={{ color: FAINT }} aria-hidden="true" />
+              </div>
+              <RadarChart metrics={board.metrics} accent={accent} />
+              <ScoreBar score={score} />
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-            {/* Month stepper */}
-            <div className={`flex items-center rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b]`}>
+          <div className={`${PANEL} flex flex-col p-3 sm:p-4`}>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
               <button
-                onClick={prevMonth}
+                type="button"
+                onClick={() => setViewDate((current) => addMonths(current, -1))}
+                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#1c1c28]"
+                style={{ color: MUTED }}
                 aria-label="Previous month"
-                className={`p-2.5 rounded-l-lg ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
               >
                 <ChevronLeft size={16} />
               </button>
-              <span className={`min-w-[8.5rem] px-2 text-center text-sm font-semibold ${HEAD}`}>
+              <span className="min-w-[108px] text-center text-[14.5px] font-semibold">
                 {format(viewDate, "MMMM yyyy")}
               </span>
               <button
-                onClick={nextMonth}
+                type="button"
+                onClick={() => setViewDate((current) => addMonths(current, 1))}
+                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#1c1c28]"
+                style={{ color: MUTED }}
                 aria-label="Next month"
-                className={`p-2.5 rounded-r-lg ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
               >
                 <ChevronRight size={16} />
               </button>
+
+              <button
+                type="button"
+                onClick={() => setViewDate(new Date())}
+                className={`ml-1 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors hover:text-white ${FOCUS}`}
+                style={{ borderColor: "#242433", color: "#c7c7d6" }}
+              >
+                This month
+              </button>
+
+              <div className="ml-auto flex items-center gap-2.5">
+                <div className="text-[11px]" style={{ color: MUTED }}>
+                  Monthly stats:{" "}
+                  <span className="font-semibold" style={{ color: monthNet >= 0 ? POS : NEG }}>
+                    {usdCell(monthNet)}
+                  </span>{" "}
+                  <span className="ml-1">{monthTraded} days</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/settings")}
+                  aria-label="Calendar settings"
+                  className="transition-colors hover:text-white"
+                  style={{ color: MUTED }}
+                >
+                  <Settings size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewDate(new Date())}
+                  aria-label="Jump to current month"
+                  className="transition-colors hover:text-white"
+                  style={{ color: MUTED }}
+                >
+                  <CalendarDays size={14} />
+                </button>
+                <span
+                  title="Each cell shows that day's net P&L, trade count and win rate."
+                  style={{ color: MUTED }}
+                >
+                  <Info size={14} />
+                </span>
+              </div>
             </div>
 
-            <button
-              onClick={syncFromMT5}
-              disabled={syncing}
-              title={!currentAccount.mt5Connected ? "Connect MT5 first in the sidebar" : "Sync trades from MT5"}
-              className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3.5 py-2.5 text-sm font-semibold transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${HEAD} ${
-                syncing || !currentAccount.mt5Connected ? "opacity-60" : ""
-              } ${syncing ? "cursor-not-allowed" : ""} ${FOCUS}`}
-            >
-              <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
-              {syncing ? "Syncing..." : "Sync MT5"}
-            </button>
+            <div className="flex min-h-0 flex-1 items-stretch gap-2">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <div className="mb-1.5 grid grid-cols-7 gap-1.5">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
+                    <div
+                      key={label}
+                      className="rounded-md py-1.5 text-center text-[11px] font-medium"
+                      style={{ backgroundColor: CARD_ALT, color: "#9a9ab0" }}
+                    >
+                      {label}
+                    </div>
+                  ))}
+                </div>
 
-            <button
-              onClick={() => setShowQuickAnalysis(true)}
-              style={{ backgroundColor: ac.hex }}
-              className={`flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
-            >
-              <Zap size={15} />
-              Ask Zella AI
-            </button>
+                <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+                  {weeks.map((week, weekIndex) => (
+                    <div key={weekIndex} className="grid flex-1 grid-cols-7 gap-1.5">
+                      {week.map((day, dayIndex) => {
+                        if (!day) {
+                          return (
+                            <div
+                              key={`blank-${weekIndex}-${dayIndex}`}
+                              className="h-full min-h-[62px] rounded-md sm:min-h-[86px]"
+                              style={{ backgroundColor: "#0c0c12" }}
+                            />
+                          );
+                        }
 
-            <button
-              onClick={() => navigate("/trades/new")}
-              className={`flex items-center gap-2 rounded-lg bg-[#6C47FF] px-3.5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#5b37e8] ${FOCUS}`}
-            >
-              <Plus size={15} />
-              Import your trades
-            </button>
+                        const key = format(day, "yyyy-MM-dd");
+                        const cell = daysMap.get(key);
+                        const winRate = cell && cell.count ? (cell.wins / cell.count) * 100 : 0;
 
-            {/* Accent picker */}
-            <div className="flex items-center gap-1.5 pl-1" role="radiogroup" aria-label="Accent theme">
-              <Palette size={15} className={MUTED} />
-              {Object.entries(ACCENTS).map(([key, a]) => (
-                <button
-                  key={key}
-                  role="radio"
-                  aria-checked={accent === key}
-                  onClick={() => setAccent(key)}
-                  title={a.name}
-                  aria-label={`${a.name} theme`}
-                  className={`h-5 w-5 rounded-full transition-transform ${FOCUS} ${
-                    accent === key
-                      ? "scale-110 ring-2 ring-offset-2 ring-[#8a8fb5] ring-offset-[#f4f5fa] dark:ring-white/70 dark:ring-offset-[#0b0b19]"
-                      : "opacity-75 hover:scale-110 hover:opacity-100"
-                  }`}
-                  style={{ backgroundImage: `linear-gradient(135deg, ${a.hex}, ${a.hex2})` }}
-                />
-              ))}
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => navigate(`/trades?date=${key}`)}
+                            title={
+                              cell
+                                ? `${format(day, "eee, d MMM")}: ${usd(cell.net)} · ${cell.count} trade${
+                                    cell.count === 1 ? "" : "s"
+                                  }`
+                                : format(day, "eee, d MMM")
+                            }
+                            className="relative flex h-full min-h-[62px] flex-col items-center justify-center rounded-md border px-1 py-1.5 text-center transition hover:brightness-125 sm:min-h-[86px]"
+                            style={{
+                              backgroundColor: cellBg(cell?.net || 0, monthMax),
+                              borderColor: cell ? "#20202c" : "#14141c",
+                            }}
+                          >
+                            <span
+                              className="absolute left-1.5 top-1 text-[10px] tabular-nums"
+                              style={{ color: FAINT }}
+                            >
+                              {format(day, "d")}
+                            </span>
+                            {cell ? (
+                              <>
+                                <div className="mt-2 text-[11.5px] font-bold tabular-nums sm:text-[12.5px]">
+                                  {usdCell(cell.net)}
+                                </div>
+                                <div className="text-[9px] leading-tight sm:text-[9.5px]" style={{ color: "#b9b9c9" }}>
+                                  {cell.count} trade{cell.count === 1 ? "" : "s"}
+                                </div>
+                                <div className="text-[9px] leading-tight sm:text-[9.5px]" style={{ color: "#b9b9c9" }}>
+                                  {pct(winRate, 1)}
+                                </div>
+                              </>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-[30px] hidden w-[128px] shrink-0 flex-col gap-1.5 lg:flex">
+                {weeks.map((week, index) => {
+                  const weekStats = week.filter(Boolean).reduce(
+                    (acc, day) => {
+                      const cell = daysMap.get(format(day, "yyyy-MM-dd"));
+                      if (cell) {
+                        acc.net += cell.net;
+                        acc.days += 1;
+                      }
+                      return acc;
+                    },
+                    { net: 0, days: 0 }
+                  );
+                  return (
+                    <div
+                      key={index}
+                      className="flex flex-1 flex-col justify-center rounded-md border px-3 py-2"
+                      style={{ borderColor: BORDER, backgroundColor: CARD }}
+                    >
+                      <div className="text-[10px]" style={{ color: MUTED }}>
+                        Week {index + 1}
+                      </div>
+                      <div className="text-[13px] font-semibold tabular-nums">{usdCell(weekStats.net)}</div>
+                      <div className="text-[9.5px]" style={{ color: FAINT }}>
+                        {weekStats.days} day{weekStats.days === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Sync message */}
-        {syncMessage.text && (
-          <div
-            role="status"
-            className={`mb-5 flex items-center gap-2.5 rounded-lg border px-4 py-3 text-sm font-medium ${
-              syncMessage.type === "success"
-                ? "border-[#22c493]/30 bg-[#22c493]/10 text-[#0e9f77] dark:text-[#2dd4a0]"
-                : syncMessage.type === "error"
-                ? "border-[#f2556e]/30 bg-[#f2556e]/10 text-[#d93a57] dark:text-[#ff6b86]"
-                : "border-[#7c8cf8]/30 bg-[#7c8cf8]/10 text-[#4a56c9] dark:text-[#aab4ff]"
-            }`}
-          >
-            {syncMessage.type === "success" ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-            {syncMessage.text}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="flex justify-center items-center h-72">
-            <div
-              className="h-10 w-10 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#262645]"
-              style={{ borderTopColor: ac.hex }}
-              role="progressbar"
-              aria-label="Loading trades"
-            />
-          </div>
-        ) : error ? (
-          <Card className={`${CARD} mx-auto max-w-md p-8 text-center`}>
-            <AlertCircle size={36} className="mx-auto mb-3 text-[#f2556e]" />
-            <p className={`mb-5 text-sm ${MUTED}`}>{error}</p>
-            <button
-              onClick={refreshTrades}
-              style={{ backgroundColor: ac.hex }}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition ${FOCUS}`}
-            >
-              Try again
-            </button>
-          </Card>
-        ) : (
-          <>
-            {/* ───────── KPI row ───────── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4 mb-4">
-              <Kpi
-                title="Net P&L"
-                hint="Total profit and loss for the selected month"
-                badge={
-                  <span className="rounded-md bg-[#f1f2f8] dark:bg-[#1e1e3a] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[#3b3f5e] dark:text-[#c9ccea]">
-                    {monthlyStats.totalTrades}
-                  </span>
-                }
-                value={
-                  <>
-                    {netPnl < 0 ? "-" : ""}$<AnimatedNumber value={Math.abs(netPnl)} />
-                  </>
-                }
-                valueClass={pnlClass(netPnl)}
-              >
-                <div className={`text-xs ${MUTED}`}>
-                  Account growth{" "}
-                  <span className={`font-semibold ${pnlClass(accountGrowth)}`}>
-                    {Number(accountGrowth) >= 0 ? "+" : ""}
-                    {accountGrowth}%
-                  </span>{" "}
-                  all-time
-                </div>
-              </Kpi>
-
-              <Kpi
-                title="Trade win %"
-                hint="Share of trades closed in profit"
-                value={<><AnimatedNumber value={Number(monthlyStats.winRate)} decimals={1} />%</>}
-                valueClass={HEAD}
-                visual={
-                  <div className="h-[56px] w-[104px]">
-                    <Gauge
-                      half
-                      isDark={isDark}
-                      values={[perf.wins, perf.breakeven, perf.losses]}
-                      colors={[POS, NEUTRAL, NEG]}
-                    />
-                  </div>
-                }
-              >
-                <div className="flex flex-wrap gap-1.5">
-                  <Chip color={POS}>{perf.wins}</Chip>
-                  <Chip color={NEUTRAL}>{perf.breakeven}</Chip>
-                  <Chip color={NEG}>{perf.losses}</Chip>
-                </div>
-              </Kpi>
-
-              <Kpi
-                title="Profit factor"
-                hint="Gross profit divided by gross loss"
-                value={monthlyStats.profitFactor}
-                valueClass={HEAD}
-                visual={
-                  <div className="h-[56px] w-[56px]">
-                    <Gauge isDark={isDark} values={[perf.grossW, perf.grossL]} colors={[POS, NEG]} />
-                  </div>
-                }
-              >
-                <div className={`text-xs ${MUTED}`}>
-                  <span className={`font-semibold ${POS_T}`}>{money(perf.grossW, false)}</span> won,{" "}
-                  <span className={`font-semibold ${NEG_T}`}>{money(perf.grossL, false)}</span> lost
-                </div>
-              </Kpi>
-
-              <Kpi
-                title="Day win %"
-                hint="Share of trading days that closed green"
-                value={<><AnimatedNumber value={perf.dayWinRate} decimals={1} />%</>}
-                valueClass={HEAD}
-                visual={
-                  <div className="h-[56px] w-[104px]">
-                    <Gauge
-                      half
-                      isDark={isDark}
-                      values={[perf.greenDays, perf.flatDays, perf.redDays]}
-                      colors={[POS, NEUTRAL, NEG]}
-                    />
-                  </div>
-                }
-              >
-                <div className="flex flex-wrap gap-1.5">
-                  <Chip color={POS}>{perf.greenDays}</Chip>
-                  <Chip color={NEUTRAL}>{perf.flatDays}</Chip>
-                  <Chip color={NEG}>{perf.redDays}</Chip>
-                </div>
-              </Kpi>
-
-              <Kpi
-                title="Avg win / loss trade"
-                hint="Average winning trade divided by average losing trade"
-                value={payoffText}
-                valueClass={HEAD}
-              >
-                <div className="h-2 w-full overflow-hidden rounded-full bg-[#e6e8f2] dark:bg-[#262645] flex">
-                  <div
-                    className="h-full"
-                    style={{ width: `${avgTotal ? (perf.avgWin / avgTotal) * 100 : 50}%`, backgroundColor: POS }}
-                  />
-                  <div className="h-full flex-1" style={{ backgroundColor: avgTotal ? NEG : "transparent" }} />
-                </div>
-                <div className="mt-2 flex justify-between text-xs font-semibold tabular-nums">
-                  <span className={POS_T}>{money(perf.avgWin, false)}</span>
-                  <span className={NEG_T}>-{money(perf.avgLoss, false)}</span>
-                </div>
-              </Kpi>
-
-              <Kpi
-                title="Current streak"
-                hint="Consecutive winning or losing trades"
-                value={
-                  currentStreak.type === "None"
-                    ? "—"
-                    : `${currentStreak.count} ${currentStreak.type}${currentStreak.count === 1 ? "" : "s"}`
-                }
-                valueClass={
-                  currentStreak.type === "Win" ? POS_T : currentStreak.type === "Loss" ? NEG_T : HEAD
-                }
-                visual={
-                  <Flame
-                    size={26}
-                    className={
-                      currentStreak.type === "Win"
-                        ? "text-[#22c493]"
-                        : currentStreak.type === "Loss"
-                        ? "text-[#f2556e]"
-                        : "opacity-30"
-                    }
-                  />
-                }
-              >
-                <div className={`text-xs ${MUTED}`}>Most recent closed trades</div>
-              </Kpi>
-            </div>
-
-            {/* ───────── Month at a glance ───────── */}
-            <div className={`mb-4 overflow-hidden rounded-xl border ${DIVIDER} bg-[#e6e8f2] dark:bg-[#262645]`}>
-              <div className="grid grid-cols-2 gap-px sm:grid-cols-3 xl:grid-cols-6">
-                {glance.map((g) => (
-                  <div key={g.label} className="bg-white dark:bg-[#15152b] px-4 py-3.5">
-                    <div className={`text-xs font-medium ${MUTED}`}>{g.label}</div>
-                    <div className={`mt-1 text-lg font-bold tabular-nums ${g.cls || HEAD}`}>{g.value}</div>
-                    <div className={`text-[11px] ${MUTED}`}>{g.sub}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ───────── Cumulative P&L + side widget column ───────── */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4">
-              <div className="order-2 flex flex-col gap-4 xl:order-2 xl:col-span-4">
-              {widgets.radar && (
-              <Card className={`${CARD} p-0`}>
-                <CardHead
-                  icon={Target}
-                  accent={ac.hex}
-                  title="Performance radar"
-                  sub={radarMonth ? `${format(viewDate, "MMMM yyyy")} vs all-time` : "All-time (no trades this month)"}
-                  right={
-                    <div className="text-right shrink-0">
-                      <div className={`text-[11px] ${MUTED}`}>Edge score</div>
-                      <div className="text-2xl font-bold leading-none mt-1 tabular-nums" style={{ color: ac.hex }}>
-                        {radarMain ? radarMain.edge : "—"}
-                        <span className={`text-xs font-semibold ${MUTED}`}>/100</span>
-                      </div>
-                    </div>
-                  }
-                />
-                <div className="p-4 sm:p-5">
-                  {radarMain ? (
-                    <>
-                      <div className="relative h-72">
-                        <Radar data={radarChartData} options={radarOptions} />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 mt-4">
-                        {RADAR_LABELS.map((label, i) => (
-                          <div key={label} className={`${PANEL} px-2 py-2 text-center`}>
-                            <div className={`text-[10px] sm:text-[11px] truncate ${MUTED}`}>{label}</div>
-                            <div className={`text-sm font-bold tabular-nums ${HEAD}`}>{radarMain.raw[i]}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className={`h-72 flex flex-col items-center justify-center text-center gap-2 ${MUTED}`}>
-                      <Target size={36} className="opacity-40" />
-                      <p className="text-sm">Add trades to see your performance radar.</p>
-                    </div>
-                  )}
-                </div>
-              </Card>
-              )}
-
-              {/* Account balance & P&L */}
-              {widgets.balance && (
-              <Card className={`${CARD} p-0`}>
-                <CardHead
-                  icon={Wallet}
-                  accent={ac.hex}
-                  title="Account balance"
-                  sub="Live account equity"
-                  right={
-                    <span
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold tabular-nums ${
-                        Number(accountGrowth) >= 0
-                          ? "bg-[#22c493]/15 text-[#0e9f77] dark:text-[#2dd4a0]"
-                          : "bg-[#f2556e]/15 text-[#d93a57] dark:text-[#ff6b86]"
-                      }`}
-                    >
-                      {Number(accountGrowth) >= 0 ? "+" : ""}
-                      {accountGrowth}%
-                    </span>
-                  }
-                />
-                <div className="p-4 sm:p-5">
-                  <div className={`text-2xl font-bold tabular-nums ${HEAD}`}>${formatNumber(currentBalance)}</div>
-                  <div className={`mt-4 flex items-center justify-between border-t pt-3 text-sm ${DIVIDER}`}>
-                    <div>
-                      <div className={`text-[11px] ${MUTED}`}>Period P&L</div>
-                      <div className={`font-semibold tabular-nums ${pnlClass(netPnl)}`}>{money(netPnl)}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`text-[11px] ${MUTED}`}>All-time P&L</div>
-                      <div className={`font-semibold tabular-nums ${pnlClass(allTimePnL)}`}>{money(allTimePnL)}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className={`flex items-center gap-1.5 text-xs ${MUTED}`}>
-                      <Flame
-                        size={14}
-                        className={
-                          currentStreak.type === "Win"
-                            ? "text-[#22c493]"
-                            : currentStreak.type === "Loss"
-                            ? "text-[#f2556e]"
-                            : ""
-                        }
-                      />
-                      Current streak
-                    </span>
-                    <span
-                      className={`text-xs font-bold ${
-                        currentStreak.type === "Win" ? POS_T : currentStreak.type === "Loss" ? NEG_T : MUTED
-                      }`}
-                    >
-                      {currentStreak.type === "None" ? "—" : `${currentStreak.count} ${currentStreak.type}`}
-                    </span>
-                  </div>
-                </div>
-              </Card>
-              )}
-
-              {/* Win % + expectancy mini cards */}
-              <div className={`grid gap-4 ${widgets.winrate && widgets.expectancy ? "grid-cols-2" : "grid-cols-1"}`}>
-                {widgets.winrate && (
-                <Card className={`${CARD} p-4`}>
-                  <div className={`text-[11px] font-medium ${MUTED}`}>Trade win %</div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <div className="h-[44px] w-[64px] shrink-0">
-                      <Gauge half isDark={isDark} values={[perf.wins, perf.breakeven, perf.losses]} colors={[POS, NEUTRAL, NEG]} />
-                    </div>
-                    <div className={`text-xl font-bold tabular-nums ${HEAD}`}>{Number(monthlyStats.winRate).toFixed(0)}%</div>
-                  </div>
-                  <div className={`mt-1 text-[10px] ${MUTED}`}>{perf.wins}W · {perf.losses}L</div>
-                </Card>
-                )}
-                {widgets.expectancy && (
-                <Card className={`${CARD} p-4`}>
-                  <div className={`text-[11px] font-medium ${MUTED}`}>Trade expectancy</div>
-                  <div className={`mt-1 text-xl font-bold tabular-nums ${pnlClass(monthlyStats.expectancy)}`}>
-                    {money(monthlyStats.expectancy)}
-                  </div>
-                  <div className={`mt-1 text-[10px] ${MUTED}`}>avg R:R {monthlyStats.avgRR}</div>
-                </Card>
-                )}
-              </div>
-              {!widgets.radar && !widgets.balance && !widgets.winrate && !widgets.expectancy && (
-                <Card className={`${CARD} p-6 text-center`}>
-                  <SlidersHorizontal size={32} className={`mx-auto mb-2 ${MUTED}`} />
-                  <p className={`text-sm ${MUTED}`}>No widgets selected.</p>
-                  <button
-                    onClick={() => setWidgetPanelOpen(true)}
-                    className={`mt-3 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
-                    style={{ backgroundColor: ac.hex }}
-                  >
-                    Choose widgets
-                  </button>
-                </Card>
-              )}
-              </div>
-
-              <Card className={`${CARD} order-1 xl:order-1 xl:col-span-8 p-0`}>
-                <CardHead
-                  icon={LineChartIcon}
-                  accent={ac.hex}
-                  title="Cumulative P&L"
-                  sub={
-                    <>
-                      <span className={`font-semibold ${pnlClass(equityNet)}`}>{money(equityNet)}</span>
-                      {` across ${equity.count} trades`}
-                    </>
-                  }
-                  right={
-                    <div className="flex rounded-lg bg-[#f1f2f8] dark:bg-[#0f0f22] p-1 text-xs">
-                      {[
-                        ["month", "This month"],
-                        ["all", "All-time"],
-                      ].map(([key, label]) => (
-                        <button
-                          key={key}
-                          onClick={() => setCurveRange(key)}
-                          aria-pressed={curveRange === key}
-                          className={`rounded-md px-3 py-1.5 font-semibold transition-colors ${FOCUS} ${
-                            curveRange === key ? "text-white shadow-sm" : `${MUTED} hover:text-[#14142b] dark:hover:text-white`
-                          }`}
-                          style={curveRange === key ? { backgroundColor: ac.hex } : undefined}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  }
-                />
-                <div className="p-4 sm:p-5">
-                  {equity.count ? (
-                    <div className="relative h-72 sm:h-80 xl:h-[26rem]">
-                      <Line data={equityChartData} options={equityOptions} />
-                    </div>
-                  ) : (
-                    <div className={`h-72 flex flex-col items-center justify-center text-center gap-2 ${MUTED}`}>
-                      <LineChartIcon size={36} className="opacity-40" />
-                      <p className="text-sm">No trades in this range yet.</p>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            </div>
-
-            {/* ───────── Net daily P&L + Account overview ───────── */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4">
-              <Card className={`${CARD} xl:col-span-8 p-0`}>
-                <CardHead
-                  icon={BarChart3}
-                  accent={ac.hex}
-                  title="Net daily P&L"
-                  sub={`${perf.greenDays} green and ${perf.redDays} red days in ${format(viewDate, "MMMM")}`}
-                />
-                <div className="p-4 sm:p-5">
-                  {perf.daily.length ? (
-                    <div className="relative h-64">
-                      <Bar data={dailyBarData} options={dailyBarOptions} />
-                    </div>
-                  ) : (
-                    <div className={`h-64 flex flex-col items-center justify-center text-center gap-2 ${MUTED}`}>
-                      <BarChart3 size={36} className="opacity-40" />
-                      <p className="text-sm">No trading days this month.</p>
-                    </div>
-                  )}
-                </div>
-              </Card>
-
-              <Card className={`${CARD} xl:col-span-4 p-0`}>
-                <CardHead icon={Activity} accent={ac.hex} title="Trade expectancy" />
-                <div className="p-4 sm:p-5">
-                  <div className={`text-xs ${MUTED}`}>Expected value per trade</div>
-                  <div className={`mt-1 text-3xl font-bold tabular-nums ${pnlClass(monthlyStats.expectancy)}`}>
-                    {money(monthlyStats.expectancy)}
-                  </div>
-                  <div className="mt-5 space-y-3.5 text-sm">
-                    {[
-                      ["Average win", money(perf.avgWin, false), POS_T],
-                      ["Average loss", `-${money(perf.avgLoss, false)}`, NEG_T],
-                      ["Win / loss ratio", payoffText, HEAD],
-                      ["Profit factor", monthlyStats.profitFactor, HEAD],
-                    ].map(([label, value, cls]) => (
-                      <div key={label} className={`flex items-center justify-between border-b pb-3 last:border-0 last:pb-0 ${DIVIDER}`}>
-                        <span className={MUTED}>{label}</span>
-                        <span className={`font-semibold tabular-nums ${cls}`}>{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            {/* ───────── Calendar + side widgets ───────── */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4">
-              <Card className={`${CARD} xl:col-span-8 p-0`}>
-                <CardHead
-                  icon={CalendarDays}
-                  accent={ac.hex}
-                  title="Trading calendar"
-                  sub="Select a day to view its trades"
-                  right={
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={prevMonth}
-                        aria-label="Previous month"
-                        className={`rounded-lg p-2 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          const res = prompt("Enter month (YYYY-MM)");
-                          if (res && /^\d{4}-\d{2}$/.test(res)) {
-                            const [y, m] = res.split("-").map(Number);
-                            jumpTo(y, m);
-                          }
-                        }}
-                        title="Jump to a month"
-                        className={`rounded-lg border ${DIVIDER} px-3 py-1.5 text-sm font-semibold ${HEAD} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-                      >
-                        {format(viewDate, "MMM yyyy")}
-                      </button>
-                      <button
-                        onClick={nextMonth}
-                        aria-label="Next month"
-                        className={`rounded-lg p-2 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  }
-                />
-
-                <div className="p-3 sm:p-5">
-                  <div className="sm:overflow-x-auto">
-                    <div className="grid grid-cols-7 sm:grid-cols-8 sm:min-w-[640px] gap-1 sm:gap-1.5">
-                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Week"].map((d) => (
-                        <div
-                          key={d}
-                          className={`text-[10px] sm:text-xs font-semibold text-center py-1.5 ${MUTED} ${
-                            d === "Week" ? "hidden sm:block" : ""
-                          }`}
-                        >
-                          {d === "Week" ? d : d.slice(0, 1)}
-                          <span className="hidden sm:inline">{d === "Week" ? "" : d.slice(1)}</span>
-                        </div>
-                      ))}
-
-                      {calendarWeeks.map((week, wi) => {
-                        const wSum = weekSummary(week);
-                        return (
-                          <React.Fragment key={wi}>
-                            {week.map((dayObj, di) => {
-                              const ds = daySummary(dayObj);
-                              const isCur = isSameMonth(dayObj, viewDate);
-                              const pnl = ds?.pnl || 0;
-                              const alpha = 0.1 + Math.min(Math.abs(pnl) / 1500, 1) * 0.26;
-                              const today = isToday(dayObj);
-
-                              return (
-                                <div
-                                  key={di}
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={() => openDay(dayObj)}
-                                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && openDay(dayObj)}
-                                  aria-label={`${format(dayObj, "d MMMM")}${ds ? `, ${money(pnl)}` : ", no trades"}`}
-                                  className={`cursor-pointer min-h-[54px] sm:min-h-[92px] rounded-lg p-1 sm:p-2 flex flex-col justify-between border transition-colors ${FOCUS} ${
-                                    isCur
-                                      ? "bg-white dark:bg-[#101024] border-[#e6e8f2] dark:border-[#262645]"
-                                      : "bg-transparent border-dashed border-[#e6e8f2]/70 dark:border-[#262645]/60 opacity-60"
-                                  } hover:border-[#6C47FF]`}
-                                  style={{
-                                    backgroundColor: ds
-                                      ? pnl >= 0
-                                        ? `rgba(34, 196, 147, ${alpha})`
-                                        : pnl < 0
-                                        ? `rgba(242, 85, 110, ${alpha})`
-                                        : undefined
-                                      : undefined,
-                                    boxShadow: today ? `inset 0 0 0 2px ${ac.hex}` : undefined,
-                                  }}
-                                >
-                                  <div className={`text-[10px] sm:text-xs text-right font-medium ${MUTED}`}>
-                                    {format(dayObj, "d")}
-                                  </div>
-                                  <div className="flex flex-col items-center justify-center text-center">
-                                    {ds ? (
-                                      <>
-                                        <div className={`font-bold text-[10px] sm:text-sm leading-tight tabular-nums ${pnlClass(pnl)}`}>
-                                          <span className="sm:hidden">
-                                            {pnl >= 0 ? "+" : "-"}
-                                            {Math.abs(pnl).toFixed(0)}
-                                          </span>
-                                          <span className="hidden sm:inline">{money(pnl)}</span>
-                                        </div>
-                                        <div className={`hidden sm:block text-[10px] ${MUTED}`}>
-                                          {ds.count} {ds.count === 1 ? "trade" : "trades"}, {ds.winRate}%
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <div className={`text-xs ${MUTED} opacity-50`}>—</div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-
-                            {/* Weekly summary */}
-                            <div
-                              className={`hidden sm:flex min-h-[92px] flex-col items-center justify-center rounded-lg border p-2 bg-[#f7f8fc] dark:bg-[#1b1b36] ${DIVIDER}`}
-                            >
-                              <div className={`text-xs font-medium mb-1 ${MUTED}`}>Week {wi + 1}</div>
-                              <div className={`text-sm font-bold tabular-nums ${wSum.count ? pnlClass(wSum.pnl) : MUTED}`}>
-                                {wSum.count ? money(wSum.pnl) : "—"}
-                              </div>
-                              <div className={`text-[10px] ${MUTED}`}>
-                                {wSum.count} {wSum.count === 1 ? "trade" : "trades"}, {wSum.winRate}%
-                              </div>
-                            </div>
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              <div className="xl:col-span-4 flex flex-col gap-4">
-                {/* Weekly performance */}
-                <Card className={`${CARD} p-0`}>
-                  <CardHead
-                    icon={BarChart3}
-                    accent={ac.hex}
-                    title="Weekly performance"
-                    sub="Last 4 weeks"
-                  />
-                  <div className="p-4 sm:p-5 space-y-4">
-                    {weeklyBreakdown.map((week, idx) => (
-                      <div key={idx}>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className={`font-medium ${HEAD}`}>Week of {week.label}</span>
-                          <span className={`font-semibold tabular-nums ${week.total ? pnlClass(week.pnl) : MUTED}`}>
-                            {week.total ? money(week.pnl) : "—"}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-[#e6e8f2] dark:bg-[#262645]">
-                          {week.total > 0 && (
-                            <>
-                              <div style={{ width: `${(week.wins / week.total) * 100}%`, backgroundColor: POS }} />
-                              <div style={{ width: `${(week.breakeven / week.total) * 100}%`, backgroundColor: NEUTRAL }} />
-                              <div style={{ width: `${(week.losses / week.total) * 100}%`, backgroundColor: NEG }} />
-                            </>
-                          )}
-                        </div>
-                        <div className={`mt-1.5 flex gap-3 text-xs tabular-nums ${MUTED}`}>
-                          <span>{week.wins}W</span>
-                          <span>{week.losses}L</span>
-                          <span>{week.breakeven}B</span>
-                          <span className="ml-auto">{week.total} trades</span>
-                        </div>
-                      </div>
-                    ))}
-                    {weeklyBreakdown.every((w) => w.total === 0) && (
-                      <div className={`text-center py-4 text-sm ${MUTED}`}>No trades in the last 4 weeks</div>
-                    )}
-
-                    <div className={`flex items-center justify-between border-t pt-4 ${DIVIDER}`}>
-                      <span className={`flex items-center gap-2 text-sm ${MUTED}`}>
-                        <Flame size={16} className={currentStreak.type === "Win" ? "text-[#22c493]" : currentStreak.type === "Loss" ? "text-[#f2556e]" : ""} />
-                        Current streak
-                      </span>
-                      <span
-                        className={`text-sm font-bold ${
-                          currentStreak.type === "Win" ? POS_T : currentStreak.type === "Loss" ? NEG_T : MUTED
-                        }`}
-                      >
-                        {currentStreak.type === "None" ? "—" : `${currentStreak.count} ${currentStreak.type}`}
-                      </span>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* Top assets */}
-                <Card className={`${CARD} p-0 flex-1`}>
-                  <CardHead
-                    icon={TrendingUp}
-                    accent={ac.hex}
-                    title="Top assets by P&L"
-                    sub={
-                      monthlyAssetStats.topPairCount > 0
-                        ? `Most traded: ${monthlyAssetStats.topPair} (${monthlyAssetStats.topPairCount}), ${monthlyAssetStats.totalLots} lots`
-                        : "No trades this month"
-                    }
-                  />
-                  <div className="p-4 sm:p-5 space-y-3.5">
-                    {monthlyAssetStats.assetPnL.length > 0 ? (
-                      monthlyAssetStats.assetPnL.map((item) => (
-                        <div key={item.pair}>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className={`font-medium truncate max-w-[55%] ${HEAD}`}>{item.pair}</span>
-                            <span className={`font-semibold tabular-nums ${pnlClass(item.pnl)}`}>{money(item.pnl)}</span>
-                          </div>
-                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-[#e6e8f2] dark:bg-[#262645]">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${(Math.abs(item.pnl) / maxAssetAbs) * 100}%`,
-                                backgroundColor: item.pnl >= 0 ? POS : NEG,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className={`text-center py-4 text-sm ${MUTED}`}>No asset data</div>
-                    )}
-                  </div>
-                </Card>
-              </div>
-            </div>
-
-            {/* ───────── Recent trades ───────── */}
-            <Card className={`${CARD} p-0 mb-10`}>
-              <div className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 ${DIVIDER}`}>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setBottomTab("recent")}
-                    aria-pressed={bottomTab === "recent"}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${FOCUS} ${
-                      bottomTab === "recent"
-                        ? "bg-[#f1f2f8] dark:bg-[#1e1e3a] " + HEAD
-                        : MUTED + " hover:text-[#14142b] dark:hover:text-white"
-                    }`}
-                  >
-                    Recent trades
-                  </button>
-                  <button
-                    onClick={() => setBottomTab("open")}
-                    aria-pressed={bottomTab === "open"}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${FOCUS} ${
-                      bottomTab === "open"
-                        ? "bg-[#f1f2f8] dark:bg-[#1e1e3a] " + HEAD
-                        : MUTED + " hover:text-[#14142b] dark:hover:text-white"
-                    }`}
-                  >
-                    Open positions
-                    {openPositions.length > 0 && (
-                      <span className="ml-1.5 rounded-md bg-[#22c493]/15 px-1.5 py-0.5 text-[10px] tabular-nums text-[#0e9f77] dark:text-[#2dd4a0]">
-                        {openPositions.length}
-                      </span>
-                    )}
-                  </button>
-                </div>
+        {/* Bottom strip */}
+        <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[1.5fr_1fr_1fr]">
+          <div className={`${PANEL} p-4`}>
+            <div className="flex items-center gap-4 border-b pb-2.5" style={{ borderColor: BORDER }}>
+              {[
+                ["recent", "Recent trades"],
+                ["open", "Open positions"],
+              ].map(([key, label]) => (
                 <button
-                  onClick={() => navigate("/trades")}
-                  className={`flex items-center gap-1 rounded text-sm font-semibold hover:underline ${FOCUS}`}
-                  style={{ color: ac.hex }}
+                  key={key}
+                  type="button"
+                  onClick={() => setBottomTab(key)}
+                  aria-pressed={bottomTab === key}
+                  className="relative pb-1 text-[12px] font-semibold transition-colors"
+                  style={{ color: bottomTab === key ? TEXT : MUTED }}
                 >
-                  View all
-                  <ChevronRight size={15} />
+                  {label}
+                  {bottomTab === key ? (
+                    <span
+                      className="absolute inset-x-0 -bottom-[11px] h-[2px] rounded"
+                      style={{ backgroundColor: accent }}
+                    />
+                  ) : null}
                 </button>
-              </div>
-
-              {bottomTab === "recent" ? (
-                recentTrades.length === 0 ? (
-                <div className={`py-14 text-center text-sm ${MUTED}`}>No trades yet. Add one with the + button.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[520px] text-sm">
-                    <thead>
-                      <tr className={`border-b text-left text-xs font-medium ${MUTED} ${DIVIDER}`}>
-                        <th className="px-4 sm:px-5 py-3 font-medium">Date</th>
-                        <th className="px-3 py-3 font-medium">Symbol</th>
-                        <th className="px-3 py-3 font-medium">Side</th>
-                        <th className="px-3 py-3 font-medium hidden sm:table-cell text-right">Lots</th>
-                        <th className="px-3 py-3 font-medium hidden sm:table-cell text-right">R:R</th>
-                        <th className="px-4 sm:px-5 py-3 font-medium text-right">Net P&L</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentTrades.map((trade, i) => {
-                        const p = Number(trade.pnl) || 0;
-                        const isLong = /buy|long/i.test(String(trade.direction || ""));
-                        return (
-                          <tr
-                            key={trade.id || i}
-                            onClick={() => navigate(`/trades?date=${format(new Date(trade.date), "yyyy-MM-dd")}`)}
-                            className={`cursor-pointer border-b last:border-0 transition-colors hover:bg-[#f7f8fc] dark:hover:bg-[#1b1b36] ${DIVIDER}`}
-                          >
-                            <td className={`px-4 sm:px-5 py-3.5 whitespace-nowrap ${MUTED}`}>
-                              {format(new Date(trade.date), "dd MMM yyyy, HH:mm")}
-                            </td>
-                            <td className={`px-3 py-3.5 font-semibold ${HEAD}`}>{trade.pair || "—"}</td>
-                            <td className="px-3 py-3.5">
-                              <span
-                                className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
-                                  isLong
-                                    ? "bg-[#22c493]/15 text-[#0e9f77] dark:text-[#2dd4a0]"
-                                    : "bg-[#f2556e]/15 text-[#d93a57] dark:text-[#ff6b86]"
-                                }`}
-                              >
-                                {trade.direction || "—"}
-                              </span>
-                            </td>
-                            <td className={`px-3 py-3.5 hidden sm:table-cell text-right tabular-nums ${MUTED}`}>
-                              {trade.lotSize ?? "—"}
-                            </td>
-                            <td className={`px-3 py-3.5 hidden sm:table-cell text-right tabular-nums ${MUTED}`}>
-                              {trade.rr ? Number(trade.rr).toFixed(2) : "—"}
-                            </td>
-                            <td className={`px-4 sm:px-5 py-3.5 text-right font-bold tabular-nums ${pnlClass(p)}`}>
-                              {money(p)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )
-              ) : openPositions.length === 0 ? (
-                <div className={`py-14 text-center text-sm ${MUTED}`}>
-                  No open positions. Trades appear here while they are still running.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[520px] text-sm">
-                    <thead>
-                      <tr className={`border-b text-left text-xs font-medium ${MUTED} ${DIVIDER}`}>
-                        <th className="px-4 sm:px-5 py-3 font-medium">Opened</th>
-                        <th className="px-3 py-3 font-medium">Symbol</th>
-                        <th className="px-3 py-3 font-medium">Side</th>
-                        <th className="px-3 py-3 font-medium hidden sm:table-cell text-right">Lots</th>
-                        <th className="px-3 py-3 font-medium hidden sm:table-cell text-right">R:R</th>
-                        <th className="px-4 sm:px-5 py-3 font-medium text-right">Unrealised</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {openPositions.map((trade, i) => {
-                        const p = Number(trade.pnl) || 0;
-                        const isLong = /buy|long/i.test(String(trade.direction || ""));
-                        return (
-                          <tr
-                            key={trade.id || i}
-                            onClick={() => navigate(`/trades?date=${format(new Date(trade.date), "yyyy-MM-dd")}`)}
-                            className={`cursor-pointer border-b last:border-0 transition-colors hover:bg-[#f7f8fc] dark:hover:bg-[#1b1b36] ${DIVIDER}`}
-                          >
-                            <td className={`px-4 sm:px-5 py-3.5 whitespace-nowrap ${MUTED}`}>
-                              {format(new Date(trade.date), "dd MMM yyyy, HH:mm")}
-                            </td>
-                            <td className={`px-3 py-3.5 font-semibold ${HEAD}`}>{trade.pair || "—"}</td>
-                            <td className="px-3 py-3.5">
-                              <span
-                                className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
-                                  isLong
-                                    ? "bg-[#22c493]/15 text-[#0e9f77] dark:text-[#2dd4a0]"
-                                    : "bg-[#f2556e]/15 text-[#d93a57] dark:text-[#ff6b86]"
-                                }`}
-                              >
-                                {trade.direction || "—"}
-                              </span>
-                            </td>
-                            <td className={`px-3 py-3.5 hidden sm:table-cell text-right tabular-nums ${MUTED}`}>
-                              {trade.lotSize ?? "—"}
-                            </td>
-                            <td className={`px-3 py-3.5 hidden sm:table-cell text-right tabular-nums ${MUTED}`}>
-                              {trade.rr ? Number(trade.rr).toFixed(2) : "—"}
-                            </td>
-                            <td className={`px-4 sm:px-5 py-3.5 text-right font-bold tabular-nums ${pnlClass(p)}`}>
-                              {money(p)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
-
-            {/* Floating Quick Add Button */}
-            <button
-              onClick={() => navigate("/trades/new")}
-              style={{ backgroundColor: ac.hex }}
-              className={`fixed bottom-24 md:bottom-6 right-4 md:right-6 z-[1000] flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg shadow-black/25 transition hover:brightness-110 active:scale-95 ${FOCUS}`}
-              aria-label="Add new trade"
-            >
-              <Plus size={26} strokeWidth={2.5} />
-            </button>
-
-            {/* Floating widget customiser */}
-            <button
-              onClick={() => setWidgetPanelOpen(true)}
-              title="Customize widgets"
-              aria-label="Customize dashboard widgets"
-              className={`fixed bottom-40 md:bottom-24 right-4 md:right-6 z-[1000] flex h-11 w-11 items-center justify-center rounded-full border bg-white dark:bg-[#15152b] shadow-lg transition hover:brightness-110 active:scale-95 ${DIVIDER} ${HEAD} ${FOCUS}`}
-            >
-              <SlidersHorizontal size={18} />
-            </button>
-
-            {/* Widget customiser drawer */}
-            {widgetPanelOpen && (
-              <div
-                className="fixed inset-0 z-[2100] flex justify-end bg-black/50"
-                onClick={() => setWidgetPanelOpen(false)}
+              ))}
+              <button
+                type="button"
+                onClick={() => navigate("/trades")}
+                aria-label="Open all trades"
+                className="ml-auto transition-colors hover:text-white"
+                style={{ color: MUTED }}
               >
-                <aside
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label="Customize dashboard widgets"
-                  onClick={(e) => e.stopPropagation()}
-                  className={`h-full w-full max-w-sm overflow-y-auto border-l bg-white dark:bg-[#15152b] shadow-2xl ${DIVIDER}`}
-                >
-                  <div className={`flex items-start justify-between border-b px-5 py-4 ${DIVIDER}`}>
-                    <div>
-                      <h2 className={`flex items-center gap-2 text-lg font-bold ${HEAD}`}>
-                        <SlidersHorizontal size={18} style={{ color: ac.hex }} />
-                        Customize widgets
-                      </h2>
-                      <p className={`mt-0.5 text-xs ${MUTED}`}>
-                        Choose what appears in your right-hand column.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setWidgetPanelOpen(false)}
-                      aria-label="Close"
-                      className={`rounded-lg p-2 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-                    >
-                      <X size={20} />
-                    </button>
-                  </div>
+                <ArrowUpRight size={15} />
+              </button>
+            </div>
 
-                  <div className="space-y-3 p-5">
-                    {WIDGET_OPTIONS.map((opt) => {
-                      const on = !!widgets[opt.key];
-                      return (
-                        <button
-                          key={opt.key}
-                          onClick={() => toggleWidget(opt.key)}
-                          role="switch"
-                          aria-checked={on}
-                          className={`flex w-full items-center justify-between gap-4 rounded-xl border bg-[#f7f8fc] dark:bg-[#101024] p-4 text-left transition-colors hover:border-[#6C47FF] ${DIVIDER} ${FOCUS}`}
-                        >
-                          <span className="min-w-0">
-                            <span className={`block text-sm font-semibold ${HEAD}`}>{opt.label}</span>
-                            <span className={`mt-0.5 block text-xs ${MUTED}`}>{opt.desc}</span>
-                          </span>
-                          <span
-                            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                              on ? "" : "bg-[#d5d8e6] dark:bg-[#2a2a4a]"
-                            }`}
-                            style={on ? { backgroundColor: ac.hex } : undefined}
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                                on ? "translate-x-6" : "translate-x-1"
-                              }`}
-                            />
-                          </span>
-                        </button>
-                      );
-                    })}
-                    <p className={`pt-2 text-[11px] ${MUTED}`}>Your selection is saved on this device.</p>
-                  </div>
-                </aside>
+            {rows.length === 0 ? (
+              <div className="py-8 text-center text-[12px]" style={{ color: MUTED }}>
+                {bottomTab === "recent"
+                  ? "No closed trades yet — log your first one to fill this dashboard."
+                  : "No open positions right now."}
               </div>
+            ) : (
+              rows.map((trade) => {
+                const pnl = Number(trade.pnl) || 0;
+                const isShort = /short|sell/i.test(trade.direction || "");
+                const date = tradeDateOf(trade);
+                return (
+                  <button
+                    key={trade.id}
+                    type="button"
+                    onClick={() => navigate("/trades")}
+                    className="flex w-full items-center gap-3 border-b py-2.5 text-left last:border-0"
+                    style={{ borderColor: "#171720" }}
+                  >
+                    <span
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold uppercase"
+                      style={{
+                        backgroundColor: isShort ? "rgba(242,85,110,0.14)" : "rgba(34,196,147,0.14)",
+                        color: isShort ? NEG : POS,
+                      }}
+                    >
+                      {(trade.pair || "—").slice(0, 2)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12.5px] font-semibold">
+                        {trade.pair || "—"} <span style={{ color: MUTED }}>· {trade.direction || "—"}</span>
+                      </span>
+                      <span className="block text-[10.5px]" style={{ color: FAINT }}>
+                        {date ? format(date, "d MMM yyyy") : "—"}
+                      </span>
+                    </span>
+                    <span
+                      className="text-[12px] font-semibold tabular-nums"
+                      style={{ color: bottomTab === "open" ? MUTED : pnl >= 0 ? POS : NEG }}
+                    >
+                      {bottomTab === "open" ? "Open" : usd(pnl, true)}
+                    </span>
+                  </button>
+                );
+              })
             )}
+          </div>
 
-            {/* Quick Analysis Modal */}
-            {showQuickAnalysis && (
-              <div
-                className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4"
-                onClick={() => setShowQuickAnalysis(false)}
-              >
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label="Quick analysis"
-                  onClick={(e) => e.stopPropagation()}
-                  className={`max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border bg-white dark:bg-[#15152b] shadow-2xl ${DIVIDER}`}
-                >
-                  <div className={`flex items-center justify-between border-b px-5 sm:px-7 py-4 ${DIVIDER}`}>
-                    <div>
-                      <h2 className={`flex items-center gap-2 text-lg font-bold ${HEAD}`}>
-                        <Zap size={18} style={{ color: ac.hex }} />
-                        Quick analysis
-                      </h2>
-                      <p className={`text-xs mt-0.5 ${MUTED}`}>{format(viewDate, "MMMM yyyy")}</p>
-                    </div>
-                    <button
-                      onClick={() => setShowQuickAnalysis(false)}
-                      aria-label="Close"
-                      className={`rounded-lg p-2 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-                    >
-                      <X size={20} />
-                    </button>
-                  </div>
-
-                  <div className="p-5 sm:p-7">{quickAnalysisContent()}</div>
-
-                  <div className={`flex justify-end border-t px-5 sm:px-7 py-4 ${DIVIDER}`}>
-                    <button
-                      onClick={() => setShowQuickAnalysis(false)}
-                      className={`rounded-lg border ${DIVIDER} px-5 py-2 text-sm font-semibold ${HEAD} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-                    >
-                      Close
-                    </button>
-                  </div>
+          <div className={`${PANEL} flex flex-col p-4`}>
+            <div className="flex items-center gap-1.5 text-[13px] font-semibold">
+              Net daily P&L
+              <Info size={12} style={{ color: FAINT }} aria-hidden="true" />
+            </div>
+            <div className="mt-4 flex min-h-[120px] max-h-[168px] flex-1 items-end gap-[3px]">
+              {dailyBars.map((bar) => {
+                const height = Math.max(bar.net === 0 ? 2 : 4, (Math.abs(bar.net) / maxDaily) * 140);
+                return (
+                  <div
+                    key={format(bar.date, "yyyy-MM-dd")}
+                    title={`${format(bar.date, "d MMM")}: ${usd(bar.net)} · ${bar.count} trades`}
+                    className="flex-1 rounded-t-[2px]"
+                    style={{
+                      height: `${Math.round(height)}px`,
+                      backgroundColor: bar.net > 0 ? POS : bar.net < 0 ? NEG : "#23232f",
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div className="mt-2 flex justify-between text-[9px]" style={{ color: FAINT }}>
+              <span>{format(dailyBars[0].date, "d MMM")}</span>
+              <span>{format(dailyBars[dailyBars.length - 1].date, "d MMM")}</span>
+            </div>
+            <div className="mt-auto flex items-end justify-between gap-3 border-t pt-3" style={{ borderColor: "#171720" }}>
+              <div>
+                <div className="text-[9.5px] uppercase tracking-wide" style={{ color: FAINT }}>
+                  Best day
+                </div>
+                <div className="text-[12.5px] font-semibold tabular-nums" style={{ color: POS }}>
+                  {usd(bestDay.net, true)}
+                </div>
+                <div className="text-[9.5px]" style={{ color: FAINT }}>
+                  {format(bestDay.date, "d MMM")}
                 </div>
               </div>
-            )}
-          </>
-        )}
+              <div className="text-right">
+                <div className="text-[9.5px] uppercase tracking-wide" style={{ color: FAINT }}>
+                  Worst day
+                </div>
+                <div className="text-[12.5px] font-semibold tabular-nums" style={{ color: NEG }}>
+                  {usd(worstDay.net, true)}
+                </div>
+                <div className="text-[9.5px]" style={{ color: FAINT }}>
+                  {format(worstDay.date, "d MMM")}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className={`${PANEL} flex flex-col p-4`}>
+            <div className="flex items-center justify-between">
+              <div className="text-[13px] font-semibold">External links</div>
+              <button
+                type="button"
+                onClick={() => navigate("/settings")}
+                aria-label="Link settings"
+                className="transition-colors hover:text-white"
+                style={{ color: MUTED }}
+              >
+                <Settings size={14} />
+              </button>
+            </div>
+
+            <div className="mt-1.5 flex flex-1 flex-col">
+              {[
+                { label: "Weekly performance report", to: "/reports", icon: BarChart3 },
+                { label: "Playbook library", to: "/playbooks", icon: BookMarked },
+                { label: "Backtest lab", to: "/backtest", icon: Calculator },
+                { label: "TradingView chart", to: "/trades", icon: ExternalLink },
+              ].map((link) => (
+                <button
+                  key={link.label}
+                  type="button"
+                  onClick={() => navigate(link.to)}
+                  className="flex w-full items-center gap-2.5 border-b py-2.5 text-left last:border-0"
+                  style={{ borderColor: "#171720" }}
+                >
+                  <span
+                    className="flex h-7 w-7 items-center justify-center rounded-md"
+                    style={{ backgroundColor: CARD_ALT, color: "#a8a8ff" }}
+                  >
+                    <link.icon size={14} />
+                  </span>
+                  <span className="flex-1 text-[12px]" style={{ color: "#cfcfdd" }}>
+                    {link.label}
+                  </span>
+                  <ExternalLink size={12} style={{ color: FAINT }} />
+                </button>
+              ))}
+
+              <div
+                className="mt-auto rounded-lg border px-3 py-2.5"
+                style={{ borderColor: "#242433", backgroundColor: "#0d0d15" }}
+              >
+                <div className="text-[11px] font-semibold" style={{ color: "#cfcfdd" }}>
+                  Connect your broker
+                </div>
+                <div className="mt-0.5 text-[10px] leading-snug" style={{ color: FAINT }}>
+                  Import MT4, MT5 or CSV trades to keep this dashboard in sync automatically.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
