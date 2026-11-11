@@ -330,10 +330,6 @@ export default function MentorMode({ currentAccount }) {
   const send = async (text) => {
     const content = (text ?? input).trim();
     if (!content || sending) return;
-    if (credits !== null && credits <= 0) {
-      setError("Out of AI credits. Please add more credits to continue chatting.");
-      return;
-    }
     setError(null);
     const userMsg = { id: newId(), role: "user", content, ts: new Date().toISOString() };
     const history = [...messages, userMsg];
@@ -367,8 +363,8 @@ export default function MentorMode({ currentAccount }) {
         );
       }
       setMessages((m) => [...m, { id: newId(), role: "assistant", content: data.reply, ts: new Date().toISOString() }]);
-      if (user) await decrementCredit(user.uid);
-      setCredits((prev) => (prev === null ? prev : prev - 1));
+      if (user && credits !== null && credits > 0) await decrementCredit(user.uid);
+      setCredits((prev) => (prev === null ? prev : Math.max(0, prev - 1)));
     } catch (err) {
       setError(err.message || "Something went wrong.");
     } finally {
@@ -379,10 +375,6 @@ export default function MentorMode({ currentAccount }) {
   const generateWeeklyReview = async () => {
     if (weeklyTrades.length === 0) {
       setWeeklyReview("No executed trades in the last 7 days. Log some trades and come back.");
-      return;
-    }
-    if (credits !== null && credits <= 0) {
-      setError("Out of AI credits. Please add more credits to continue.");
       return;
     }
     setWeeklyReviewLoading(true);
@@ -424,8 +416,8 @@ Provide: (1) a one-line summary of the week, (2) 2-3 specific observations from 
         throw new Error(data.error || `Request failed (${res.status})`);
       }
       setWeeklyReview(data.reply || "No review generated.");
-      if (user) await decrementCredit(user.uid);
-      setCredits((prev) => (prev === null ? prev : prev - 1));
+      if (user && credits !== null && credits > 0) await decrementCredit(user.uid);
+      setCredits((prev) => (prev === null ? prev : Math.max(0, prev - 1)));
     } catch (err) {
       setError(err.message || "Could not generate weekly review.");
     } finally {
@@ -444,7 +436,7 @@ Provide: (1) a one-line summary of the week, (2) 2-3 specific observations from 
 
   return (
     <div className="min-h-screen w-full bg-[#f4f5fa] p-3 text-[#14142b] dark:bg-[#0b0b19] dark:text-[#e8e9f7] sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-4xl space-y-4">
+      <div className="mx-auto max-w-[1600px] space-y-4">
         {/* Header */}
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
@@ -488,10 +480,10 @@ Provide: (1) a one-line summary of the week, (2) 2-3 specific observations from 
               </option>
             ))}
           </select>
-          {credits !== null && creditsLoading === false && (
-            <span className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${DIVIDER} ${credits <= 0 ? NEG_T : HEAD}`}>
+          {credits !== null && creditsLoading === false && credits > 0 && (
+            <span className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${DIVIDER} ${HEAD}`}>
               <DollarSign size={12} />
-              {credits <= 0 ? "Out of credits" : `Credits: ${credits}`}
+              {`Credits: ${credits}`}
             </span>
           )}
           {messages.length > 0 && (
@@ -504,7 +496,9 @@ Provide: (1) a one-line summary of the week, (2) 2-3 specific observations from 
           )}
         </div>
 
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         {/* Weekly Review */}
+        <div className="xl:order-2 xl:col-span-4">
         <Card className={`${CARD} p-0`}>
           <div className={`flex items-center justify-between border-b px-4 py-3 ${DIVIDER}`}>
             <div className="flex items-center gap-2">
@@ -533,7 +527,7 @@ Provide: (1) a one-line summary of the week, (2) 2-3 specific observations from 
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3">
                   {[
                     ["Net P&L", `$${weeklyStats.pnl.toFixed(2)}`, weeklyStats.pnl >= 0 ? POS_T : NEG_T],
                     ["Win Rate", `${weeklyStats.winRate.toFixed(1)}%`, HEAD],
@@ -568,10 +562,11 @@ Provide: (1) a one-line summary of the week, (2) 2-3 specific observations from 
             )}
           </div>
         </Card>
+        </div>
 
         {/* Chat */}
         <Card
-          className={`${CARD} flex h-[calc(100dvh-15rem)] min-h-[420px] flex-col overflow-hidden md:h-[calc(100dvh-13.5rem)]`}
+          className={`${CARD} xl:order-1 xl:col-span-8 flex h-[calc(100dvh-15rem)] min-h-[420px] flex-col overflow-hidden md:h-[calc(100dvh-13.5rem)]`}
         >
           <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
             {shown.map((m) => (
@@ -668,6 +663,7 @@ Provide: (1) a one-line summary of the week, (2) 2-3 specific observations from 
             </p>
           </div>
         </Card>
+        </div>
       </div>
     </div>
   );
