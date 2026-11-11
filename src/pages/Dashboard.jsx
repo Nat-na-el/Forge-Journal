@@ -30,6 +30,7 @@ import {
   ArrowDownRight,
   RefreshCw,
   Palette,
+  SlidersHorizontal,
   Target,
   LineChart as LineChartIcon,
   ChevronLeft,
@@ -106,6 +107,16 @@ const ACCENTS = {
 };
 
 const RADAR_LABELS = ["Win Rate", "Profit Factor", "Avg R:R", "Payoff", "Green Days", "Recovery"];
+
+// Right-hand widget column: user-customisable, persisted locally.
+const WIDGET_STORAGE_KEY = "forgexDashboardWidgets";
+const DEFAULT_WIDGETS = { radar: true, balance: true, winrate: true, expectancy: true };
+const WIDGET_OPTIONS = [
+  { key: "radar", label: "Zella score radar", desc: "Edge score across six dimensions" },
+  { key: "balance", label: "Account balance & P&L", desc: "Live equity, period and all-time P&L" },
+  { key: "winrate", label: "Trade win %", desc: "Win / breakeven / loss split" },
+  { key: "expectancy", label: "Trade expectancy", desc: "Average expected value per trade" },
+];
 
 // A trade's date, whichever field the page that saved it used
 const tDate = (t) => t?.date || t?.openDateTime || t?.closeDateTime || "";
@@ -310,6 +321,23 @@ export default function Dashboard({ currentAccount }) {
   const [viewDate, setViewDate] = useState(new Date());
   const [showQuickAnalysis, setShowQuickAnalysis] = useState(false);
   const [bottomTab, setBottomTab] = useState("recent");
+  const [widgetPanelOpen, setWidgetPanelOpen] = useState(false);
+  const [widgets, setWidgets] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(WIDGET_STORAGE_KEY) || "null");
+      return saved && typeof saved === "object" ? { ...DEFAULT_WIDGETS, ...saved } : DEFAULT_WIDGETS;
+    } catch {
+      return DEFAULT_WIDGETS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(widgets));
+    } catch {}
+  }, [widgets]);
+
+  const toggleWidget = (key) => setWidgets((prev) => ({ ...prev, [key]: !prev[key] }));
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState({ text: "", type: "" });
   const [accent, setAccent] = useState(() => {
@@ -330,11 +358,15 @@ export default function Dashboard({ currentAccount }) {
   }, [accent]);
 
   useEffect(() => {
-    if (!showQuickAnalysis) return undefined;
-    const onKey = (e) => e.key === "Escape" && setShowQuickAnalysis(false);
+    if (!showQuickAnalysis && !widgetPanelOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (widgetPanelOpen) setWidgetPanelOpen(false);
+      else setShowQuickAnalysis(false);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showQuickAnalysis]);
+  }, [showQuickAnalysis, widgetPanelOpen]);
 
   // ─── Fetch account metadata ───────────────────────────────────────
   const fetchAccountMeta = async (user, accountId) => {
@@ -1391,6 +1423,7 @@ export default function Dashboard({ currentAccount }) {
             {/* ───────── Cumulative P&L + side widget column ───────── */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 mb-4">
               <div className="order-2 flex flex-col gap-4 xl:order-2 xl:col-span-4">
+              {widgets.radar && (
               <Card className={`${CARD} p-0`}>
                 <CardHead
                   icon={Target}
@@ -1430,8 +1463,10 @@ export default function Dashboard({ currentAccount }) {
                   )}
                 </div>
               </Card>
+              )}
 
               {/* Account balance & P&L */}
+              {widgets.balance && (
               <Card className={`${CARD} p-0`}>
                 <CardHead
                   icon={Wallet}
@@ -1487,9 +1522,11 @@ export default function Dashboard({ currentAccount }) {
                   </div>
                 </div>
               </Card>
+              )}
 
               {/* Win % + expectancy mini cards */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className={`grid gap-4 ${widgets.winrate && widgets.expectancy ? "grid-cols-2" : "grid-cols-1"}`}>
+                {widgets.winrate && (
                 <Card className={`${CARD} p-4`}>
                   <div className={`text-[11px] font-medium ${MUTED}`}>Trade win %</div>
                   <div className="mt-1 flex items-center gap-2">
@@ -1500,6 +1537,8 @@ export default function Dashboard({ currentAccount }) {
                   </div>
                   <div className={`mt-1 text-[10px] ${MUTED}`}>{perf.wins}W · {perf.losses}L</div>
                 </Card>
+                )}
+                {widgets.expectancy && (
                 <Card className={`${CARD} p-4`}>
                   <div className={`text-[11px] font-medium ${MUTED}`}>Trade expectancy</div>
                   <div className={`mt-1 text-xl font-bold tabular-nums ${pnlClass(monthlyStats.expectancy)}`}>
@@ -1507,7 +1546,21 @@ export default function Dashboard({ currentAccount }) {
                   </div>
                   <div className={`mt-1 text-[10px] ${MUTED}`}>avg R:R {monthlyStats.avgRR}</div>
                 </Card>
+                )}
               </div>
+              {!widgets.radar && !widgets.balance && !widgets.winrate && !widgets.expectancy && (
+                <Card className={`${CARD} p-6 text-center`}>
+                  <SlidersHorizontal size={32} className={`mx-auto mb-2 ${MUTED}`} />
+                  <p className={`text-sm ${MUTED}`}>No widgets selected.</p>
+                  <button
+                    onClick={() => setWidgetPanelOpen(true)}
+                    className={`mt-3 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
+                    style={{ backgroundColor: ac.hex }}
+                  >
+                    Choose widgets
+                  </button>
+                </Card>
+              )}
               </div>
 
               <Card className={`${CARD} order-1 xl:order-1 xl:col-span-8 p-0`}>
@@ -2002,6 +2055,84 @@ export default function Dashboard({ currentAccount }) {
             >
               <Plus size={26} strokeWidth={2.5} />
             </button>
+
+            {/* Floating widget customiser */}
+            <button
+              onClick={() => setWidgetPanelOpen(true)}
+              title="Customize widgets"
+              aria-label="Customize dashboard widgets"
+              className={`fixed bottom-40 md:bottom-24 right-4 md:right-6 z-[1000] flex h-11 w-11 items-center justify-center rounded-full border bg-white dark:bg-[#15152b] shadow-lg transition hover:brightness-110 active:scale-95 ${DIVIDER} ${HEAD} ${FOCUS}`}
+            >
+              <SlidersHorizontal size={18} />
+            </button>
+
+            {/* Widget customiser drawer */}
+            {widgetPanelOpen && (
+              <div
+                className="fixed inset-0 z-[2100] flex justify-end bg-black/50"
+                onClick={() => setWidgetPanelOpen(false)}
+              >
+                <aside
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Customize dashboard widgets"
+                  onClick={(e) => e.stopPropagation()}
+                  className={`h-full w-full max-w-sm overflow-y-auto border-l bg-white dark:bg-[#15152b] shadow-2xl ${DIVIDER}`}
+                >
+                  <div className={`flex items-start justify-between border-b px-5 py-4 ${DIVIDER}`}>
+                    <div>
+                      <h2 className={`flex items-center gap-2 text-lg font-bold ${HEAD}`}>
+                        <SlidersHorizontal size={18} style={{ color: ac.hex }} />
+                        Customize widgets
+                      </h2>
+                      <p className={`mt-0.5 text-xs ${MUTED}`}>
+                        Choose what appears in your right-hand column.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setWidgetPanelOpen(false)}
+                      aria-label="Close"
+                      className={`rounded-lg p-2 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 p-5">
+                    {WIDGET_OPTIONS.map((opt) => {
+                      const on = !!widgets[opt.key];
+                      return (
+                        <button
+                          key={opt.key}
+                          onClick={() => toggleWidget(opt.key)}
+                          role="switch"
+                          aria-checked={on}
+                          className={`flex w-full items-center justify-between gap-4 rounded-xl border bg-[#f7f8fc] dark:bg-[#101024] p-4 text-left transition-colors hover:border-[#6C47FF] ${DIVIDER} ${FOCUS}`}
+                        >
+                          <span className="min-w-0">
+                            <span className={`block text-sm font-semibold ${HEAD}`}>{opt.label}</span>
+                            <span className={`mt-0.5 block text-xs ${MUTED}`}>{opt.desc}</span>
+                          </span>
+                          <span
+                            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                              on ? "" : "bg-[#d5d8e6] dark:bg-[#2a2a4a]"
+                            }`}
+                            style={on ? { backgroundColor: ac.hex } : undefined}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                on ? "translate-x-6" : "translate-x-1"
+                              }`}
+                            />
+                          </span>
+                        </button>
+                      );
+                    })}
+                    <p className={`pt-2 text-[11px] ${MUTED}`}>Your selection is saved on this device.</p>
+                  </div>
+                </aside>
+              </div>
+            )}
 
             {/* Quick Analysis Modal */}
             {showQuickAnalysis && (
