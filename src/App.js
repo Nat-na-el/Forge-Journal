@@ -48,6 +48,13 @@ import {
 // Shared look (Tradezella-style – same palette as Dashboard / Journal / Sidebar)
 // ────────────────────────────────────────────────
 const ACCENT = "#6C47FF";
+
+// Read once at module load: lets the dashboard demo screen render without a
+// Firebase session for local design review (also used by the Demo Data menu).
+const PREVIEW_MODE =
+  typeof window !== "undefined" &&
+  process.env.NODE_ENV !== "production" &&
+  new URLSearchParams(window.location.search).get("preview") === "1";
 const MODAL_PANEL =
   "w-full rounded-2xl border border-[#e6e8f2] bg-white text-[#14142b] shadow-2xl dark:border-[#262645] dark:bg-[#15152b] dark:text-white";
 const FIELD =
@@ -354,6 +361,13 @@ function AppContent() {
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (PREVIEW_MODE) {
+        const demo = { id: "demo", name: "Demo Account", currency: "USD", starting_balance: 10000 };
+        setAccounts([demo]);
+        setCurrentAccount(demo);
+        setLoading(false);
+        return;
+      }
       if (user) {
         loadAccounts(user);
       } else {
@@ -501,7 +515,7 @@ function AppContent() {
     );
   }
 
-  const isLoggedIn = !!auth.currentUser;
+  const isLoggedIn = !!auth.currentUser || PREVIEW_MODE;
 
   // Sidebar is flush with the left edge: 12rem open, 4rem collapsed (drawer on phones)
   const sidebarWidth = isMobile ? "0rem" : open ? "12rem" : "4rem";

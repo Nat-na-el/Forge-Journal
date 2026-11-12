@@ -35,6 +35,7 @@ import {
   Sunrise,
 } from "lucide-react";
 import useAccent from "../hooks/useAccent";
+import demoDashboardTrades from "../lib/demoDashboardData";
 
 // ─── Palette (matches the reference dashboard) ───────────────────────────────
 const BG = "#08080d";
@@ -614,11 +615,25 @@ export default function Dashboard({ currentAccount }) {
   const [bottomTab, setBottomTab] = useState("recent");
   const [copied, setCopied] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [demoMode, setDemoMode] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("demo") === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const accountId = currentAccount?.id;
   const currency = currentAccount?.currency || "USD";
 
   const load = async () => {
+    // Demo mode shows bundled sample trades; it never writes to Firestore.
+    if (demoMode) {
+      setTrades(demoDashboardTrades());
+      setError("");
+      setLoading(false);
+      return;
+    }
     const user = auth.currentUser;
     if (!user || !accountId) {
       setTrades([]);
@@ -644,7 +659,7 @@ export default function Dashboard({ currentAccount }) {
     setLoading(true);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId]);
+  }, [accountId, demoMode]);
 
   // Rotate the "copied" tick back to the copy icon.
   useEffect(() => {
@@ -811,6 +826,13 @@ export default function Dashboard({ currentAccount }) {
               label="Demo Data"
               icon={FolderOpen}
               items={[
+                {
+                  label: demoMode ? "Back to my data" : "Show demo dashboard",
+                  icon: Sparkles,
+                  active: demoMode,
+                  accent,
+                  onClick: () => setDemoMode((value) => !value),
+                },
                 { label: "Open Backtest lab", icon: Calculator, onClick: () => navigate("/backtest") },
                 { label: "Import trades (CSV)", icon: FolderOpen, onClick: () => navigate("/trades") },
               ]}
@@ -867,6 +889,19 @@ export default function Dashboard({ currentAccount }) {
           <span className="hidden text-[10.5px] sm:inline" style={{ color: FAINT }}>
             · Synced from your broker once a day
           </span>
+          {demoMode ? (
+            <span className="flex items-center gap-1.5 rounded-md border border-[#3a2d6b] bg-[#1b1436] px-2 py-0.5 text-[10px] font-semibold text-[#cbbcff]">
+              Demo data
+              <button
+                type="button"
+                onClick={() => setDemoMode(false)}
+                className="hover:text-white"
+                aria-label="Exit demo data"
+              >
+                ×
+              </button>
+            </span>
+          ) : null}
         </div>
 
         {error ? (
