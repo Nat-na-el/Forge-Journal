@@ -1,5 +1,6 @@
 // src/pages/DailyJournal.jsx
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Trash2,
   Plus,
@@ -610,6 +611,26 @@ export default function DailyJournal({ currentAccount }) {
     Object.values(m).forEach((l) => l.sort((a, b) => entryStamp(a).localeCompare(entryStamp(b))));
     return m;
   }, [entries]);
+
+  // ─── Open the day passed via ?date= (e.g. from the dashboard day-detail modal) ─
+  const dateParamHandled = useRef(false);
+  const { search: locationSearch } = useLocation();
+  useEffect(() => {
+    if (
+      !user ||
+      !currentAccount ||
+      entries.length === 0 ||
+      dateParamHandled.current
+    )
+      return;
+    const params = new URLSearchParams(locationSearch);
+    const date = params.get("date");
+    if (!date) return;
+    const key = String(date).slice(0, 10);
+    if (!grouped[key] && !dayNotes[key]) return;
+    dateParamHandled.current = true;
+    selectDay(key);
+  }, [user, currentAccount, entries.length, locationSearch, grouped, dayNotes]);
 
   const dayTotals = useMemo(() => {
     const m = {};
