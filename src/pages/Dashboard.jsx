@@ -294,13 +294,13 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-52" })
 
 function KpiCard({ title, hint, value, tone = TEXT, children, className = "" }) {
   return (
-    <div className={`${PANEL} px-4 py-3.5 sm:px-5 ${className}`}>
+    <div className={`${PANEL} px-4 py-4 sm:px-5 ${className}`}>
       <div className="flex items-center gap-1.5 text-[11.5px] font-medium" style={{ color: MUTED }}>
         <span title={hint}>{title}</span>
         {hint ? <Info size={12} className="opacity-50" aria-hidden="true" /> : null}
       </div>
       <div className="mt-2 flex items-end justify-between gap-3">
-        <div className="text-[24px] font-bold leading-none tracking-tight sm:text-[26px]" style={{ color: tone }}>
+        <div className="text-[26px] font-bold leading-none tracking-tight sm:text-[28px]" style={{ color: tone }}>
           {value}
         </div>
         {children}
@@ -780,7 +780,7 @@ export default function Dashboard({ currentAccount }) {
       <div className="mx-auto max-w-[1600px] p-3 sm:p-5">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-[21px] font-semibold tracking-tight sm:text-[22px]">Dashboard</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight sm:text-[24px]">Dashboard</h1>
 
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className={TOOLBAR_BTN} title={`Account currency: ${currency}`}>
@@ -930,7 +930,7 @@ export default function Dashboard({ currentAccount }) {
             <PfRing value={stats.profitFactor} />
           </KpiCard>
 
-          <div className={`${PANEL} px-4 py-3.5 sm:px-5`}>
+          <div className={`${PANEL} px-4 py-4 sm:px-5`}>
             <div className="flex items-center gap-1.5 text-[11.5px] font-medium" style={{ color: MUTED }}>
               <span title="Consecutive green days and winning trades at the end of the period.">
                 Current streak

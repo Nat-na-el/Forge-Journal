@@ -100,6 +100,9 @@ export default function Topbar({
   }, [menuOpen]);
 
   const title = PAGE_TITLES[location.pathname] || "Dashboard";
+  // The dashboard renders its own heading row, so the top bar keeps only the
+  // account / actions cluster there instead of a duplicate title.
+  const hideTitle = location.pathname === "/dashboard";
   const accountName = currentAccount?.name || "No account";
   const user = auth.currentUser;
   const initial = (user?.displayName || user?.email || accountName || "F")
@@ -122,7 +125,11 @@ export default function Topbar({
   return (
     <>
       <header
-        className="fixed right-0 top-0 z-50 flex h-14 items-center justify-between gap-3 border-b border-[#e6e8f2] bg-white/90 px-3 backdrop-blur-md transition-[left] duration-300 dark:border-[#262645] dark:bg-[#0b0b19]/90 sm:px-6"
+        className={`fixed right-0 top-0 z-50 flex h-14 items-center justify-between gap-3 border-b px-3 backdrop-blur-md transition-[left] duration-300 sm:px-6 ${
+          hideTitle
+            ? "border-[#1e1e28] bg-[#08080d]/90"
+            : "border-[#e6e8f2] bg-white/90 dark:border-[#262645] dark:bg-[#0b0b19]/90"
+        }`}
         style={{ left }}
       >
         {/* Left – menu button (phones) + page title */}
@@ -136,7 +143,11 @@ export default function Topbar({
               <Menu size={20} />
             </button>
           )}
-          <h1 className="truncate text-[15px] font-semibold tracking-tight text-[#14142b] dark:text-white sm:text-base">
+          <h1
+            className={`truncate text-[15px] font-semibold tracking-tight text-[#14142b] dark:text-white sm:text-base ${
+              hideTitle ? "hidden" : ""
+            }`}
+          >
             {title}
           </h1>
         </div>

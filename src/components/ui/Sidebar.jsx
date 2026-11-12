@@ -36,9 +36,9 @@ import useIsMobile from "../../hooks/useIsMobile";
 // For a flush, full-height sidebar like Tradezella use: "left-0 top-0 h-[100dvh]"
 const DESKTOP_POS = "left-0 top-0 h-[100dvh]";
 
-const SHELL_BG = "linear-gradient(180deg, #0b0518 0%, #160a36 38%, #2a1566 100%)";
-const NAV_IDLE = "text-[#a99fd1] hover:bg-white/[0.05] hover:text-white";
-const NAV_ACTIVE = "bg-white/[0.08] text-white";
+const SHELL_BG = "linear-gradient(180deg, #0b0b12 0%, #08080d 100%)";
+const NAV_IDLE = "text-[#8b8ba3] hover:bg-white/[0.06] hover:text-white";
+const NAV_ACTIVE = "bg-white/[0.09] text-white";
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b6cff]";
 
@@ -259,7 +259,7 @@ export default function Sidebar({
       onClick={() => isMobile && setOpen(false)}
       className={({ isActive }) =>
         `flex items-center rounded-lg text-[13px] font-medium transition-colors ${FOCUS} ${
-          compact ? "h-10 w-10 justify-center" : "h-9 gap-3 px-3"
+          compact ? "h-10 w-10 justify-center" : "h-9 gap-2.5 px-2.5"
         } ${isActive ? NAV_ACTIVE : NAV_IDLE}`
       }
     >
@@ -400,7 +400,7 @@ export default function Sidebar({
       >
         {/* Background lives on its own layer so the account menu can overflow the sidebar */}
         <div
-          className={`absolute inset-0 overflow-hidden border border-white/10 shadow-2xl shadow-black/40 ${
+          className={`absolute inset-0 overflow-hidden border border-[#1e1e28] shadow-2xl shadow-black/40 ${
             ""
           }`}
           style={{ background: SHELL_BG }}
@@ -409,7 +409,7 @@ export default function Sidebar({
         <div className="relative flex h-full">
           {/* ───────── Icon rail ───────── */}
           <div
-            className={`relative flex shrink-0 flex-col items-center gap-1.5 border-r border-white/10 bg-black/20 py-3 ${
+            className={`relative flex shrink-0 flex-col items-center gap-1.5 border-r border-[#1e1e28] bg-black/20 py-3 ${
               open ? "w-11" : "w-full"
             } ${isMobile ? "" : "rounded-l-2xl"} ${!open && !isMobile ? "rounded-r-2xl" : ""}`}
           >
