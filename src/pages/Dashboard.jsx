@@ -31,9 +31,12 @@ import {
   FolderOpen,
   Info,
   Lock,
-  PencilLine,
+  Mic,
+  Upload,
+  Download,
   Percent,
   Ruler,
+  Save,
   Settings,
   Sparkles,
   Sunrise,
@@ -825,6 +828,9 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
   const volume = (trades || []).reduce((sum, trade) => sum + (Number(trade.lotSize) || 0), 0);
   const tone = dayStats.net >= 0 ? POS : NEG;
 
+  const [note, setNote] = useState("");
+  const [voiceListening, setVoiceListening] = useState(false);
+
   const stats = [
     ["Total trades", String(dayStats.count)],
     ["Winners", String(dayStats.wins)],
@@ -844,6 +850,14 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const handleSave = () => {
+    onAddNote(note);
+  };
+
+  const handleVoice = () => {
+    setVoiceListening((prev) => !prev);
+  };
+
   return (
     <div
       className="fixed inset-0 z-[1200] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm sm:items-center"
@@ -857,7 +871,7 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
         style={{ backgroundColor: "#141420", borderColor: "#2c2c3d" }}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b" style={{ borderColor: "#23232f" }}>
           <div className="flex flex-wrap items-baseline gap-2 text-[15px] font-semibold">
             <span>{format(day, "EEE, MMM dd, yyyy")}</span>
             <span style={{ color: "#5b5b72" }}>•</span>
@@ -867,12 +881,24 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onAddNote}
-              className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
-              style={{ backgroundColor: "#6C47FF" }}
+              onClick={handleSave}
+              disabled={!note.trim()}
+              className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold text-white transition ${FOCUS}`}
+              style={{ backgroundColor: !note.trim() ? "#2c254a" : "#6C47FF", opacity: !note.trim() ? 0.5 : 1 }}
             >
-              <PencilLine size={13} />
-              Add note
+              <Save size={13} /> Save
+            </button>
+            <button
+              type="button"
+              onClick={handleVoice}
+              aria-label={voiceListening ? "Stop voice" : "Voice note"}
+              className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${FOCUS}`}
+              style={{
+                backgroundColor: voiceListening ? "#f2556e" : "#1e1e28",
+                color: voiceListening ? "#ffffff" : "#b9b9cc",
+              }}
+            >
+              <Mic size={14} />
             </button>
             <button
               type="button"
@@ -882,6 +908,58 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
             >
               <X size={18} />
             </button>
+          </div>
+        </div>
+
+        {/* Rich note editor */}
+        <div className="px-5 py-3 border-b" style={{ borderColor: "#23232f" }}>
+          <div className="flex items-center gap-2 mb-2 overflow-x-auto px-1">
+            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#b9b9cc] hover:text-white" aria-label="Undo" title="Undo">
+              <ArrowUpRight size={12} />
+            </button>
+            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#b9b9cc] hover:text-white" aria-label="Redo" title="Redo">
+              <ArrowUpRight size={12} />
+            </button>
+            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+              <span className="flex items-center gap-1">Normal</span>
+              <ChevronDown size={10} />
+            </div>
+            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+              <span className="flex items-center gap-1">Arial</span>
+              <ChevronDown size={10} />
+            </div>
+            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+              <span>15</span>
+              <button type="button" className="ml-0.5 text-[#b9b9cc] hover:text-white" title="Increase">+</button>
+              <button type="button" className="ml-0.5 text-[#b9b9cc] hover:text-white" title="Decrease">−</button>
+            </div>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#b9b9cc] hover:text-white" aria-label="Bold" title="Bold">B</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#b9b9cc] hover:text-white" aria-label="Italic" title="Italic">I</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#b9b9cc] hover:text-white" aria-label="Underline" title="Underline">U</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#b9b9cc] hover:text-white" aria-label="Strikethrough" title="Strikethrough">S</button>
+            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+              <span>Left Align</span>
+              <ChevronDown size={10} />
+            </div>
+            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+              <span>Insert</span>
+              <ChevronDown size={10} />
+            </div>
+          </div>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Enter some text..."
+            className="w-full min-h-[110px] resize-y rounded-lg border border-[#23232f] bg-[#0a0a10] p-3 text-sm outline-none focus:ring-2 focus:ring-[#6C47FF] text-[#e9e9f2]"
+          />
+          <div className="flex items-center gap-2 mt-2">
+            <button type="button" onClick={handleVoice} aria-label={voiceListening ? "Stop voice" : "Start voice recording"} title={voiceListening ? "Stop voice" : "Voice note"} className="flex h-7 w-7 items-center justify-center rounded-full transition-colors" style={{ backgroundColor: voiceListening ? "#f2556e" : "#1e1e28" }}>
+              <Mic size={13} />
+            </button>
+            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#b9b9cc] hover:text-white" title="Upload" aria-label="Upload file"><Upload size={13} /></button>
+            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#b9b9cc] hover:text-white" title="Download" aria-label="Download note"><Download size={13} /></button>
+            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#b9b9cc] hover:text-white" title="Share" aria-label="Share note"><Copy size={13} /></button>
+            <button type="button" className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-[#b9b9cc] hover:text-[#f2556e]" title="Delete note" aria-label="Delete note"><X size={13} /></button>
           </div>
         </div>
 
