@@ -16,32 +16,37 @@ import {
 import { collection, getDocs } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import {
+  Activity,
   ArrowUpRight,
-  BarChart3,
-  BookMarked,
-  Calculator,
   CalendarDays,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleDot,
   Copy,
-  ExternalLink,
+  Calculator,
+  DollarSign,
   Filter,
   FolderOpen,
   Info,
+  Lock,
+  PencilLine,
+  Percent,
+  Ruler,
   Settings,
   Sparkles,
   Sunrise,
+  Waves,
+  X,
 } from "lucide-react";
 import useAccent from "../hooks/useAccent";
 import demoDashboardTrades from "../lib/demoDashboardData";
 
 // ─── Palette (matches the reference dashboard) ───────────────────────────────
-const BG = "#08080d";
-const CARD = "#101016";
-const CARD_ALT = "#15151d";
-const BORDER = "#1e1e28";
+const BG = "#0a0a10";
+const CARD_ALT = "#191922";
+const BORDER = "#23232f";
 const TEXT = "#e9e9f2";
 const MUTED = "#8b8ba3";
 const FAINT = "#66667c";
@@ -57,9 +62,9 @@ const PERIODS = [
 ];
 
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF]";
-const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 rounded-lg border border-[#242433] bg-[#101016] px-3 text-[12px] font-medium text-[#c7c7d6] transition-colors hover:border-[#33334a] hover:text-white ${FOCUS}`;
-const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg border border-[#242433] bg-[#101016] text-[#8b8ba3] transition-colors hover:text-white ${FOCUS}`;
-const PANEL = `rounded-xl border border-[#1e1e28] bg-[#101016]`;
+const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#23232f] bg-[#13131b] px-3 text-[12px] font-medium text-[#c7c7d6] transition-colors hover:border-[#33334a] hover:text-white ${FOCUS}`;
+const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg border border-[#23232f] bg-[#13131b] text-[#8b8ba3] transition-colors hover:text-white ${FOCUS}`;
+const PANEL = `rounded-xl border border-[#23232f] bg-[#13131b]`;
 
 // ─── Numbers & dates ─────────────────────────────────────────────────────────
 const clamp = (value, min = 0, max = 100) => Math.min(max, Math.max(min, Number(value) || 0));
@@ -92,6 +97,32 @@ const usdCell = (value) => {
 };
 
 const pct = (value, digits = 2) => `${(Number(value) || 0).toFixed(digits)}%`;
+
+// ─── Display units (the currency / $ selector in the toolbar) ────────────────
+const priceDelta = (trade) => {
+  const entry = Number(trade.entry);
+  const exit = Number(trade.exit);
+  if (!Number.isFinite(entry) || !Number.isFinite(exit)) return 0;
+  const direction = /short|sell/i.test(trade.direction || "") ? -1 : 1;
+  return (exit - entry) * direction;
+};
+
+const riskAmount = (trade) => {
+  const entry = Number(trade.entry);
+  const stop = Number(trade.stopLoss);
+  const lots = Number(trade.lotSize) || 1;
+  if (!Number.isFinite(entry) || !Number.isFinite(stop) || entry === stop) return 0;
+  return Math.abs(entry - stop) * 100000 * lots;
+};
+
+const DISPLAY_UNITS = [
+  ["dollar", "Dollar", "$", DollarSign],
+  ["percent", "Percentage", "%", Percent],
+  ["r", "R-multiple", "R", Ruler, "Uses the stop loss saved with each trade."],
+  ["ticks", "Ticks", "Ticks", Activity, "For futures — derived from the price move."],
+  ["pips", "Pips", "Pips", Waves, "For forex — derived from the price move."],
+  ["points", "Points", "Pts", CircleDot, "For indices and metals — from the price move."],
+];
 
 const parseDate = (value) => {
   if (!value) return null;
@@ -182,33 +213,6 @@ function dayPnL(trades) {
   return map;
 }
 
-function streakStats(trades) {
-  const ordered = trades
-    .filter((t) => t && t.status !== "pending" && tradeDateOf(t))
-    .slice()
-    .sort((a, b) => tradeDateOf(a) - tradeDateOf(b));
-
-  let win = 0;
-  let loss = 0;
-  for (let i = ordered.length - 1; i >= 0; i -= 1) {
-    const pnl = Number(ordered[i].pnl) || 0;
-    if (pnl > 0 && loss === 0) win += 1;
-    else if (pnl < 0 && win === 0) loss += 1;
-    else break;
-  }
-
-  const days = [...dayPnL(ordered).entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  let greenDays = 0;
-  let redDays = 0;
-  for (const [, cell] of days) {
-    if (cell.net > 0 && redDays === 0) greenDays += 1;
-    else if (cell.net < 0 && greenDays === 0) redDays += 1;
-    else break;
-  }
-
-  return { win, loss, greenDays, redDays };
-}
-
 function scoreMetrics(trades, curve) {
   const stats = summarize(trades);
   const drawdown = maxDrawdown(curve);
@@ -267,26 +271,42 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-52" })
           role="menu"
           className={`absolute ${align === "right" ? "right-0" : "left-0"} z-40 mt-1.5 ${width} overflow-hidden rounded-lg border border-[#26263a] bg-[#12121b] py-1 shadow-2xl shadow-black/60`}
         >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                item.onClick?.();
-              }}
-              className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#1c1c28] ${
-                item.active ? "text-white" : "text-[#b9b9cc]"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                {item.icon ? <item.icon size={13} /> : null}
-                {item.label}
-              </span>
-              {item.active ? <Check size={13} style={{ color: item.accent || BE }} /> : null}
-            </button>
-          ))}
+          {items.map((item) =>
+            item.divider ? (
+              <div key={item.divider} className="my-1 h-px" style={{ backgroundColor: "#26263a" }} />
+            ) : (
+              <button
+                key={item.label}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  item.onClick?.();
+                }}
+                className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#1c1c28] ${
+                  item.active ? "text-white" : "text-[#b9b9cc]"
+                }`}
+              >
+                <span className="flex min-w-0 items-start gap-2">
+                  {item.icon ? <item.icon size={13} className="mt-0.5 shrink-0" /> : null}
+                  <span className="flex min-w-0 flex-col">
+                    <span>{item.label}</span>
+                    {item.description ? (
+                      <span
+                        className="mt-0.5 text-[10px] font-normal leading-snug"
+                        style={{ color: FAINT }}
+                      >
+                        {item.description}
+                      </span>
+                    ) : null}
+                  </span>
+                </span>
+                {item.active ? (
+                  <Check size={13} className="mt-0.5 shrink-0" style={{ color: item.accent || BE }} />
+                ) : null}
+              </button>
+            )
+          )}
         </div>
       ) : null}
     </div>
@@ -398,23 +418,7 @@ function PfRing({ value }) {
   );
 }
 
-function StreakRing({ count, label, tone }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        className="flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-bold tabular-nums"
-        style={{ color: tone, boxShadow: `inset 0 0 0 1.5px ${tone}80` }}
-      >
-        {count}
-      </span>
-      <span className="whitespace-nowrap text-[11px]" style={{ color: MUTED }}>
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function EquityChart({ points }) {
+function EquityChart({ points, formatAxis = usdAxis }) {
   const W = 640;
   const H = 250;
   const PAD = { left: 54, right: 10, top: 14, bottom: 26 };
@@ -436,7 +440,9 @@ function EquityChart({ points }) {
   const line = points
     .map((point, index) => `${index ? "L" : "M"}${x(index).toFixed(1)},${y(point.value).toFixed(1)}`)
     .join(" ");
-  const area = `${line} L${x(points.length - 1).toFixed(1)},${y(low).toFixed(1)} L${x(0).toFixed(1)},${y(low).toFixed(1)} Z`;
+  const area = `${line} L${x(points.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(
+    0
+  ).toFixed(1)} Z`;
   const ticks = [0, 1, 2, 3, 4].map((index) => low + (span * index) / 4);
   const labelIndexes = [
     0,
@@ -454,10 +460,20 @@ function EquityChart({ points }) {
       aria-label="Daily net cumulative profit and loss"
     >
       <defs>
-        <linearGradient id="dashEquityFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={POS} stopOpacity="0.34" />
+        <linearGradient id="dashEquityPos" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={POS} stopOpacity="0.32" />
           <stop offset="100%" stopColor={POS} stopOpacity="0" />
         </linearGradient>
+        <linearGradient id="dashEquityNeg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={NEG} stopOpacity="0" />
+          <stop offset="100%" stopColor={NEG} stopOpacity="0.32" />
+        </linearGradient>
+        <clipPath id="dashEquityAbove">
+          <rect x="0" y="0" width={W} height={y(0)} />
+        </clipPath>
+        <clipPath id="dashEquityBelow">
+          <rect x="0" y={y(0)} width={W} height={H - y(0)} />
+        </clipPath>
       </defs>
 
       {ticks.map((tick) => (
@@ -471,22 +487,29 @@ function EquityChart({ points }) {
             strokeDasharray="3 4"
           />
           <text x={PAD.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="10" fill={FAINT}>
-            {usdAxis(tick)}
+            {formatAxis(tick)}
           </text>
         </g>
       ))}
 
-      <path d={area} fill="url(#dashEquityFill)" />
+      <g clipPath="url(#dashEquityAbove)">
+        <path d={area} fill="url(#dashEquityPos)" />
+      </g>
+      <g clipPath="url(#dashEquityBelow)">
+        <path d={area} fill="url(#dashEquityNeg)" />
+      </g>
+      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="#2c2c3a" />
+
       <path
         d={line}
         fill="none"
-        stroke={POS}
+        stroke="#8b7cf6"
         strokeWidth="2"
         strokeLinejoin="round"
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
-      <circle cx={x(points.length - 1)} cy={y(values[values.length - 1])} r="3.5" fill={POS} />
+      <circle cx={x(points.length - 1)} cy={y(values[values.length - 1])} r="3.5" fill="#8b7cf6" />
 
       {labelIndexes.map((index) => (
         <text
@@ -602,6 +625,372 @@ function ScoreBar({ score }) {
   );
 }
 
+/** Net daily P&L: green / red bars around a dashed zero line with a $ axis. */
+function NetDailyChart({ bars, formatAxis = usdAxis }) {
+  const W = 460;
+  const H = 210;
+  const PAD = { left: 48, right: 8, top: 12, bottom: 24 };
+  const top = Math.max(0, ...bars.map((bar) => bar.net));
+  const low = Math.min(0, ...bars.map((bar) => bar.net));
+  const span = top - low || 1;
+  const x = (index) => PAD.left + (index + 0.5) * ((W - PAD.left - PAD.right) / Math.max(1, bars.length));
+  const y = (value) => PAD.top + (1 - (value - low) / span) * (H - PAD.top - PAD.bottom);
+  const barW = Math.max(3, ((W - PAD.left - PAD.right) / Math.max(1, bars.length)) * 0.5);
+  const ticks = [0, 1, 2, 3].map((index) => low + (span * index) / 3);
+  const labelIndexes = [0, Math.floor((bars.length - 1) / 2), bars.length - 1];
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="h-full w-full"
+      role="img"
+      aria-label="Net daily profit and loss"
+    >
+      {ticks.map((tick) => (
+        <g key={tick}>
+          <line
+            x1={PAD.left}
+            x2={W - PAD.right}
+            y1={y(tick)}
+            y2={y(tick)}
+            stroke="#20202c"
+            strokeDasharray="3 4"
+          />
+          <text x={PAD.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="10" fill={FAINT}>
+            {formatAxis(tick)}
+          </text>
+        </g>
+      ))}
+      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="#2c2c3a" />
+
+      {bars.map((bar, index) => {
+        const zero = y(0);
+        const value = y(bar.net);
+        return (
+          <rect
+            key={format(bar.date, "yyyy-MM-dd")}
+            x={x(index) - barW / 2}
+            y={Math.min(zero, value)}
+            width={barW}
+            height={Math.max(2, Math.abs(zero - value))}
+            rx="2"
+            fill={bar.net > 0 ? POS : bar.net < 0 ? NEG : "#2c2c3a"}
+          >
+            <title>{`${format(bar.date, "d MMM")}: ${usd(bar.net)}`}</title>
+          </rect>
+        );
+      })}
+
+      {labelIndexes.map((index) => (
+        <text
+          key={index}
+          x={x(index)}
+          y={H - 6}
+          textAnchor={index === 0 ? "start" : index === bars.length - 1 ? "end" : "middle"}
+          fontSize="9.5"
+          fill={FAINT}
+        >
+          {format(bars[index].date, "MM/dd/yy")}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+/** Performance by hour of day — the reference "Trade time" panel. */
+function TradeTimeChart({ trades, formatAxis = usdAxis }) {
+  const W = 460;
+  const H = 190;
+  const PAD = { left: 48, right: 8, top: 12, bottom: 24 };
+  const buckets = useMemo(() => {
+    const map = new Map();
+    for (let hour = 8; hour <= 22; hour += 1) map.set(hour, 0);
+    trades.forEach((trade) => {
+      const date = tradeDateOf(trade);
+      if (!date) return;
+      const hour = date.getHours();
+      if (!map.has(hour)) map.set(hour, 0);
+      map.set(hour, map.get(hour) + (Number(trade.pnl) || 0));
+    });
+    return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([hour, net]) => ({ hour, net }));
+  }, [trades]);
+
+  const top = Math.max(0, ...buckets.map((bucket) => bucket.net));
+  const low = Math.min(0, ...buckets.map((bucket) => bucket.net));
+  const span = top - low || 1;
+  const x = (index) => PAD.left + (index + 0.5) * ((W - PAD.left - PAD.right) / Math.max(1, buckets.length));
+  const y = (value) => PAD.top + (1 - (value - low) / span) * (H - PAD.top - PAD.bottom);
+  const barW = Math.max(3, ((W - PAD.left - PAD.right) / Math.max(1, buckets.length)) * 0.5);
+  const ticks = [0, 1, 2, 3].map((index) => low + (span * index) / 3);
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="h-full w-full"
+      role="img"
+      aria-label="Performance by hour of day"
+    >
+      {ticks.map((tick) => (
+        <g key={tick}>
+          <line
+            x1={PAD.left}
+            x2={W - PAD.right}
+            y1={y(tick)}
+            y2={y(tick)}
+            stroke="#20202c"
+            strokeDasharray="3 4"
+          />
+          <text x={PAD.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="10" fill={FAINT}>
+            {formatAxis(tick)}
+          </text>
+        </g>
+      ))}
+      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="#2c2c3a" />
+
+      {buckets.map((bucket, index) => {
+        const zero = y(0);
+        const value = y(bucket.net);
+        return (
+          <g key={bucket.hour}>
+            <rect
+              x={x(index) - barW / 2}
+              y={Math.min(zero, value)}
+              width={barW}
+              height={Math.max(1.5, Math.abs(zero - value))}
+              rx="1.5"
+              fill={bucket.net > 0 ? POS : bucket.net < 0 ? NEG : "#2c2c3a"}
+            />
+            <text x={x(index)} y={H - 6} textAnchor="middle" fontSize="8.5" fill={FAINT}>
+              {bucket.hour}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function DayCurve({ points, tone }) {
+  const W = 320;
+  const H = 112;
+  const PAD = { left: 34, right: 6, top: 8, bottom: 8 };
+  if (!points || points.length < 2) {
+    return (
+      <div className="flex h-[112px] items-center justify-center text-[11px]" style={{ color: MUTED }}>
+        One trade — no curve yet.
+      </div>
+    );
+  }
+  const values = points.map((point) => point.value);
+  const low = Math.min(0, ...values);
+  const high = Math.max(0, ...values);
+  const span = high - low || 1;
+  const x = (index) => PAD.left + (index / (points.length - 1)) * (W - PAD.left - PAD.right);
+  const y = (value) => PAD.top + (1 - (value - low) / span) * (H - PAD.top - PAD.bottom);
+  const line = points
+    .map((point, index) => `${index ? "L" : "M"}${x(index).toFixed(1)},${y(point.value).toFixed(1)}`)
+    .join(" ");
+  const area = `${line} L${x(points.length - 1).toFixed(1)},${y(low).toFixed(1)} L${x(0).toFixed(1)},${y(low).toFixed(1)} Z`;
+  const gradientId = `dayCurve-${tone === POS ? "pos" : "neg"}`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-[112px] w-full" role="img" aria-label="Day cumulative P&L">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={tone} stopOpacity="0.32" />
+          <stop offset="100%" stopColor={tone} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="#2c2c3a" />
+      <text x={PAD.left - 6} y={y(high) + 4} textAnchor="end" fontSize="9" fill={FAINT}>
+        {usdAxis(high)}
+      </text>
+      <text x={PAD.left - 6} y={y(low) + 4} textAnchor="end" fontSize="9" fill={FAINT}>
+        {usdAxis(low)}
+      </text>
+      <path d={area} fill={`url(#${gradientId})`} />
+      <path d={line} fill="none" stroke={tone} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Click a calendar day: the reference trade-detail sheet. */
+function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
+  const dayStats = useMemo(() => summarize(trades || []), [trades]);
+  const curve = useMemo(() => equitySeries(trades || []), [trades]);
+  const commissions = (trades || []).reduce((sum, trade) => sum + (Number(trade.commission) || 0), 0);
+  const swap = (trades || []).reduce((sum, trade) => sum + (Number(trade.swap) || 0), 0);
+  const volume = (trades || []).reduce((sum, trade) => sum + (Number(trade.lotSize) || 0), 0);
+  const tone = dayStats.net >= 0 ? POS : NEG;
+
+  const stats = [
+    ["Total trades", String(dayStats.count)],
+    ["Winners", String(dayStats.wins)],
+    ["Gross P&L", usd(dayStats.net + commissions + swap)],
+    ["Commissions", usd(commissions + swap)],
+    ["Winrate", pct(dayStats.winRate, 0)],
+    ["Losers", String(dayStats.losses)],
+    ["Volume", volume ? volume.toFixed(2) : "0"],
+    ["Profit factor", (Number(dayStats.profitFactor) || 0).toFixed(2)],
+  ];
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1200] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Trades on ${format(day, "EEEE, d MMMM yyyy")}`}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[960px] overflow-hidden rounded-xl border shadow-2xl shadow-black/70"
+        style={{ backgroundColor: "#141420", borderColor: "#2c2c3d" }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+          <div className="flex flex-wrap items-baseline gap-2 text-[15px] font-semibold">
+            <span>{format(day, "EEE, MMM dd, yyyy")}</span>
+            <span style={{ color: "#5b5b72" }}>•</span>
+            <span style={{ color: MUTED }}>Net P&L</span>
+            <span style={{ color: tone }}>{usd(dayStats.net)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onAddNote}
+              className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
+              style={{ backgroundColor: "#6C47FF" }}
+            >
+              <PencilLine size={13} />
+              Add note
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close day details"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#9a9aae] transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="border-t" style={{ borderColor: "#23232f" }}>
+          <div className="grid grid-cols-1 gap-5 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+            <DayCurve points={curve} tone={tone} />
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 sm:grid-cols-4">
+              {stats.map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <div className="truncate text-[10px]" style={{ color: FAINT }}>
+                    {label}
+                  </div>
+                  <div
+                    className="mt-0.5 truncate text-[13px] font-semibold tabular-nums"
+                    style={{
+                      color:
+                        label === "Gross P&L"
+                          ? dayStats.net >= 0
+                            ? POS
+                            : NEG
+                          : TEXT,
+                    }}
+                  >
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto border-t" style={{ borderColor: "#23232f" }}>
+            <table className="w-full min-w-[720px] border-collapse text-left">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wide" style={{ backgroundColor: "#191926", color: FAINT }}>
+                  {["Open time", "Ticker", "Side", "Instrument", "Net P&L", "Net ROI", "Realized R", "Playbook"].map(
+                    (label) => (
+                      <th key={label} className="px-3 py-2 font-semibold">
+                        {label}
+                      </th>
+                    )
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {trades.map((trade, index) => {
+                  const pnl = Number(trade.pnl) || 0;
+                  const notional =
+                    (Number(trade.entry) || 0) * (Number(trade.lotSize) || 1) * 100000;
+                  const roi = notional ? (pnl / notional) * 100 : null;
+                  const rr = Number(trade.rr);
+                  return (
+                    <tr
+                      key={trade.id || index}
+                      className="border-t text-[11.5px]"
+                      style={{ borderColor: "#1d1d2a", backgroundColor: index % 2 ? "#16161f" : "transparent" }}
+                    >
+                      <td className="px-3 py-2" style={{ color: "#b9b9c9" }}>
+                        {tradeDateOf(trade) ? format(tradeDateOf(trade), "HH:mm:ss") : "—"}
+                      </td>
+                      <td className="px-3 py-2 font-semibold">{trade.pair || "—"}</td>
+                      <td className="px-3 py-2" style={{ color: "#b9b9c9" }}>
+                        {(trade.direction || "—").toUpperCase()}
+                      </td>
+                      <td className="px-3 py-2" style={{ color: "#b9b9c9" }}>
+                        {trade.pair || "—"}
+                      </td>
+                      <td className="px-3 py-2 font-semibold tabular-nums" style={{ color: pnl >= 0 ? POS : NEG }}>
+                        {usd(pnl)}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums" style={{ color: "#9a9aae" }}>
+                        {roi === null ? "—" : `(${roi.toFixed(2)}%)`}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums" style={{ color: "#9a9aae" }}>
+                        {Number.isFinite(rr) ? `${rr.toFixed(2)}R` : "—"}
+                      </td>
+                      <td className="px-3 py-2" style={{ color: "#9a9aae" }}>
+                        {trade.playbook?.name || trade.strategy || "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 border-t px-5 py-3" style={{ borderColor: "#23232f" }}>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg px-4 py-2 text-[12px] font-semibold text-[#c7c7d6] transition-colors hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onOpenTrades}
+              className="rounded-lg px-4 py-2 text-[12px] font-semibold text-white transition hover:brightness-110"
+              style={{ backgroundColor: "#4b3fa8" }}
+            >
+              View Details
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard({ currentAccount }) {
   const navigate = useNavigate();
   const { ac } = useAccent();
@@ -613,7 +1002,11 @@ export default function Dashboard({ currentAccount }) {
   const [period, setPeriod] = useState("all");
   const [viewDate, setViewDate] = useState(() => new Date());
   const [bottomTab, setBottomTab] = useState("recent");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState("");
+  const [displayMode, setDisplayMode] = useState("dollar");
+  const [privacy, setPrivacy] = useState(false);
+  const [tradeFilter, setTradeFilter] = useState("all");
+  const [selectedDay, setSelectedDay] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [demoMode, setDemoMode] = useState(() => {
     try {
@@ -624,7 +1017,7 @@ export default function Dashboard({ currentAccount }) {
   });
 
   const accountId = currentAccount?.id;
-  const currency = currentAccount?.currency || "USD";
+  const startingBalance = Number(currentAccount?.starting_balance) || 10000;
 
   const load = async () => {
     // Demo mode shows bundled sample trades; it never writes to Firestore.
@@ -674,11 +1067,43 @@ export default function Dashboard({ currentAccount }) {
     setRefreshing(false);
   };
 
-  const executed = useMemo(() => trades.filter((t) => t.status !== "pending"), [trades]);
+  // Convert every trade's P&L into the selected display unit once, so the KPIs,
+  // charts and calendar all speak the same language.
+  const unitTrades = useMemo(
+    () =>
+      trades.map((trade) => {
+        const pnl = Number(trade.pnl) || 0;
+        let value = pnl;
+        if (displayMode === "percent") value = (pnl / (startingBalance || 1)) * 100;
+        else if (displayMode === "r") {
+          const risk = riskAmount(trade);
+          const rr = Number(trade.rr);
+          value = risk ? pnl / risk : Number.isFinite(rr) ? rr : 0;
+        } else if (displayMode === "pips") value = priceDelta(trade) * 10000;
+        else if (displayMode === "points") value = priceDelta(trade) * 100;
+        else if (displayMode === "ticks") value = priceDelta(trade) * 400;
+        return { ...trade, pnl: Number(value.toFixed(4)) };
+      }),
+    [trades, displayMode, startingBalance]
+  );
+
+  const matchesFilter = (trade) => {
+    const pnl = Number(trade.pnl) || 0;
+    if (tradeFilter === "wins") return pnl > 0;
+    if (tradeFilter === "losses") return pnl < 0;
+    if (tradeFilter === "breakeven") return pnl === 0;
+    return true;
+  };
+
+  const executed = useMemo(
+    () => unitTrades.filter((t) => t.status !== "pending" && matchesFilter(t)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [unitTrades, tradeFilter]
+  );
   const openPositions = useMemo(() => trades.filter((t) => t.status === "pending"), [trades]);
 
   const periodTrades = useMemo(() => {
-    if (period === "all") return trades;
+    if (period === "all") return executed;
     const now = new Date();
     const start =
       period === "this-month"
@@ -687,19 +1112,45 @@ export default function Dashboard({ currentAccount }) {
         ? new Date(now.getFullYear(), 0, 1)
         : subDays(now, 29);
     const end = period === "this-month" ? endOfMonth(now) : now;
-    return trades.filter((trade) => {
+    return executed.filter((trade) => {
       const date = tradeDateOf(trade);
       return date && isWithinInterval(date, { start, end });
     });
-  }, [trades, period]);
+  }, [executed, period]);
 
   const stats = useMemo(() => summarize(periodTrades), [periodTrades]);
+  const rangeLabel = useMemo(() => {
+    const dates = periodTrades.map(tradeDateOf).filter(Boolean).sort((a, b) => a - b);
+    if (!dates.length) return "Date range";
+    return `${format(dates[0], "MMM dd, yyyy")}-${format(dates[dates.length - 1], "MMM dd, yyyy")}`;
+  }, [periodTrades]);
   const curve = useMemo(() => equitySeries(periodTrades), [periodTrades]);
-  const streak = useMemo(() => streakStats(executed), [executed]);
-  const board = useMemo(() => scoreMetrics(trades, curve), [trades, curve]);
+  const board = useMemo(() => scoreMetrics(unitTrades, curve), [unitTrades, curve]);
   const score = board.metrics.reduce((sum, metric) => sum + metric.value, 0) / board.metrics.length;
 
-  const daysMap = useMemo(() => dayPnL(trades), [trades]);
+  const daysMap = useMemo(() => dayPnL(unitTrades), [unitTrades]);
+
+  const formatValue = (value, signed = false) => {
+    if (privacy) return "••••";
+    const n = Number(value) || 0;
+    const sign = n < 0 ? "-" : signed && n > 0 ? "+" : "";
+    const abs = Math.abs(n);
+    if (displayMode === "percent") return `${sign}${abs.toFixed(2)}%`;
+    if (displayMode === "r") return `${sign}${abs.toFixed(2)}R`;
+    if (displayMode === "pips") return `${sign}${abs.toFixed(1)} pips`;
+    if (displayMode === "points") return `${sign}${abs.toFixed(1)} pts`;
+    if (displayMode === "ticks") return `${sign}${Math.round(abs)} ticks`;
+    return `${sign}$${abs.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const formatCell = (value) => {
+    if (privacy) return "••••";
+    if (displayMode === "dollar") return usdCell(value);
+    return formatValue(value, true).replace(/\s(pips|pts|ticks)$/, "").replace(/(\.\d\d)0+$/, "$1");
+  };
 
   const weeks = useMemo(() => {
     const start = startOfMonth(viewDate);
@@ -718,10 +1169,6 @@ export default function Dashboard({ currentAccount }) {
     return sum + (cell?.net || 0);
   }, 0);
   const monthTraded = monthDays.filter((day) => daysMap.has(format(day, "yyyy-MM-dd"))).length;
-  const monthMax = Math.max(
-    1,
-    ...monthDays.map((day) => Math.abs(daysMap.get(format(day, "yyyy-MM-dd"))?.net || 0))
-  );
 
   const lastImport = useMemo(() => {
     const stamps = trades
@@ -750,30 +1197,28 @@ export default function Dashboard({ currentAccount }) {
     return bars;
   }, [daysMap]);
 
-  const maxDaily = Math.max(1, ...dailyBars.map((bar) => Math.abs(bar.net)));
-  const bestDay = dailyBars.reduce((best, bar) => (bar.net > best.net ? bar : best), dailyBars[0]);
-  const worstDay = dailyBars.reduce((worst, bar) => (bar.net < worst.net ? bar : worst), dailyBars[0]);
-
   const avgTotal = stats.avgWin + stats.avgLoss;
   const winShare = avgTotal ? (stats.avgWin / avgTotal) * 100 : 50;
 
-  const copyNet = async () => {
+  const copyValue = async (key, value) => {
     try {
-      await navigator.clipboard.writeText(usd(stats.net));
-      setCopied(true);
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
     } catch {
       // Clipboard can be blocked; leave the icon untouched.
     }
   };
 
-  const cellBg = (net, maxAbs) => {
-    if (!net) return CARD_ALT;
-    const ratio = Math.min(1, Math.abs(net) / (maxAbs || 1));
-    if (ratio < 0.18) return net > 0 ? "rgba(34,196,147,0.10)" : "rgba(74,110,196,0.22)";
-    return net > 0
-      ? `rgba(34,196,147,${(0.12 + ratio * 0.3).toFixed(2)})`
-      : `rgba(242,85,110,${(0.12 + ratio * 0.3).toFixed(2)})`;
-  };
+  const axis = (value) => (displayMode === "dollar" ? usdAxis(value) : formatValue(value));
+
+  const dayTrades = useMemo(() => {
+    if (!selectedDay) return [];
+    const key = format(selectedDay, "yyyy-MM-dd");
+    return trades.filter((trade) => {
+      const date = tradeDateOf(trade);
+      return date && format(date, "yyyy-MM-dd") === key;
+    });
+  }, [trades, selectedDay]);
 
   if (loading) {
     return (
@@ -798,21 +1243,50 @@ export default function Dashboard({ currentAccount }) {
           <h1 className="text-[22px] font-semibold tracking-tight sm:text-[24px]">Dashboard</h1>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={TOOLBAR_BTN} title={`Account currency: ${currency}`}>
-              <span className="text-[13px] font-semibold">$</span>
-              <span className="hidden text-[11px] sm:inline" style={{ color: MUTED }}>
-                {currency}
-              </span>
-              <ChevronDown size={12} className="opacity-60" />
-            </button>
-
-            <button type="button" className={TOOLBAR_BTN} onClick={() => navigate("/trades")}>
-              <Filter size={14} />
-              Filters
-            </button>
+            <Dropdown
+              label={DISPLAY_UNITS.find(([key]) => key === displayMode)?.[2] || "$"}
+              width="w-64"
+              items={[
+                ...DISPLAY_UNITS.map(([key, label, , Icon, description]) => ({
+                  label,
+                  icon: Icon,
+                  description,
+                  active: displayMode === key,
+                  accent,
+                  onClick: () => setDisplayMode(key),
+                })),
+                { divider: "privacy" },
+                {
+                  label: "Privacy",
+                  icon: Lock,
+                  description: "Hide P&L figures while sharing your screen.",
+                  active: privacy,
+                  accent,
+                  onClick: () => setPrivacy((value) => !value),
+                },
+              ]}
+            />
 
             <Dropdown
-              label="Date range"
+              label="Filters"
+              icon={Filter}
+              width="w-48"
+              items={[
+                { key: "all", label: "All trades", description: "No P&L filter applied." },
+                { key: "wins", label: "Winners only", description: "Trades that ended in profit." },
+                { key: "losses", label: "Losers only", description: "Trades that ended at a loss." },
+                { key: "breakeven", label: "Breakeven", description: "Trades that closed flat." },
+              ].map((item) => ({
+                label: item.label,
+                description: item.description,
+                active: tradeFilter === item.key,
+                accent,
+                onClick: () => setTradeFilter(item.key),
+              }))}
+            />
+
+            <Dropdown
+              label={rangeLabel}
               icon={CalendarDays}
               items={PERIODS.map(([key, label]) => ({
                 label,
@@ -837,35 +1311,6 @@ export default function Dashboard({ currentAccount }) {
                 { label: "Import trades (CSV)", icon: FolderOpen, onClick: () => navigate("/trades") },
               ]}
             />
-
-            <button
-              type="button"
-              onClick={() => navigate("/mentor")}
-              className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[12px] font-semibold transition-colors ${FOCUS}`}
-              style={{ borderColor: "#4b3a9e", backgroundColor: "#1b1436", color: "#cbbcff" }}
-            >
-              <Sparkles size={14} />
-              <span>Ask Zella AI</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate("/journal")}
-              className={`flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12px] font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
-              style={{ backgroundColor: accent }}
-            >
-              <Sunrise size={14} />
-              Start my day
-            </button>
-
-            <button
-              type="button"
-              className={ICON_BTN}
-              onClick={() => navigate("/settings")}
-              aria-label="Dashboard settings"
-            >
-              <Settings size={15} />
-            </button>
           </div>
         </div>
 
@@ -902,6 +1347,27 @@ export default function Dashboard({ currentAccount }) {
               </button>
             </span>
           ) : null}
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/journal")}
+              className={`flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12px] font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
+              style={{ backgroundColor: accent }}
+            >
+              <Sunrise size={14} />
+              Start my day
+            </button>
+
+            <button
+              type="button"
+              className={ICON_BTN}
+              onClick={() => navigate("/settings")}
+              aria-label="Dashboard settings"
+            >
+              <Settings size={15} />
+            </button>
+          </div>
         </div>
 
         {error ? (
@@ -918,18 +1384,43 @@ export default function Dashboard({ currentAccount }) {
           <KpiCard
             title="Net P&L"
             hint="Realised profit and loss for the selected period."
-            value={usd(stats.net)}
+            value={formatValue(stats.net)}
             tone={stats.net >= 0 ? POS : NEG}
           >
             <button
               type="button"
-              onClick={copyNet}
+              onClick={() => copyValue("net", formatValue(stats.net))}
               aria-label="Copy net P&L"
               className="flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:brightness-125"
               style={{ borderColor: "#2f2560", backgroundColor: "#1a1433", color: "#a78bfa" }}
             >
-              {copied ? <Check size={13} /> : <Copy size={13} />}
+              {copied === "net" ? <Check size={13} /> : <Copy size={13} />}
             </button>
+          </KpiCard>
+
+          <KpiCard
+            title="Trade expectancy"
+            hint="Average result per trade in the selected period."
+            value={formatValue(stats.avgPnl)}
+            tone={stats.avgPnl >= 0 ? TEXT : NEG}
+          >
+            <button
+              type="button"
+              onClick={() => copyValue("expectancy", formatValue(stats.avgPnl, true))}
+              aria-label="Copy trade expectancy"
+              className="flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:brightness-125"
+              style={{ borderColor: "#2f2560", backgroundColor: "#1a1433", color: "#a78bfa" }}
+            >
+              {copied === "expectancy" ? <Check size={13} /> : <Copy size={13} />}
+            </button>
+          </KpiCard>
+
+          <KpiCard
+            title="Profit factor"
+            hint="Gross profit divided by gross loss."
+            value={(Number(stats.profitFactor) || 0).toFixed(2)}
+          >
+            <PfRing value={stats.profitFactor} />
           </KpiCard>
 
           <KpiCard
@@ -945,96 +1436,149 @@ export default function Dashboard({ currentAccount }) {
             hint="Average winner divided by average loser. Above 1 is healthy."
             value={(Number(stats.payoff) || 0).toFixed(2)}
           >
-            <div className="w-[46%] min-w-[104px]">
-              <div className="flex h-2 overflow-hidden rounded-full" style={{ backgroundColor: "#1e1e28" }}>
+            <div className="w-[54%] min-w-[112px]">
+              <div className="flex h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: "#1e1e28" }}>
                 <span style={{ width: `${winShare}%`, backgroundColor: POS }} />
                 <span style={{ flex: 1, backgroundColor: NEG }} />
               </div>
               <div className="mt-1.5 flex justify-between text-[10px] font-semibold tabular-nums">
-                <span style={{ color: POS }}>{usdCell(stats.avgWin)}</span>
-                <span style={{ color: NEG }}>{`-${usdCell(stats.avgLoss)}`}</span>
+                <span style={{ color: POS }}>{formatCell(stats.avgWin)}</span>
+                <span style={{ color: NEG }}>{`-${formatCell(stats.avgLoss)}`}</span>
               </div>
             </div>
           </KpiCard>
+        </div>
 
-          <KpiCard
-            title="Profit factor"
-            hint="Gross profit divided by gross loss."
-            value={(Number(stats.profitFactor) || 0).toFixed(2)}
-          >
-            <PfRing value={stats.profitFactor} />
-          </KpiCard>
-
-          <div className={`${PANEL} px-4 py-4 sm:px-5`}>
-            <div className="flex items-center gap-1.5 text-[11.5px] font-medium" style={{ color: MUTED }}>
-              <span title="Consecutive green days and winning trades at the end of the period.">
-                Current streak
-              </span>
-              <Info size={12} className="opacity-50" aria-hidden="true" />
+        {/* Zella score / cumulative P&L / net daily P&L */}
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+          <div className={`${PANEL} flex flex-col p-4`}>
+            <div className="flex items-center gap-1.5 text-[13px] font-semibold">
+              Zella score
+              <Info size={12} style={{ color: FAINT }} aria-hidden="true" />
             </div>
-            <div className="mt-2.5 grid grid-cols-[auto_1px_auto] items-center gap-3">
-              <div>
-                <div className="text-[9px] font-semibold uppercase tracking-[0.08em]" style={{ color: FAINT }}>
-                  Days
-                </div>
-                <div className="mt-1.5 space-y-1.5">
-                  <StreakRing
-                    count={streak.greenDays}
-                    label={`${streak.greenDays} day${streak.greenDays === 1 ? "" : "s"}`}
-                    tone={POS}
-                  />
-                  <StreakRing
-                    count={streak.redDays}
-                    label={`${streak.redDays} day${streak.redDays === 1 ? "" : "s"}`}
-                    tone="#7c8cf8"
-                  />
-                </div>
-              </div>
-              <div className="h-14 w-px" style={{ backgroundColor: BORDER }} />
-              <div>
-                <div className="text-[9px] font-semibold uppercase tracking-[0.08em]" style={{ color: FAINT }}>
-                  Trades
-                </div>
-                <div className="mt-1.5 space-y-1.5">
-                  <StreakRing
-                    count={streak.win}
-                    label={`${streak.win} trade${streak.win === 1 ? "" : "s"}`}
-                    tone={POS}
-                  />
-                  <StreakRing
-                    count={streak.loss}
-                    label={`${streak.loss} trade${streak.loss === 1 ? "" : "s"}`}
-                    tone="#7c8cf8"
-                  />
-                </div>
-              </div>
+            <RadarChart metrics={board.metrics} accent={accent} />
+            <ScoreBar score={score} />
+          </div>
+
+          <div className={`${PANEL} flex flex-col p-4`}>
+            <div className="flex items-center gap-1.5 text-[13px] font-semibold">
+              Daily net cumulative P&L
+              <Info size={12} style={{ color: FAINT }} aria-hidden="true" />
+            </div>
+            <div className="mt-1 flex-1">
+              <EquityChart points={curve} formatAxis={axis} />
+            </div>
+          </div>
+
+          <div className={`${PANEL} flex flex-col p-4`}>
+            <div className="flex items-center gap-1.5 text-[13px] font-semibold">
+              Net daily P&L
+              <Info size={12} style={{ color: FAINT }} aria-hidden="true" />
+            </div>
+            <div className="mt-1 min-h-[196px] flex-1">
+              <NetDailyChart bars={dailyBars} formatAxis={axis} />
             </div>
           </div>
         </div>
 
-        {/* Chart + radar + calendar */}
+        {/* Recent trades + trade time | calendar */}
         <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-          <div className="space-y-3">
-            <div className={`${PANEL} p-4`}>
-              <div className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold">
-                Daily net cumulative P&L
-                <Info size={12} style={{ color: FAINT }} aria-hidden="true" />
+          <div className="flex flex-col gap-3">
+            <div className={`${PANEL} flex flex-col p-4`}>
+              <div className="flex items-center gap-4 border-b pb-2.5" style={{ borderColor: BORDER }}>
+                {[
+                  ["recent", "Recent trades"],
+                  ["open", "Open positions"],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setBottomTab(key)}
+                    aria-pressed={bottomTab === key}
+                    className="relative pb-1 text-[12px] font-semibold transition-colors"
+                    style={{ color: bottomTab === key ? "#a78bfa" : MUTED }}
+                  >
+                    {label}
+                    {bottomTab === key ? (
+                      <span
+                        className="absolute inset-x-0 -bottom-[11px] h-[2px] rounded"
+                        style={{ backgroundColor: accent }}
+                      />
+                    ) : null}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => navigate("/trades")}
+                  aria-label="Open all trades"
+                  className="ml-auto transition-colors hover:text-white"
+                  style={{ color: MUTED }}
+                >
+                  <ArrowUpRight size={15} />
+                </button>
               </div>
-              <EquityChart points={curve} />
+
+              <div className="mt-3 overflow-hidden rounded-lg border" style={{ borderColor: "#1f1f2b" }}>
+                <div
+                  className="grid grid-cols-[1fr_0.75fr_0.9fr] text-[10px] uppercase tracking-wide"
+                  style={{ backgroundColor: CARD_ALT, color: MUTED }}
+                >
+                  <span className="px-3 py-2">{bottomTab === "open" ? "Open date" : "Close date"}</span>
+                  <span className="px-3 py-2">Symbol</span>
+                  <span className="px-3 py-2 text-right">{bottomTab === "open" ? "Status" : "Net P&L"}</span>
+                </div>
+
+                {rows.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-[12px]" style={{ color: MUTED }}>
+                    {bottomTab === "recent"
+                      ? "No closed trades yet — log your first one to fill this dashboard."
+                      : "No open positions right now."}
+                  </div>
+                ) : (
+                  rows.map((trade, index) => {
+                    const pnl = Number(trade.pnl) || 0;
+                    const date = tradeDateOf(trade);
+                    return (
+                      <button
+                        key={trade.id || index}
+                        type="button"
+                        onClick={() => navigate("/trades")}
+                        className="grid w-full grid-cols-[1fr_0.75fr_0.9fr] border-t text-left text-[11.5px] transition-colors hover:bg-white/[0.03]"
+                        style={{
+                          borderColor: "#1d1d29",
+                          backgroundColor: index % 2 ? "rgba(255,255,255,0.018)" : "transparent",
+                        }}
+                      >
+                        <span className="px-3 py-2.5 tabular-nums" style={{ color: "#b9b9c9" }}>
+                          {date ? format(date, "MM/dd/yyyy") : "—"}
+                        </span>
+                        <span className="truncate px-3 py-2.5 font-semibold">{trade.pair || "—"}</span>
+                        <span
+                          className="px-3 py-2.5 text-right font-semibold tabular-nums"
+                          style={{ color: bottomTab === "open" ? MUTED : pnl >= 0 ? POS : NEG }}
+                        >
+                          {bottomTab === "open" ? "Open" : formatValue(pnl, true)}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             <div className={`${PANEL} flex flex-col p-4`}>
               <div className="flex items-center gap-1.5 text-[13px] font-semibold">
-                Zella score
+                Trade time
                 <Info size={12} style={{ color: FAINT }} aria-hidden="true" />
               </div>
-              <RadarChart metrics={board.metrics} accent={accent} />
-              <ScoreBar score={score} />
+              <div className="mt-2 h-[190px] flex-1">
+                <TradeTimeChart trades={periodTrades} formatAxis={axis} />
+              </div>
             </div>
           </div>
 
-          <div className={`${PANEL} flex flex-col p-3 sm:p-4`}>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className={`${PANEL} flex flex-col p-4`} data-testid="trade-calendar">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setViewDate((current) => addMonths(current, -1))}
@@ -1044,7 +1588,7 @@ export default function Dashboard({ currentAccount }) {
               >
                 <ChevronLeft size={16} />
               </button>
-              <span className="min-w-[108px] text-center text-[14.5px] font-semibold">
+              <span className="min-w-[112px] text-center text-[13.5px] font-semibold">
                 {format(viewDate, "MMMM yyyy")}
               </span>
               <button
@@ -1060,8 +1604,8 @@ export default function Dashboard({ currentAccount }) {
               <button
                 type="button"
                 onClick={() => setViewDate(new Date())}
-                className={`ml-1 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors hover:text-white ${FOCUS}`}
-                style={{ borderColor: "#242433", color: "#c7c7d6" }}
+                className={`ml-1 rounded-md border px-2.5 py-1 text-[11px] font-medium text-[#c7c7d6] transition-colors hover:text-white ${FOCUS}`}
+                style={{ borderColor: "#2a2a3a" }}
               >
                 This month
               </button>
@@ -1070,7 +1614,7 @@ export default function Dashboard({ currentAccount }) {
                 <div className="text-[11px]" style={{ color: MUTED }}>
                   Monthly stats:{" "}
                   <span className="font-semibold" style={{ color: monthNet >= 0 ? POS : NEG }}>
-                    {usdCell(monthNet)}
+                    {formatCell(monthNet)}
                   </span>{" "}
                   <span className="ml-1">{monthTraded} days</span>
                 </div>
@@ -1092,22 +1636,16 @@ export default function Dashboard({ currentAccount }) {
                 >
                   <CalendarDays size={14} />
                 </button>
-                <span
-                  title="Each cell shows that day's net P&L, trade count and win rate."
-                  style={{ color: MUTED }}
-                >
-                  <Info size={14} />
-                </span>
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 items-stretch gap-2">
+            <div className="mt-3 flex min-h-0 flex-1 items-stretch gap-2">
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="mb-1.5 grid grid-cols-7 gap-1.5">
                   {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
                     <div
                       key={label}
-                      className="rounded-md py-1.5 text-center text-[11px] font-medium"
+                      className="rounded-md py-1.5 text-center text-[10.5px] font-medium"
                       style={{ backgroundColor: CARD_ALT, color: "#9a9ab0" }}
                     >
                       {label}
@@ -1123,8 +1661,8 @@ export default function Dashboard({ currentAccount }) {
                           return (
                             <div
                               key={`blank-${weekIndex}-${dayIndex}`}
-                              className="h-full min-h-[62px] rounded-md sm:min-h-[86px]"
-                              style={{ backgroundColor: "#0c0c12" }}
+                              className="h-full min-h-[72px] rounded-md"
+                              style={{ backgroundColor: "#0f0f17" }}
                             />
                           );
                         }
@@ -1132,40 +1670,48 @@ export default function Dashboard({ currentAccount }) {
                         const key = format(day, "yyyy-MM-dd");
                         const cell = daysMap.get(key);
                         const winRate = cell && cell.count ? (cell.wins / cell.count) * 100 : 0;
+                        const empty = !cell;
+                        const tone = cell ? (cell.net > 0 ? POS : cell.net < 0 ? NEG : TEXT) : TEXT;
 
                         return (
                           <button
                             key={key}
                             type="button"
-                            onClick={() => navigate(`/trades?date=${key}`)}
+                            onClick={() => setSelectedDay(day)}
                             title={
                               cell
-                                ? `${format(day, "eee, d MMM")}: ${usd(cell.net)} · ${cell.count} trade${
+                                ? `${format(day, "eee, d MMM")}: ${formatValue(cell.net)} · ${cell.count} trade${
                                     cell.count === 1 ? "" : "s"
                                   }`
                                 : format(day, "eee, d MMM")
                             }
-                            className="relative flex h-full min-h-[62px] flex-col items-center justify-center rounded-md border px-1 py-1.5 text-center transition hover:brightness-125 sm:min-h-[86px]"
+                            className="relative flex h-full min-h-[72px] flex-col items-center justify-start rounded-md px-1 pb-1.5 pt-[22px] text-center transition hover:brightness-125"
                             style={{
-                              backgroundColor: cellBg(cell?.net || 0, monthMax),
-                              borderColor: cell ? "#20202c" : "#14141c",
+                              backgroundColor: empty
+                                ? "#15151d"
+                                : cell.net > 0
+                                ? "rgba(34,196,147,0.16)"
+                                : cell.net < 0
+                                ? "rgba(242,85,110,0.18)"
+                                : "rgba(70,110,220,0.22)",
+                              border: `1px solid ${empty ? "#1d1d29" : "rgba(255,255,255,0.05)"}`,
                             }}
                           >
                             <span
-                              className="absolute left-1.5 top-1 text-[10px] tabular-nums"
-                              style={{ color: FAINT }}
+                              className="absolute inset-x-0 top-1 text-center text-[10.5px] tabular-nums"
+                              style={{ color: empty ? FAINT : "#d5d5e2" }}
                             >
                               {format(day, "d")}
                             </span>
                             {cell ? (
                               <>
-                                <div className="mt-2 text-[11.5px] font-bold tabular-nums sm:text-[12.5px]">
-                                  {usdCell(cell.net)}
+                                <div className="mt-0.5 text-[11.5px] font-semibold tabular-nums" style={{ color: tone }}>
+                                  {formatCell(cell.net)}
                                 </div>
-                                <div className="text-[9px] leading-tight sm:text-[9.5px]" style={{ color: "#b9b9c9" }}>
+                                <div className="text-[9px] leading-tight" style={{ color: "#cfcfdd" }}>
                                   {cell.count} trade{cell.count === 1 ? "" : "s"}
                                 </div>
-                                <div className="text-[9px] leading-tight sm:text-[9.5px]" style={{ color: "#b9b9c9" }}>
+                                <div className="text-[9px] leading-tight" style={{ color: "#cfcfdd" }}>
                                   {pct(winRate, 1)}
                                 </div>
                               </>
@@ -1178,7 +1724,7 @@ export default function Dashboard({ currentAccount }) {
                 </div>
               </div>
 
-              <div className="mt-[30px] hidden w-[128px] shrink-0 flex-col gap-1.5 lg:flex">
+              <div className="mt-[28px] hidden w-[92px] shrink-0 flex-col gap-1.5 lg:flex">
                 {weeks.map((week, index) => {
                   const weekStats = week.filter(Boolean).reduce(
                     (acc, day) => {
@@ -1194,14 +1740,14 @@ export default function Dashboard({ currentAccount }) {
                   return (
                     <div
                       key={index}
-                      className="flex flex-1 flex-col justify-center rounded-md border px-3 py-2"
-                      style={{ borderColor: BORDER, backgroundColor: CARD }}
+                      className="flex flex-1 flex-col justify-start rounded-md border px-2.5 py-2"
+                      style={{ borderColor: "#232331", backgroundColor: CARD_ALT }}
                     >
-                      <div className="text-[10px]" style={{ color: MUTED }}>
+                      <div className="text-[9.5px]" style={{ color: MUTED }}>
                         Week {index + 1}
                       </div>
-                      <div className="text-[13px] font-semibold tabular-nums">{usdCell(weekStats.net)}</div>
-                      <div className="text-[9.5px]" style={{ color: FAINT }}>
+                      <div className="text-[12px] font-semibold tabular-nums">{formatCell(weekStats.net)}</div>
+                      <div className="text-[9px]" style={{ color: FAINT }}>
                         {weekStats.days} day{weekStats.days === 1 ? "" : "s"}
                       </div>
                     </div>
@@ -1211,198 +1757,25 @@ export default function Dashboard({ currentAccount }) {
             </div>
           </div>
         </div>
-
-        {/* Bottom strip */}
-        <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[1.5fr_1fr_1fr]">
-          <div className={`${PANEL} p-4`}>
-            <div className="flex items-center gap-4 border-b pb-2.5" style={{ borderColor: BORDER }}>
-              {[
-                ["recent", "Recent trades"],
-                ["open", "Open positions"],
-              ].map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setBottomTab(key)}
-                  aria-pressed={bottomTab === key}
-                  className="relative pb-1 text-[12px] font-semibold transition-colors"
-                  style={{ color: bottomTab === key ? TEXT : MUTED }}
-                >
-                  {label}
-                  {bottomTab === key ? (
-                    <span
-                      className="absolute inset-x-0 -bottom-[11px] h-[2px] rounded"
-                      style={{ backgroundColor: accent }}
-                    />
-                  ) : null}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => navigate("/trades")}
-                aria-label="Open all trades"
-                className="ml-auto transition-colors hover:text-white"
-                style={{ color: MUTED }}
-              >
-                <ArrowUpRight size={15} />
-              </button>
-            </div>
-
-            {rows.length === 0 ? (
-              <div className="py-8 text-center text-[12px]" style={{ color: MUTED }}>
-                {bottomTab === "recent"
-                  ? "No closed trades yet — log your first one to fill this dashboard."
-                  : "No open positions right now."}
-              </div>
-            ) : (
-              rows.map((trade) => {
-                const pnl = Number(trade.pnl) || 0;
-                const isShort = /short|sell/i.test(trade.direction || "");
-                const date = tradeDateOf(trade);
-                return (
-                  <button
-                    key={trade.id}
-                    type="button"
-                    onClick={() => navigate("/trades")}
-                    className="flex w-full items-center gap-3 border-b py-2.5 text-left last:border-0"
-                    style={{ borderColor: "#171720" }}
-                  >
-                    <span
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold uppercase"
-                      style={{
-                        backgroundColor: isShort ? "rgba(242,85,110,0.14)" : "rgba(34,196,147,0.14)",
-                        color: isShort ? NEG : POS,
-                      }}
-                    >
-                      {(trade.pair || "—").slice(0, 2)}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[12.5px] font-semibold">
-                        {trade.pair || "—"} <span style={{ color: MUTED }}>· {trade.direction || "—"}</span>
-                      </span>
-                      <span className="block text-[10.5px]" style={{ color: FAINT }}>
-                        {date ? format(date, "d MMM yyyy") : "—"}
-                      </span>
-                    </span>
-                    <span
-                      className="text-[12px] font-semibold tabular-nums"
-                      style={{ color: bottomTab === "open" ? MUTED : pnl >= 0 ? POS : NEG }}
-                    >
-                      {bottomTab === "open" ? "Open" : usd(pnl, true)}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          <div className={`${PANEL} flex flex-col p-4`}>
-            <div className="flex items-center gap-1.5 text-[13px] font-semibold">
-              Net daily P&L
-              <Info size={12} style={{ color: FAINT }} aria-hidden="true" />
-            </div>
-            <div className="mt-4 flex min-h-[120px] max-h-[168px] flex-1 items-end gap-[3px]">
-              {dailyBars.map((bar) => {
-                const height = Math.max(bar.net === 0 ? 2 : 4, (Math.abs(bar.net) / maxDaily) * 140);
-                return (
-                  <div
-                    key={format(bar.date, "yyyy-MM-dd")}
-                    title={`${format(bar.date, "d MMM")}: ${usd(bar.net)} · ${bar.count} trades`}
-                    className="flex-1 rounded-t-[2px]"
-                    style={{
-                      height: `${Math.round(height)}px`,
-                      backgroundColor: bar.net > 0 ? POS : bar.net < 0 ? NEG : "#23232f",
-                    }}
-                  />
-                );
-              })}
-            </div>
-            <div className="mt-2 flex justify-between text-[9px]" style={{ color: FAINT }}>
-              <span>{format(dailyBars[0].date, "d MMM")}</span>
-              <span>{format(dailyBars[dailyBars.length - 1].date, "d MMM")}</span>
-            </div>
-            <div className="mt-auto flex items-end justify-between gap-3 border-t pt-3" style={{ borderColor: "#171720" }}>
-              <div>
-                <div className="text-[9.5px] uppercase tracking-wide" style={{ color: FAINT }}>
-                  Best day
-                </div>
-                <div className="text-[12.5px] font-semibold tabular-nums" style={{ color: POS }}>
-                  {usd(bestDay.net, true)}
-                </div>
-                <div className="text-[9.5px]" style={{ color: FAINT }}>
-                  {format(bestDay.date, "d MMM")}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-[9.5px] uppercase tracking-wide" style={{ color: FAINT }}>
-                  Worst day
-                </div>
-                <div className="text-[12.5px] font-semibold tabular-nums" style={{ color: NEG }}>
-                  {usd(worstDay.net, true)}
-                </div>
-                <div className="text-[9.5px]" style={{ color: FAINT }}>
-                  {format(worstDay.date, "d MMM")}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className={`${PANEL} flex flex-col p-4`}>
-            <div className="flex items-center justify-between">
-              <div className="text-[13px] font-semibold">External links</div>
-              <button
-                type="button"
-                onClick={() => navigate("/settings")}
-                aria-label="Link settings"
-                className="transition-colors hover:text-white"
-                style={{ color: MUTED }}
-              >
-                <Settings size={14} />
-              </button>
-            </div>
-
-            <div className="mt-1.5 flex flex-1 flex-col">
-              {[
-                { label: "Weekly performance report", to: "/reports", icon: BarChart3 },
-                { label: "Playbook library", to: "/playbooks", icon: BookMarked },
-                { label: "Backtest lab", to: "/backtest", icon: Calculator },
-                { label: "TradingView chart", to: "/trades", icon: ExternalLink },
-              ].map((link) => (
-                <button
-                  key={link.label}
-                  type="button"
-                  onClick={() => navigate(link.to)}
-                  className="flex w-full items-center gap-2.5 border-b py-2.5 text-left last:border-0"
-                  style={{ borderColor: "#171720" }}
-                >
-                  <span
-                    className="flex h-7 w-7 items-center justify-center rounded-md"
-                    style={{ backgroundColor: CARD_ALT, color: "#a8a8ff" }}
-                  >
-                    <link.icon size={14} />
-                  </span>
-                  <span className="flex-1 text-[12px]" style={{ color: "#cfcfdd" }}>
-                    {link.label}
-                  </span>
-                  <ExternalLink size={12} style={{ color: FAINT }} />
-                </button>
-              ))}
-
-              <div
-                className="mt-auto rounded-lg border px-3 py-2.5"
-                style={{ borderColor: "#242433", backgroundColor: "#0d0d15" }}
-              >
-                <div className="text-[11px] font-semibold" style={{ color: "#cfcfdd" }}>
-                  Connect your broker
-                </div>
-                <div className="mt-0.5 text-[10px] leading-snug" style={{ color: FAINT }}>
-                  Import MT4, MT5 or CSV trades to keep this dashboard in sync automatically.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
+
+      {selectedDay ? (
+        <DayDetailModal
+          day={selectedDay}
+          trades={dayTrades}
+          onClose={() => setSelectedDay(null)}
+          onOpenTrades={() => {
+            const key = format(selectedDay, "yyyy-MM-dd");
+            setSelectedDay(null);
+            navigate(`/trades?date=${key}`);
+          }}
+          onAddNote={() => {
+            const key = format(selectedDay, "yyyy-MM-dd");
+            setSelectedDay(null);
+            navigate(`/journal?date=${key}`);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
