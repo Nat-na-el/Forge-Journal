@@ -17,3 +17,23 @@ AT04,MetaTrader server login investor password,must,yes,Existing connectMT5Accou
 AT04,Connection progress and sync status,must,yes,Progress copy plus success/error banners
 AT04,Imported trades create a journal account,must,yes,Account id mt5-<login>
 AT05,Manual trade entry without a broker,must,yes,Generic account plus existing trade form
+T01,Dark trade log with KPI strip,must,yes,Six KPI cards above the table
+T01,Display-unit selector with privacy,must,yes,Dollar / percentage / R / ticks / pips / points
+T01,Search sort and page size,should,yes,Symbol notes and tags search across the filtered log
+T01,CSV import and export,must,yes,Reuses CsvImportModal and exports the filtered rows
+T01,Bulk select and delete,should,yes,Page-level select-all and a batched delete
+T01,Reviewed state per trade,should,yes,Persisted with updateDoc and reflected in the table
+T01,Loading empty and error states,must,yes,Skeletons, filtered-empty copy and retry banner
+T02,Filter panel with left rail,must,yes,General / Tags / Date & Time / Playbook
+T02,Grouped checkbox filters,must,yes,Instrument timeframe open-closed reviewed side symbol status rating
+T02,Tag date and playbook filters,must,yes,Date presets plus custom from/to
+T02,Reset all cancel apply semantics,must,yes,Draft state discarded on cancel and outside click
+T03,Tracking layout with stats rail,must,yes,Net P&L block plus full trade detail list
+T03,Live TradingView advanced chart,must,yes,Official embed mounted per symbol; network required
+T03,Chart interval switch,must,yes,1m 5m 15m 1h 1D plus open-on-TradingView
+T03,Stats playbook executions attachments tabs,should,yes,All four tabs render real trade fields
+T03,Previous and next trade navigation,could,yes,Walks the current filtered order
+T03,Note editor with save and template,should,yes,Persists notes; preview mode stays local
+T03,Reviewed share edit delete actions,must,yes,Share copies a summary; delete opens the confirm modal
+T04,Analytics tab,must,yes,Equity curve donut daily P&L symbol P&L and statistics
+T04,P&L calendar tab,must,yes,Daily and weekly totals with a day deep link

@@ -26,3 +26,31 @@ MT5 client, same trade fields.
 - Broker marks are our own letter tiles; no broker logos or artwork are used.
 - Platforms without a direct integration route to the generic template instead
   of pretending to authenticate.
+
+## Phase 3 — Trades log and Tracking view
+
+Reference: `Trades page.png`, `Filter top up.png`, `Te dollar sign top up.png`,
+`Trade details.png`, `Each trades.png` (trade log, filter panel, display-unit
+menu, Tracking layout with the chart and executions).
+
+| ID | Screen | Date | Status | Notes |
+|----|--------|------|--------|-------|
+| T01 | Trade log (`/trades`) | 2026-11-13 | done | Always-dark page with the six KPI cards, trade table, search, sort, rows-per-page, bulk select and CSV import/export. Row actions open the Tracking view, the edit modal or the delete confirmation. Loading, empty, filtered-empty and error states. |
+| T02 | Filters and display units | 2026-11-13 | done | Left-rail filter panel (General, Tags, Date & Time, Playbook) with grouped checkboxes, date presets and Reset all / Cancel / Apply. Display-unit menu swaps Dollar, Percentage, R-multiple, Ticks, Pips and Points, plus a Privacy switch. |
+| T03 | Tracking view | 2026-11-13 | done | Trade detail as a full-screen page: Stats / Playbook / Executions / Attachments rail, prev/next trade, Mark as reviewed, Share, edit and delete, live TradingView advanced chart with interval switch, and a trade-note editor with save and template. |
+| T04 | Analytics and Calendar tabs | 2026-11-13 | done | Equity curve, win/loss donut, long/short split, daily P&L, P&L by symbol and the full statistics list. Calendar view shows daily and weekly totals and deep-links a day back into the log. |
+
+### Harder than expected
+
+- The Tracking view has to escape the app shell: it is rendered through
+  `createPortal` at `z-[1050]`, above the fixed sidebar (`z-1000`) and drawer,
+  and below the toast layer (`z-1100`).
+- The TradingView chart is the official advanced-chart embed, mounted per
+  symbol and interval and torn down on close. It needs network access; if the
+  embed is blocked the panel offers an "Open on TradingView" fallback instead
+  of a blank box.
+- Demo trades now carry instrument-appropriate prices (FX 5 digits, JPY 3,
+  indices 1) and stop/target distances derived from a per-market tick size, so
+  the table and the chart axis agree.
+- Category and currency naming stays ours: no "Zella Scale"; the equivalent
+  is "Setup score" plus the shared 1–5 star trade rating.
