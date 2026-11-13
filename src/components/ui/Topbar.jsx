@@ -104,9 +104,11 @@ export default function Topbar({
   }, [menuOpen]);
 
   const title = PAGE_TITLES[location.pathname] || "Dashboard";
-  // The dashboard renders its own heading row, so the top bar keeps only the
-  // account / actions cluster there instead of a duplicate title.
-  const hideTitle = location.pathname === "/dashboard";
+  // The dashboard and reports pages render their own heading row, so the top
+  // bar keeps only the account / actions cluster there instead of a duplicate
+  // title. The dashboard also swaps to a dark chrome; reports stays light.
+  const hideTitle = location.pathname === "/dashboard" || location.pathname === "/reports";
+  const darkChrome = location.pathname === "/dashboard";
   const accountName = currentAccount?.name || "No account";
   const user = auth.currentUser;
   const initial = (user?.displayName || user?.email || accountName || "F")
@@ -130,7 +132,7 @@ export default function Topbar({
     <>
       <header
         className={`fixed right-0 top-0 z-50 flex h-14 items-center justify-between gap-3 border-b px-3 backdrop-blur-md transition-[left] duration-300 sm:px-6 ${
-          hideTitle
+          hideTitle && darkChrome
             ? "border-[#1e1e28] bg-[#08080d]/90"
             : "border-[#e6e8f2] bg-white/90 dark:border-[#262645] dark:bg-[#0b0b19]/90"
         }`}

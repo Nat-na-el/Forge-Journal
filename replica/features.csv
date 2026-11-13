@@ -47,3 +47,21 @@ D01,Add edit delete trade flows,must,yes,Reuses existing entry modal delete conf
 D01,Mood and reviewed fields,must,yes,Mood chip toggle Mark as reviewed checkbox persisted with note
 D01,Search and filter,must,yes,All days Green Red With notes filters plus symbol search
 D01,Dismissible promo banner,should,yes,Day View intro banner with Dismiss action
+R01,Header filters date range and account chip,must,yes,Filters menu with periods custom dates breakeven band and reset; date pill and account menu both wired
+R01,Underline tabs Overview Reports Compare Calendar,must,yes,Reports tab opens grouped dropdown of fifteen sub-reports
+R01,P&L showing metric switch,must,yes,Net Gross Volume Commissions drive totals and both charts
+R01,Your stats two-column table,must,yes,42 metrics including trade day hold-time R-multiple drawdown and cost rows
+R01,Best lowest average month tiles,must,yes,Computed across full account history
+R01,Cumulative and daily charts,must,yes,Local SVG with dashed grid green/red split fill and MM/dd/yy axis
+R02,Date and time reports,must,yes,Days weeks months trade time trade duration
+R02,Price and quantity reports,must,yes,Price bands lot-size bands and instrument
+R02,Options report,must,yes,Days till expiration with honest empty state when no expiry is logged
+R02,Risk reports,must,yes,R-multiple and position-size bands
+R02,Wins vs losses report,must,yes,Winners losers breakeven
+R02,Tags reports,must,yes,Setups mistakes and custom tags
+R02,Distribution performance and summary trio,must,yes,Bars scaled to count performance split at zero and summary table with winning-% bar
+R03,Two compare groups,must,yes,Symbol tag chips side trade result and date range with live match count
+R03,Generate and reset report,must,yes,Statistics donuts and cumulative P&L per group; reset returns to the form
+R04,Calendar month grid,must,yes,Per-day P&L chips trade counts month totals and navigation
+R04,Day deep link,must,yes,Clicking a day opens /journal?date= for that date
+R04,Export and copy summary,should,yes,CSV export of filtered trades and clipboard summary with toast feedback

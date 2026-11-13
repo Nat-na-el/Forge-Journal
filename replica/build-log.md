@@ -76,3 +76,32 @@ sections).
   select the day, note modal persists to Firestore, add/edit/delete flows
   all functional in preview and live modes.
 
+
+## Phase 5 - Reports
+
+Reference: `report.png`, `Reports detail.png`, `Report with tags.png`,
+`Compare.png`, `Generated comparision report.png` (overview stats table,
+report sub-tabs, tag breakdown, compare-groups form and generated comparison).
+
+| ID | Screen | Date | Status | Notes |
+|----|--------|------|--------|-------|
+| R01 | Reports overview (`/reports`) | 2026-11-13 | done | Light-first, theme-aware header with Filters, date-range pill and account chip, underline tabs Overview / Reports / Compare / Calendar. P&L SHOWING metric switch (Net, Gross, Volume, Commissions) drives every chart and total. Your Stats card with best / lowest / average month tiles and a 42-row two-column statistics table (trade, day, hold-time, R, drawdown and cost metrics). Cumulative area chart and daily bar chart in the reference style: dashed grid, green above zero, red below, MM/dd/yy axis. |
+| R02 | Sub-reports | 2026-11-13 | done | Fifteen dimensions across Date & Time (days, weeks, months, trade time, duration), Price & Quantity (price, volume, instrument), Options (days till expiration), Risk (R-multiple, position size), Wins vs Losses and Tags (setups, mistakes, custom tags). Each renders Trade distribution, Performance and a Summary table with net, winning-% bar, gross profit/loss, trades and volume. |
+| R03 | Compare groups | 2026-11-13 | done | Two group cards (symbol, tag chips, side, trade result, start and end date) with a live match count, RESET and GENERATE REPORT. Results pair Statistics, Overall evaluation donuts and Daily net cumulative P&L per group. |
+| R04 | P&L calendar | 2026-11-13 | done | Month grid with Mon-Sun weeks, per-day P&L chips and trade counts, month navigation, Today, month totals and a click-through to `/journal?date=`. |
+
+### Harder than expected
+
+- The reference charts are drawn with chart.js; they are rebuilt here as local
+  SVG components so the dashed grid, green/red split fill and `MM/dd/yy` axis
+  match without adding a dependency.
+- The options report needs an expiry field that this journal does not collect.
+  It shows an honest empty state instead of inventing expiry buckets.
+- Best / lowest / average month read across the whole history, so a
+  single-month range does not print the same number three times.
+- "Custom Tags" headings use the reference's `CUSTOM_TAGS` shape; every other
+  report keeps its words.
+- The Reports page owns its heading row, so `Topbar` hides its title there while
+  keeping the light chrome (only the dashboard swaps to dark chrome).
+- Verified light and dark at 1600x1000 and 390x844; the summary table scrolls
+  horizontally on phones and calendar chips drop cents below `sm`.
