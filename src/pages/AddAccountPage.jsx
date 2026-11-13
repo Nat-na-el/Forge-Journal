@@ -1,195 +1,246 @@
 // src/pages/AddAccountPage.jsx
-// Step 2 of the Add Trade workflow: choose a broker / platform to connect,
-// or create a custom account manually.
-import React, { useState } from "react";
+// "Choose Broker" step of the Add Trade workflow. A single narrow column with
+// a search field: the popular platforms show as a two-column grid, and typing
+// swaps in a full result list plus the generic-template escape hatch.
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ChevronRight, Plus, Link, Plug, FileText, AlertTriangle } from "lucide-react";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { CARD, PANEL, FIELD, HEAD, MUTED, DIVIDER, FOCUS, PAGE, PAGE_BG } from "../lib/uiTokens";
+import { Info, Search, X, Check } from "lucide-react";
+import { BROKERS, POPULAR_BROKERS } from "../lib/brokers";
+import {
+  AT_ACCENT,
+  AT_CENTER,
+  AT_FIELD,
+  AT_FAINT,
+  AT_FOCUS,
+  AT_MUTED,
+  AT_PAGE,
+  AT_PRIMARY,
+} from "../lib/addTradeTheme";
 
-const ACCENT = "#6C47FF";
-
-const POPULAR_BROKERS = [
-  { name: "Exness", desc: "MetaTrader 4 / 5", region: "Global" },
-  { name: "IC Markets", desc: "MetaTrader 4 / 5, cTrader", region: "Global" },
-  { name: "Pepperstone", desc: "MetaTrader 4 / 5, cTrader", region: "Global" },
-  { name: "FP Markets", desc: "MetaTrader 4 / 5", region: "Global" },
-  { name: "XM", desc: "MetaTrader 4 / 5", region: "Global" },
-  { name: "FBS", desc: "MetaTrader 4 / 5", region: "Global" },
-  { name: "OANDA", desc: "OANDA fxTrade, MT4", region: "Global" },
-  { name: "IG", desc: "IG trading platform", region: "UK / EU" },
-];
-
-const SUPPORTED_INTEGRATIONS = [
-  {
-    name: "MetaTrader 5",
-    icon: "M5",
-    desc: "Read-only investor password sync",
-    path: "/add-trade/mt5",
-    primary: true,
-  },
-  {
-    name: "Custom broker",
-    icon: "+",
-    desc: "Create an account manually",
-    path: "/add-trade/custom-account",
-    primary: true,
-  },
-  {
-    name: "TradeLocker",
-    icon: "TL",
-    desc: "Import via CSV upload",
-    path: null,
-    primary: false,
-  },
-  {
-    name: "cTrader",
-    icon: "cT",
-    desc: "Import via CSV upload",
-    path: null,
-    primary: false,
-  },
-  {
-    name: "CSV file",
-    icon: "↑",
-    desc: "Upload trade history CSV",
-    path: null,
-    primary: false,
-  },
-];
+const BrokerTile = ({ broker, size = "md" }) => {
+  const dims = size === "sm" ? "h-5 w-5 rounded-md text-[8px]" : "h-8 w-8 rounded-lg text-[11px]";
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex shrink-0 items-center justify-center font-bold ${dims}`}
+      style={{ backgroundColor: broker?.bg || "#1f1f2b", color: broker?.fg || "#ffffff" }}
+    >
+      {broker?.mark || "?"}
+    </span>
+  );
+};
 
 export default function AddAccountPage() {
   const navigate = useNavigate();
+  const inputRef = useRef(null);
   const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
 
-  const filteredBrokers = POPULAR_BROKERS.filter((b) =>
-    b.name.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") navigate("/add-trade");
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [navigate]);
+
+  const query = search.trim().toLowerCase();
+  const searching = query.length > 0;
+  const results = useMemo(
+    () => (searching ? BROKERS.filter((b) => b.name.toLowerCase().includes(query)) : []),
+    [query, searching]
   );
 
-  const goMT5 = () => navigate("/add-trade/mt5");
-  const goCustom = () => navigate("/add-trade/custom-account");
-  const goBack = () => navigate("/add-trade");
+  const selected = BROKERS.find((b) => b.id === selectedId) || null;
 
-  const selectBroker = (broker) => {
-    // Non-MT5 brokers are CSV-based placeholders; keep workflow moving to manual entry.
-    navigate(`/add-trade/custom-account?broker=${encodeURIComponent(broker.name)}`);
+  const goClose = () => navigate("/add-trade");
+  const goGeneric = (brokerName = "") =>
+    navigate(
+      brokerName
+        ? `/add-trade/custom-account?broker=${encodeURIComponent(brokerName)}`
+        : "/add-trade/custom-account"
+    );
+
+  const continueTo = () => {
+    if (!selected) return;
+    if (selected.integration === "mt5") navigate("/add-trade/mt5");
+    else goGeneric(selected.name);
   };
 
-  return (
-    <div className={`${PAGE_BG} min-h-screen`}>
-      {/* Header */}
-      <div className={`${PAGE} border-b border-[#e6e8f2] dark:border-[#262645] bg-white/50 dark:bg-[#0b0b19]/50 backdrop-blur sticky top-0 z-20`}>
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={goBack}
-              className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border border-[#e6e8f2] dark:border-[#262645] bg-white dark:bg-[#15152b] text-[#6b7090] dark:text-[#c9ccea] hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors"
-              aria-label="Go back"
-            >
-              <Link size={20} />
-            </button>
-            <div>
-              <h1 className={`text-2xl font-bold ${HEAD}`}>Add Account</h1>
-              <p className="text-sm {MUTED}">Connect a broker or create an account manually.</p>
-            </div>
-          </div>
-        </div>
-      </div>
+  const pick = (broker) => {
+    setSelectedId(broker.id);
+    // A single click on a platform is the choice; Continue then opens its
+    // connection step so the selection is always visible before we navigate.
+    inputRef.current?.blur();
+  };
 
-      <div className={`${PAGE} space-y-6`}>
+  const genericRow = (
+    <button
+      type="button"
+      onClick={() => goGeneric()}
+      className={`flex w-full items-center justify-between gap-3 rounded-lg bg-[#6C47FF] px-3 py-2.5 text-left transition hover:brightness-110 ${AT_FOCUS}`}
+    >
+      <span className="flex items-center gap-2 text-[12px] font-semibold text-white">
+        <Info size={13} className="shrink-0" />
+        Can&apos;t find your broker?
+      </span>
+      <span className="text-right text-[10px] font-medium leading-tight text-white/75">
+        Use generic template
+        <br />
+        or add trades manually
+      </span>
+    </button>
+  );
+
+  return (
+    <div className={`${AT_PAGE} relative`}>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(ellipse at 24% 46%, rgba(108,71,255,0.16), transparent 62%)" }}
+      />
+      <button
+        type="button"
+        onClick={goClose}
+        aria-label="Close and go back to my accounts"
+        className={`absolute right-4 top-0 z-10 flex h-9 w-9 items-center justify-center rounded-lg text-[#8a8fb5] transition-colors hover:bg-[#1a1a26] hover:text-white ${AT_FOCUS}`}
+      >
+        <X size={20} />
+      </button>
+
+      <div className={`${AT_CENTER} relative`}>
+        {/* Progress */}
+        <div
+          className="h-1 w-full overflow-hidden rounded-full bg-[#20202c]"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={35}
+          aria-label="Add trade progress"
+        >
+          <div className="h-full rounded-full" style={{ width: "35%", backgroundColor: AT_ACCENT }} />
+        </div>
+
+        <header className="mt-8 text-center">
+          <p className={`text-[13px] font-medium ${AT_MUTED}`}>Add Trades</p>
+          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-white">Choose Broker</h1>
+        </header>
+
         {/* Search */}
-        <div className="relative">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6b7090] dark:text-[#8a8fb5] shrink-0" />
-          <Input
+        <div className="relative mt-9">
+          <label htmlFor="broker-search" className="sr-only">
+            Search brokers and trading platforms
+          </label>
+          <input
+            id="broker-search"
+            ref={inputRef}
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search brokers &amp; platforms…"
-            className="pl-10"
+            placeholder="Start typing the broker name"
+            autoComplete="off"
+            className={`${AT_FIELD} pr-10`}
+          />
+          <Search
+            size={16}
+            aria-hidden="true"
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7090]"
           />
         </div>
 
-        {/* Popular brokers */}
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wider {MUTED} mb-4">Popular brokers</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {filteredBrokers.length === 0 ? (
-              <div className="col-span-full {PANEL} p-8 text-center border">
-                <p className="text-sm {MUTED}">No brokers match your search.</p>
-              </div>
-            ) : (
-              filteredBrokers.map((broker) => (
-                <button
-                  key={broker.name}
-                  type="button"
-                  onClick={() => selectBroker(broker)}
-                  className={`flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-colors hover:border-[#6C47FF]/50 hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
-                  style={{ backgroundColor: "#ffffff", borderColor: "#e6e8f2" }}
-                >
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold"
-                    style={{ backgroundColor: "#f1f2f8", color: "#6b7090" }}
+        {/* Popular grid */}
+        {!searching && (
+          <section className="mt-7">
+            <h2 className="text-[14px] font-semibold text-white">Popular Brokers</h2>
+            <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5">
+              {POPULAR_BROKERS.map((broker) => {
+                const isSelected = selectedId === broker.id;
+                return (
+                  <button
+                    key={broker.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => pick(broker)}
+                    onDoubleClick={() =>
+                      broker.integration === "mt5" ? navigate("/add-trade/mt5") : goGeneric(broker.name)
+                    }
+                    className={`flex items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors ${AT_FOCUS} ${
+                      isSelected ? "bg-[#171725]" : "hover:bg-[#12121b]"
+                    }`}
                   >
-                    {broker.name.charAt(0)}
-                  </div>
-                  <p className="text-xs font-semibold {HEAD}">{broker.name}</p>
-                  <p className="text-[10px] {MUTED} leading-tight">{broker.desc}</p>
-                </button>
-              ))
-            )}
-          </div>
-        </section>
-
-        {/* Supported integrations */}
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wider {MUTED} mb-4">Supported integrations</h2>
-          <div className="space-y-2">
-            {SUPPORTED_INTEGRATIONS.map((integration) => {
-              const clickable = integration.path != null;
-              return (
-                <button
-                  key={integration.name}
-                  type="button"
-                  onClick={
-                    clickable
-                      ? integration.name === "MetaTrader 5"
-                        ? goMT5
-                        : goCustom
-                      : undefined
-                  }
-                  disabled={!clickable}
-                  className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-left transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS} ${!clickable ? "opacity-60 pointer-events-none" : ""}`}
-                  style={{ backgroundColor: "#ffffff", borderColor: "#e6e8f2" }}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold"
-                      style={{
-                        backgroundColor: integration.primary ? "#6C47FF14" : "#f1f2f8",
-                        color: integration.primary ? ACCENT : "#6b7090",
-                      }}
+                    <BrokerTile broker={broker} />
+                    <span
+                      className={`min-w-0 flex-1 truncate text-[13px] font-medium ${
+                        isSelected ? "text-white" : "text-[#d4d6e6]"
+                      }`}
                     >
-                      {integration.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold {HEAD} truncate">{integration.name}</p>
-                      <p className="text-xs {MUTED} truncate">{integration.desc}</p>
-                    </div>
-                    {!clickable && (
-                      <span className="text-[9px] uppercase tracking-wider text-[#b9bcc8]">
-                        Coming soon
-                      </span>
-                    )}
-                  </div>
-                  {clickable && <ChevronRight size={16} className="text-[#c9ccea] shrink-0" />}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+                      {broker.name}
+                    </span>
+                    {isSelected && <Check size={14} style={{ color: AT_ACCENT }} className="shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Search results */}
+        {searching && (
+          <section className="mt-1.5">
+            <div className="overflow-hidden rounded-lg border border-[#23232f] bg-[#0d0d16]">
+              <div className="max-h-[300px] overflow-y-auto py-1">
+                {results.length === 0 ? (
+                  <p className={`px-3 py-3 text-[12px] ${AT_FAINT}`}>
+                    No platform matches &ldquo;{search.trim()}&rdquo;.
+                  </p>
+                ) : (
+                  results.map((broker) => {
+                    const isSelected = selectedId === broker.id;
+                    return (
+                      <button
+                        key={broker.id}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => pick(broker)}
+                        className={`flex w-full items-center gap-2.5 px-3 py-1 text-left transition-colors ${AT_FOCUS} ${
+                          isSelected ? "bg-[#1d1d2c]" : "hover:bg-[#1a1a24]"
+                        }`}
+                      >
+                        <BrokerTile broker={broker} size="sm" />
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-[#d4d6e6]">
+                          {broker.name}
+                        </span>
+                        {isSelected && <Check size={13} style={{ color: AT_ACCENT }} className="shrink-0" />}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+              <div className="p-1.5 pt-0">{genericRow}</div>
+            </div>
+          </section>
+        )}
+
+        {/* Generic escape hatch when browsing popular platforms */}
+        {!searching && <div className="mt-7">{genericRow}</div>}
+
+        <div className="mt-8">
+          <p className={`mb-3 text-center text-[11px] ${AT_FAINT}`}>
+            Pick a platform to link an account, or choose the generic template to log trades by hand.
+          </p>
+          <button
+            type="button"
+            onClick={continueTo}
+            disabled={!selected}
+            className={`${AT_PRIMARY} w-full`}
+          >
+            Continue
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -52,6 +52,10 @@ const PAGE_TITLES = {
   "/journal": "Daily Journal",
   "/trades": "Trades",
   "/trades/new": "Add Trade",
+  "/add-trade": "Add Trade",
+  "/add-trade/add-account": "Add Account",
+  "/add-trade/custom-account": "Add Account",
+  "/add-trade/mt5": "Add Account",
   "/notebook": "Notebook",
   "/reports": "Reports",
   "/challenges": "Challenges",
@@ -176,7 +180,7 @@ export default function Topbar({
 
           {/* Primary action */}
           <button
-            onClick={() => navigate("/trades/new")}
+            onClick={() => navigate("/add-trade")}
             className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98] ${FOCUS}`}
             style={{ backgroundColor: accent }}
             aria-label="Add trade"

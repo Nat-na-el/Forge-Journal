@@ -1,0 +1,19 @@
+screen,feature,priority,clone,notes
+AT01,List connected accounts with broker and status,must,yes,Account table loads from Firestore
+AT01,Balance and profit calculation method per account,must,yes,Balance uses current_balance then starting_balance; method FIFO
+AT01,Select accounts and sync selected,must,yes,Sequential MetaTrader sync with result toast
+AT01,Add account entry point in top right,must,yes,Navigates to Choose Broker
+AT01,Per-row actions (sync / log trade / set active),should,yes,Menu and icon buttons are wired
+AT01,Empty and loading states,must,yes,Skeleton rows and empty panel
+AT02,Popular brokers grid,must,yes,Eight platforms, letter-tile marks
+AT02,Search across supported platforms,must,yes,Filters as you type with empty result copy
+AT02,List of available integrations in search,must,yes,Full platform list plus generic row
+AT02,Generic template / manual entry fallback,must,yes,Purple row and standalone row
+AT02,Continue gated on a selection,must,yes,Disabled until a platform is selected
+AT03,Custom broker and account name,must,yes,Also prefilled from the picker
+AT03,Starting balance and leverage,must,yes,Validated before write
+AT03,Saved account opens manual trade entry,must,yes,Navigates to /trades/new?accountId=
+AT04,MetaTrader server login investor password,must,yes,Existing connectMT5Account reused
+AT04,Connection progress and sync status,must,yes,Progress copy plus success/error banners
+AT04,Imported trades create a journal account,must,yes,Account id mt5-<login>
+AT05,Manual trade entry without a broker,must,yes,Generic account plus existing trade form

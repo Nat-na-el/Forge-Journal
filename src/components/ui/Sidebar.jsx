@@ -22,8 +22,6 @@ import {
   Plug,
   Check,
 } from "lucide-react";
-import { db, auth } from "../../firebase";
-import { collection } from "firebase/firestore";
 import useIsMobile from "../../hooks/useIsMobile";
 
 // ────────────────────────────────────────────────

@@ -312,6 +312,30 @@ function AppContent() {
     }
   };
 
+  // The Add Trade workflow creates/link accounts on its own pages. When it
+  // finishes it fires this event so the shell refreshes the account switcher
+  // without a full reload or a loading flash.
+  useEffect(() => {
+    const refresh = async () => {
+      const user = auth.currentUser;
+      if (!user || PREVIEW_MODE) return;
+      try {
+        const snapshot = await getDocs(
+          query(collection(db, "users", user.uid, "accounts"), orderBy("createdAt", "desc"))
+        );
+        const loaded = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        setAccounts(loaded);
+        const savedId = localStorage.getItem("currentAccountId");
+        const selected = loaded.find((a) => a.id === savedId) || loaded[0] || null;
+        setCurrentAccount(selected);
+      } catch (err) {
+        console.error("Refresh accounts error:", err);
+      }
+    };
+    window.addEventListener("forgex:accounts-changed", refresh);
+    return () => window.removeEventListener("forgex:accounts-changed", refresh);
+  }, []);
+
   const switchAccount = (accountId) => {
     localStorage.setItem("currentAccountId", accountId);
     const acc = accounts.find(a => a.id === accountId);
@@ -320,30 +344,31 @@ function AppContent() {
   };
 
   const deleteAccount = async (accountId) => {
-    if (!window.confirm("Delete this account? All data will be lost!")) return;
+    if (!window.confirm("Delete this account? All data will be lost!")) return false;
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) return false;
     try {
       await deleteDoc(doc(db, "users", user.uid, "accounts", accountId));
       const updated = accounts.filter(a => a.id !== accountId);
       setAccounts(updated);
 
-      if (currentAccount?.id === accountId || updated.length === 0) {
-        localStorage.removeItem("currentAccountId");
-        setCurrentAccount(null);
-        navigate("/dashboard", { replace: true });
-      } else {
-        switchAccount(updated[0].id);
+      if (currentAccount?.id === accountId) {
+        const next = updated[0] || null;
+        if (next) localStorage.setItem("currentAccountId", next.id);
+        else localStorage.removeItem("currentAccountId");
+        setCurrentAccount(next);
       }
+      return true;
     } catch (err) {
       console.error("Delete account error:", err);
+      return false;
     }
   };
 
   const resetAccount = async (accountId) => {
-    if (!window.confirm("Reset all trades/notes/journals for this account?")) return;
+    if (!window.confirm("Reset all trades/notes/journals for this account?")) return false;
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) return false;
     try {
       await clearAccountData(user.uid, accountId);
 
@@ -355,9 +380,10 @@ function AppContent() {
         a.id === accountId ? { ...a, current_balance: a.starting_balance || 10000 } : a
       );
       setAccounts(updated);
-      navigate("/dashboard", { replace: true });
+      return true;
     } catch (err) {
       console.error("Reset account error:", err);
+      return false;
     }
   };
 
@@ -375,7 +401,6 @@ function AppContent() {
       if (currentAccount?.id === accountId) {
         setCurrentAccount({ ...currentAccount, name: newName.trim() });
       }
-      navigate("/dashboard", { replace: true });
     } catch (err) {
       console.error("Rename error:", err);
     }
@@ -452,7 +477,7 @@ function AppContent() {
                     <Route path="/quantitative-analysis" element={<QuantitativeAnalysis />} />
                     <Route path="/edit-balance-pnl" element={<EditBalancePNL />} />
                     <Route path="/trades/new" element={<AddTrade currentAccount={currentAccount} />} />
-                    <Route path="/add-trade" element={<AccountSelectionPage />} />
+                    <Route path="/add-trade" element={<AccountSelectionPage onDeleteAccount={deleteAccount} onResetAccount={resetAccount} onRenameAccount={renameAccount} />} />
                     <Route path="/add-trade/add-account" element={<AddAccountPage />} />
                     <Route path="/add-trade/custom-account" element={<CustomAccountPage />} />
                     <Route path="/add-trade/mt5" element={<MT5ConnectPage />} />
