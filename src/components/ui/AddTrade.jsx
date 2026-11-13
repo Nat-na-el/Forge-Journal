@@ -1,7 +1,14 @@
 // src/components/ui/AddTrade.jsx  – full "New Trade" page, saves to Firestore like the Journal
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
+import { useNavigate, useLocation } from "react-router-dom";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  serverTimestamp,
+  doc,
+  getDoc,
+} from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   ArrowLeft,
@@ -86,6 +93,38 @@ export default function AddTrade({ currentAccount }) {
   const isDark = theme === "dark";
   const navigate = useNavigate();
   const { accent, setAccent, ac } = useAccent();
+  const location = useLocation();
+
+  // Resolve the account to trade under. Supports ?accountId= (from the Add Trade
+  // workflow) or falls back to the app-level currentAccount prop.
+  const [account, setAccount] = useState(currentAccount);
+  const [accountLoading, setAccountLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const accountId = params.get("accountId");
+    if (!accountId || accountId === currentAccount?.id) {
+      setAccount(currentAccount);
+      setAccountLoading(false);
+      return;
+    }
+    const loadAccount = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      setAccountLoading(true);
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid, "accounts", accountId));
+        if (snap.exists()) {
+          setAccount({ id: snap.id, ...snap.data() });
+        }
+      } catch (err) {
+        console.error("Failed to load account:", err);
+      } finally {
+        setAccountLoading(false);
+      }
+    };
+    loadAccount();
+  }, [location.search, currentAccount?.id]);
 
   const [form, setForm] = useState(emptyForm);
   const [tags, setTags] = useState([]);
@@ -98,16 +137,16 @@ export default function AddTrade({ currentAccount }) {
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
 
-  const leverage = currentAccount?.leverage || 100;
+  const leverage = account?.leverage || 100;
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const onChange = (e) => set({ [e.target.name]: e.target.value });
 
   // Playbooks for this account, so a trade can be linked to a named setup.
   useEffect(() => {
     const user = auth.currentUser;
-    if (!user || !currentAccount?.id) return undefined;
+    if (!user || !account?.id) return undefined;
     let cancelled = false;
-    getDocs(collection(db, "users", user.uid, "accounts", currentAccount.id, "playbooks"))
+    getDocs(collection(db, "users", user.uid, "accounts", account.id, "playbooks"))
       .then((snap) => {
         if (!cancelled) setPlaybooks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       })
@@ -115,7 +154,7 @@ export default function AddTrade({ currentAccount }) {
     return () => {
       cancelled = true;
     };
-  }, [currentAccount?.id]);
+  }, [account?.id]);
 
   // ─── Live maths (same formula as the Daily Journal) ──────────────────
   const calc = useMemo(() => {
@@ -152,12 +191,12 @@ export default function AddTrade({ currentAccount }) {
   // ─── Screenshot upload (button or paste) ─────────────────────────────
   const uploadScreenshot = async (file) => {
     const user = auth.currentUser;
-    if (!file || !user || !currentAccount?.id) return;
+    if (!file || !user || !account?.id) return;
     setUploading(true);
     setError(null);
     try {
       const small = await compressImage(file);
-      const r = ref(storage, `users/${user.uid}/accounts/${currentAccount.id}/trades/${Date.now()}_${small.name}`);
+      const r = ref(storage, `users/${user.uid}/accounts/${account.id}/trades/${Date.now()}_${small.name}`);
       await uploadBytes(r, small);
       set({ screenshotUrl: await getDownloadURL(r) });
     } catch (err) {
@@ -193,7 +232,7 @@ export default function AddTrade({ currentAccount }) {
   const save = async (another = false) => {
     setError(null);
     const user = auth.currentUser;
-    if (!user || !currentAccount?.id) return setError("Please log in and select an account.");
+    if (!user || !account?.id) return setError("Please log in and select an account.");
     if (!form.pair.trim()) return setError("Pick or type a pair / asset.");
     if (!parseFloat(form.entry)) return setError("Enter your entry price.");
     if (!pending && !form.exit && form.pnlManual === "")
@@ -227,7 +266,7 @@ export default function AddTrade({ currentAccount }) {
 
     setSaving(true);
     try {
-      await addDoc(collection(db, "users", user.uid, "accounts", currentAccount.id, "trades"), {
+      await addDoc(collection(db, "users", user.uid, "accounts", account.id, "trades"), {
         ...payload,
         createdAt: serverTimestamp(),
       });
@@ -258,13 +297,22 @@ export default function AddTrade({ currentAccount }) {
     }`;
   const warn = calc.warnings.length > 0;
 
-  if (!currentAccount) {
+  if (accountLoading || (!account && !accountLoading)) {
     return (
       <div className={`min-h-screen w-full p-8 flex items-center justify-center ${isDark ? "bg-gray-950" : "bg-gray-50"}`}>
         <Card className="p-8 max-w-md text-center bg-white/80 dark:bg-gray-800/60">
-          <AlertCircle size={48} className="mx-auto text-amber-500 mb-4" />
-          <h2 className="text-2xl font-bold mb-2">No Account Selected</h2>
-          <p className="opacity-70">Select an account from the menu to add a trade.</p>
+          {accountLoading ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#262645]" style={{ borderTopColor: ac.hex }} />
+              <p className="text-sm font-medium opacity-70">Loading account…</p>
+            </div>
+          ) : (
+            <>
+              <AlertCircle size={48} className="mx-auto text-amber-500 mb-4" />
+              <h2 className="text-2xl font-bold mb-2">No Account Selected</h2>
+              <p className="opacity-70">Select an account from the menu to add a trade.</p>
+            </>
+          )}
         </Card>
       </div>
     );
@@ -320,7 +368,7 @@ export default function AddTrade({ currentAccount }) {
                 New Trade
               </h1>
               <p className="text-sm opacity-70 mt-0.5">
-                {currentAccount.name} · {leverage}:1 leverage
+                {account?.name} · {leverage}:1 leverage
               </p>
             </div>
           </div>

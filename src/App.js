@@ -29,6 +29,10 @@ import QuantitativeAnalysis from "./pages/QuantitativeAnalysis";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Landing from "./pages/Landing";
+import AccountSelectionPage from "./pages/AccountSelectionPage";
+import AddAccountPage from "./pages/AddAccountPage";
+import CustomAccountPage from "./pages/CustomAccountPage";
+import MT5ConnectPage from "./pages/MT5ConnectPage";
 import { db, auth } from "./firebase";
 import { clearAccountData } from "./lib/firestoreData";
 import {
@@ -64,125 +68,6 @@ const BTN_PRIMARY =
   "rounded-lg bg-[#6C47FF] px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50";
 const BTN_GHOST =
   "rounded-lg border border-[#e6e8f2] px-4 py-2.5 text-sm font-semibold text-[#3b3f5e] transition-colors hover:bg-[#f1f2f8] disabled:opacity-50 dark:border-[#262645] dark:text-[#c9ccea] dark:hover:bg-[#1e1e3a]";
-const ICON_ACT =
-  "rounded-md p-1.5 text-xs text-[#6b7090] transition-colors hover:bg-[#e6e8f2] dark:text-[#8a8fb5] dark:hover:bg-[#262645]";
-
-// ────────────────────────────────────────────────
-// ManageAccountsModal
-// ────────────────────────────────────────────────
-function ManageAccountsModal({
-  accounts,
-  onClose,
-  onDeleteAccount,
-  onResetAccount,
-  onRenameAccount,
-  onCreateAccount,
-}) {
-  const [editingId, setEditingId] = useState(null);
-  const [editName, setEditName] = useState("");
-
-  const deleteAccount = (accountId) => {
-    if (!window.confirm("Delete this account? All data will be lost!")) return;
-    onDeleteAccount(accountId);
-  };
-
-  const resetAccount = (accountId) => {
-    if (!window.confirm("Reset all trades/notes/journals for this account?")) return;
-    onResetAccount(accountId);
-  };
-
-  if (accounts.length === 0) return null;
-
-  return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className={`${MODAL_PANEL} max-h-[80vh] max-w-md overflow-y-auto p-6`}>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-bold">Manage accounts</h3>
-          <button onClick={onClose} className={ICON_ACT} aria-label="Close">
-            ✕
-          </button>
-        </div>
-        <div className="space-y-3 mb-4">
-          {accounts.map((account) => (
-            <div key={account.id} className="rounded-xl border border-[#e6e8f2] bg-[#f7f8fc] p-3 dark:border-[#262645] dark:bg-[#101024]">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  {editingId === account.id ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className={`${FIELD} flex-1 !py-1.5`}
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => {
-                          onRenameAccount(account.id, editName || account.name);
-                          setEditingId(null);
-                          setEditName("");
-                        }}
-                        className="rounded-lg bg-[#6C47FF] px-3 py-1 text-xs font-semibold text-white hover:brightness-110"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#6C47FF]">
-                        <span className="text-xs font-bold text-white">
-                          {account.name.charAt(0)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-sm font-semibold">{account.name}</span>
-                        <div className="space-y-0.5 text-xs text-[#6b7090] dark:text-[#8a8fb5]">
-                          <div>${Number(account.starting_balance || 0).toLocaleString()} start</div>
-                          <div>Created: {account.createdAt?.toDate?.()?.toLocaleDateString() || "—"}</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-1 ml-2">
-                  <button
-                    onClick={() => {
-                      setEditingId(account.id);
-                      setEditName(account.name);
-                    }}
-                    className={ICON_ACT}
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => resetAccount(account.id)}
-                    className={ICON_ACT}
-                  >
-                    🔄
-                  </button>
-                  {accounts.length > 1 && (
-                    <button
-                      onClick={() => deleteAccount(account.id)}
-                      className={ICON_ACT}
-                    >
-                      🗑️
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <button
-          onClick={onCreateAccount}
-          className={`${BTN_PRIMARY} w-full`}
-        >
-          + Create New Account
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ────────────────────────────────────────────────
 // EditBalancePNL – now includes leverage
@@ -353,7 +238,6 @@ function AppContent() {
   }, [isMobile]);
   const [currentAccount, setCurrentAccount] = useState(null);
   const [accounts, setAccounts] = useState([]);
-  const [showManageModal, setShowManageModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
@@ -426,10 +310,6 @@ function AppContent() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const createAccount = () => {
-    navigate("/edit-balance-pnl");
   };
 
   const switchAccount = (accountId) => {
@@ -536,8 +416,6 @@ function AppContent() {
               accounts={accounts}
               currentAccount={currentAccount}
               onSwitchAccount={switchAccount}
-              onCreateAccount={createAccount}
-              onShowManage={() => setShowManageModal(true)}
             />
             <div
               className="min-w-0 flex-1 transition-[margin,max-width] duration-300"
@@ -574,6 +452,10 @@ function AppContent() {
                     <Route path="/quantitative-analysis" element={<QuantitativeAnalysis />} />
                     <Route path="/edit-balance-pnl" element={<EditBalancePNL />} />
                     <Route path="/trades/new" element={<AddTrade currentAccount={currentAccount} />} />
+                    <Route path="/add-trade" element={<AccountSelectionPage />} />
+                    <Route path="/add-trade/add-account" element={<AddAccountPage />} />
+                    <Route path="/add-trade/custom-account" element={<CustomAccountPage />} />
+                    <Route path="/add-trade/mt5" element={<MT5ConnectPage />} />
                     <Route path="*" element={<Dashboard currentAccount={currentAccount} />} />
                   </Routes>
                 </div>
@@ -582,16 +464,6 @@ function AppContent() {
 
             {isMobile && <BottomNav onMenuClick={() => setOpen((o) => !o)} />}
 
-            {showManageModal && (
-              <ManageAccountsModal
-                accounts={accounts}
-                onClose={() => setShowManageModal(false)}
-                onDeleteAccount={deleteAccount}
-                onResetAccount={resetAccount}
-                onRenameAccount={renameAccount}
-                onCreateAccount={createAccount}
-              />
-            )}
           </div>
         </>
       ) : (

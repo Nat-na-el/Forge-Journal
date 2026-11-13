@@ -20,13 +20,10 @@ import {
   ChevronDown,
   Plus,
   Plug,
-  RefreshCw,
   Check,
 } from "lucide-react";
 import { db, auth } from "../../firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import ConnectMT5Modal from "./ConnectMT5Modal";
-import { syncMT5Account } from "../../lib/mt5client";
+import { collection } from "firebase/firestore";
 import useIsMobile from "../../hooks/useIsMobile";
 
 // ────────────────────────────────────────────────
@@ -99,8 +96,6 @@ export default function Sidebar({
   accounts = [],
   currentAccount,
   onSwitchAccount,
-  onCreateAccount,
-  onShowManage,
 }) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -109,56 +104,7 @@ export default function Sidebar({
   const accent = readAccent();
 
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showConnectModal, setShowConnectModal] = useState(false);
-  const [newAccountName, setNewAccountName] = useState("");
-  const [newAccountBalance, setNewAccountBalance] = useState("");
-  const [newAccountLeverage, setNewAccountLeverage] = useState("100");
-  const [createError, setCreateError] = useState("");
-  const [connectSuccess, setConnectSuccess] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const popoverRef = useRef(null);
-  const hasAutoCreated = useRef(false);
-
-  const handleSyncMT5 = async () => {
-    if (!currentAccount?.mt5Login) return;
-    setSyncing(true);
-    try {
-      const r = await syncMT5Account({ login: currentAccount.mt5Login, server: currentAccount.mt5Server });
-      alert(`MetaTrader synced: ${r.added} new, ${r.updated} updated.`);
-      window.location.reload();
-    } catch (err) {
-      alert(err.message || "Sync failed.");
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  // ─── Automatically create a default account if none exist ─────────
-  useEffect(() => {
-    const createDefaultAccount = async () => {
-      const user = auth.currentUser;
-      if (!user || accounts.length > 0 || hasAutoCreated.current) return;
-      hasAutoCreated.current = true;
-      try {
-        const defaultAccount = {
-          name: "Main Account",
-          starting_balance: 10000,
-          current_balance: 10000,
-          leverage: 100,
-          createdAt: serverTimestamp(),
-          createdBy: user.uid,
-        };
-        const docRef = await addDoc(collection(db, "users", user.uid, "accounts"), defaultAccount);
-        const newAccount = { id: docRef.id, ...defaultAccount };
-        onCreateAccount(newAccount);
-        onSwitchAccount(docRef.id);
-      } catch (error) {
-        console.error("Error creating default account:", error);
-      }
-    };
-    createDefaultAccount();
-  }, [accounts, onCreateAccount, onSwitchAccount]);
 
   // Close the account menu on outside click / Escape
   useEffect(() => {
@@ -181,70 +127,8 @@ export default function Sidebar({
     setIsAccountDropdownOpen(false);
   };
 
-  // ─── Create new account from modal ────────────────────────────────
-  const handleCreateAccount = async () => {
-    const user = auth.currentUser;
-    if (!user) {
-      alert("You must be logged in to create an account.");
-      return;
-    }
-
-    const name = newAccountName.trim();
-    if (!name) {
-      setCreateError("Account name is required.");
-      return;
-    }
-
-    const balance = parseFloat(newAccountBalance);
-    if (isNaN(balance) || balance <= 0) {
-      setCreateError("Starting balance must be a positive number.");
-      return;
-    }
-
-    const leverage = parseFloat(newAccountLeverage);
-    if (isNaN(leverage) || leverage < 1) {
-      setCreateError("Leverage must be a positive number (at least 1).");
-      return;
-    }
-
-    try {
-      const accountData = {
-        name,
-        starting_balance: balance,
-        current_balance: balance,
-        leverage,
-        createdAt: serverTimestamp(),
-        createdBy: user.uid,
-      };
-
-      const docRef = await addDoc(collection(db, "users", user.uid, "accounts"), accountData);
-
-      const newAccount = { id: docRef.id, ...accountData };
-      onCreateAccount(newAccount);
-      onSwitchAccount(docRef.id);
-
-      setNewAccountName("");
-      setNewAccountBalance("");
-      setNewAccountLeverage("100");
-      setCreateError("");
-      setShowCreateModal(false);
-      setIsAccountDropdownOpen(false);
-    } catch (error) {
-      console.error("Error creating account:", error);
-      setCreateError("Failed to create account. Please try again.");
-    }
-  };
-
-  const closeCreateModal = () => {
-    setShowCreateModal(false);
-    setNewAccountName("");
-    setNewAccountBalance("");
-    setNewAccountLeverage("100");
-    setCreateError("");
-  };
-
   const goAddTrade = () => {
-    navigate("/trades/new");
+    navigate("/add-trade");
     if (isMobile) setOpen(false);
   };
 
@@ -336,48 +220,7 @@ export default function Sidebar({
         )}
       </div>
 
-      <div className="space-y-1.5 border-t border-white/10 p-2.5">
-        <button
-          onClick={() => {
-            setShowCreateModal(true);
-            setIsAccountDropdownOpen(false);
-          }}
-          className={`w-full rounded-lg bg-white/[0.07] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/[0.12] ${FOCUS}`}
-        >
-          New account
-        </button>
-        <button
-          onClick={() => {
-            onShowManage();
-            setIsAccountDropdownOpen(false);
-          }}
-          className={`w-full rounded-lg bg-white/[0.07] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/[0.12] ${FOCUS}`}
-        >
-          Manage accounts
-        </button>
-        {/* MetaTrader 5: connect a new MT5 account (becomes its own journal account) */}
-        <button
-          onClick={() => {
-            setShowConnectModal(true);
-            setIsAccountDropdownOpen(false);
-          }}
-          style={{ backgroundColor: accent }}
-          className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
-        >
-          <Plug size={13} />
-          Connect MT5 account
-        </button>
-        {currentAccount?.mt5Connected && (
-          <button
-            onClick={handleSyncMT5}
-            disabled={syncing}
-            className={`flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50 ${FOCUS}`}
-          >
-            <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
-            {syncing ? "Syncing…" : "Sync MT5 trades"}
-          </button>
-        )}
-      </div>
+      <div className="space-y-1.5 border-t border-white/10 p-2.5" />
     </div>
   );
 
@@ -448,30 +291,6 @@ export default function Sidebar({
 
             {/* Rail tools */}
             <div className="mt-auto flex flex-col items-center gap-1.5">
-              {currentAccount?.mt5Connected && (
-                <button
-                  onClick={handleSyncMT5}
-                  disabled={syncing}
-                  aria-label="Sync MT5 trades"
-                  title="Sync MT5 trades"
-                  className={`${railBtn} ${NAV_IDLE} disabled:opacity-50 ${FOCUS}`}
-                >
-                  <RefreshCw size={17} className={syncing ? "animate-spin" : ""} />
-                </button>
-              )}
-              {open && (
-                <button
-                  onClick={() => {
-                    setShowConnectModal(true);
-                    setIsAccountDropdownOpen(false);
-                  }}
-                  aria-label="Connect MT5 account"
-                  title="Connect MT5 account"
-                  className={`${railBtn} ${NAV_IDLE} ${FOCUS}`}
-                >
-                  <Plug size={17} />
-                </button>
-              )}
               <div className="relative">
                 <button
                   onClick={() => setIsAccountDropdownOpen((v) => !v)}
@@ -549,82 +368,6 @@ export default function Sidebar({
           )}
         </div>
       </aside>
-
-      {/* CREATE ACCOUNT MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Create new account"
-            className="w-full max-w-md rounded-2xl border border-[#262645] bg-[#15152b] shadow-2xl"
-          >
-            <div className="p-6">
-              <h3 className="mb-4 text-lg font-bold text-white">Create new account</h3>
-              <div className="space-y-4">
-                {[
-                  ["Account name", "text", newAccountName, setNewAccountName, "e.g. Live EURUSD, Demo NAS100", {}],
-                  ["Starting balance (USD)", "number", newAccountBalance, setNewAccountBalance, "10000", { min: "0.01", step: "0.01" }],
-                  ["Leverage (e.g. 100)", "number", newAccountLeverage, setNewAccountLeverage, "100", { min: "1", step: "1" }],
-                ].map(([label, type, value, setter, placeholder, extra]) => (
-                  <div key={label}>
-                    <label className="mb-1 block text-sm text-[#8a8fb5]">{label}</label>
-                    <input
-                      type={type}
-                      value={value}
-                      onChange={(e) => setter(e.target.value)}
-                      placeholder={placeholder}
-                      {...extra}
-                      className="w-full rounded-lg border border-[#262645] bg-[#101024] px-4 py-2 text-sm text-gray-100 outline-none focus:ring-2 focus:ring-[#6C47FF]"
-                    />
-                  </div>
-                ))}
-                {createError && <div className="text-sm text-[#ff6b86]">{createError}</div>}
-              </div>
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  onClick={closeCreateModal}
-                  className={`rounded-lg border border-[#262645] px-4 py-2 text-sm font-semibold text-gray-200 transition-colors hover:bg-[#1e1e3a] ${FOCUS}`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateAccount}
-                  style={{ backgroundColor: accent }}
-                  className={`rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
-                >
-                  Create
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CONNECT MT5 MODAL */}
-      {showConnectModal && (
-        <ConnectMT5Modal
-          isOpen={showConnectModal}
-          onClose={(success, result) => {
-            setShowConnectModal(false);
-            if (success && result?.accountId) {
-              localStorage.setItem("currentAccountId", result.accountId);
-              setConnectSuccess(true);
-              setTimeout(() => window.location.reload(), 600);
-            }
-          }}
-        />
-      )}
-
-      {/* Success toast */}
-      {connectSuccess && (
-        <div
-          role="status"
-          className="fixed bottom-4 right-4 z-[2000] rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg"
-        >
-          MT5 connected successfully!
-        </div>
-      )}
     </>
   );
 }
