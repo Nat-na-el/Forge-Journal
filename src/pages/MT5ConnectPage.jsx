@@ -129,6 +129,12 @@ export default function MT5ConnectPage() {
             >
               <AlertCircle size={14} className="mt-0.5 shrink-0" />
               <span>{error}</span>
+              {error.includes("FTMO") || error.includes("server") || error.includes("Couldn't connect") ? (
+                <p className="mt-1 text-[11px] leading-relaxed text-[#f2556e]">
+                  FTMO demo servers are usually named like <b>FTMO-Demo</b>, <b>FTMO-Demo2</b>, etc. Use the
+                  <b>investor (read-only)</b> password — never your master trading password.
+                </p>
+              ) : null}
             </div>
           )}
 
@@ -159,7 +165,33 @@ export default function MT5ConnectPage() {
                 disabled={connecting}
                 required
               />
-              <p className={hint}>Copy it from the MetaTrader login window, including any suffix.</p>
+              <p className={hint}>Copy it from the MetaTrader login window (e.g. FTMO-Demo, FTMO-Demo2).</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, server: "FTMO-Demo" }))}
+                  disabled={connecting}
+                  className="rounded px-2 py-1.5 text-[11px] font-medium border border-[#262633] bg-transparent text-[#c9cbe0] hover:bg-[#171722] disabled:opacity-50"
+                >
+                  FTMO-Demo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, server: "FTMO-Demo2" }))}
+                  disabled={connecting}
+                  className="rounded px-2 py-1.5 text-[11px] font-medium border border-[#262633] bg-transparent text-[#c9cbe0] hover:bg-[#171722] disabled:opacity-50"
+                >
+                  FTMO-Demo2
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, server: "FTMO-Demo3" }))}
+                  disabled={connecting}
+                  className="rounded px-2 py-1.5 text-[11px] font-medium border border-[#262633] bg-transparent text-[#c9cbe0] hover:bg-[#171722] disabled:opacity-50"
+                >
+                  FTMO-Demo3
+                </button>
+              </div>
             </div>
 
             <div>

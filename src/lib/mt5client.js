@@ -16,6 +16,10 @@ const isTransient = (e) =>
     e?.message || ""
   );
 
+const TOTAL_TIMEOUT_MS = 6 * 60 * 1000; // MetaApi + broker demo servers can be slow
+const SETUP_TIMEOUT_MS = 6 * 60 * 1000;
+const POLL_MS = 5000;
+
 async function call(payload) {
   const user = auth.currentUser;
   if (!user) throw new Error("Please sign in first.");
@@ -63,20 +67,20 @@ export async function connectMT5Account({ server, login, password }, onProgress 
       // A slow cold start / broker lookup can exceed Netlify's per-call limit. The
       // request uses a fixed transaction id, so retrying cannot create duplicates.
       if (!isTransient(e)) throw e;
-      if (Date.now() - firstStart > 4 * 60 * 1000) throw e;
+      if (Date.now() - firstStart > TOTAL_TIMEOUT_MS) throw e;
       onProgress("MetaApi is slow to respond — still checking…");
-      await sleep(5000);
+      await sleep(POLL_MS);
     }
   }
 
   // MetaApi may need a while to look up the broker server; keep asking (same request, safe to repeat)
   const setupStart = Date.now();
   while (r.status === "creating") {
-    if (Date.now() - setupStart > 4 * 60 * 1000) {
+    if (Date.now() - setupStart > SETUP_TIMEOUT_MS) {
       throw new Error("MetaApi is taking too long to set up the account. Check the server name and try again.");
     }
     onProgress("Setting up your account with MetaApi… this can take a minute the first time.");
-    await sleep(5000);
+    await sleep(POLL_MS);
     try {
       r = await call(payload);
     } catch (e) {
@@ -88,15 +92,21 @@ export async function connectMT5Account({ server, login, password }, onProgress 
   if (r.status === "pending") {
     const ticket = r.ticket;
     const startedAt = Date.now();
+    let lastState = "";
     onProgress("Connecting to your broker… this can take a minute the first time.");
     try {
       while (r.status === "pending") {
-        if (Date.now() - startedAt > 4 * 60 * 1000) {
-          throw new Error("Couldn't connect. Check the server name, account number and investor password.");
+        if (Date.now() - startedAt > TOTAL_TIMEOUT_MS) {
+          throw new Error(
+            lastState
+              ? `MetaApi couldn't connect to ${server} (broker said: ${lastState}). Check the server name, account number and investor password.`
+              : "Couldn't connect. Check the server name, account number and investor password."
+          );
         }
         await sleep(4000);
         try {
           r = await call({ action: "status", ticket });
+          if (r.state || r.connection) lastState = `${r.state || ""} / ${r.connection || ""}`.trim();
         } catch (e) {
           if (!isTransient(e)) throw e;
           onProgress("MetaApi is slow to respond — still connecting…");
