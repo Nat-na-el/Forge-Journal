@@ -54,3 +54,25 @@ menu, Tracking layout with the chart and executions).
   the table and the chart axis agree.
 - Category and currency naming stays ours: no "Zella Scale"; the equivalent
   is "Setup score" plus the shared 1–5 star trade rating.
+
+## Phase 4 — Daily Journal Day View
+
+Reference: `Day view.png`, `View note on Day view page.png` (day list with
+sparkline + stats rail, right-rail month calendar, day-note modal with
+sections).
+
+| ID | Screen | Date | Status | Notes |
+|----|--------|------|--------|-------|
+| D01 | Day View (`/journal`) | 2026-11-13 | done | Light-theme-aware page (dark sidebar preserved). Header with Day/Week tabs, filter pills, search, date range, account chip, Start my day button and settings. Promo banner dismissible. Right-rail month calendar tinted per-day (green/red/amber) with note dot. Day cards show date, signed Net P&L, equity sparkline, two-row stats rail (Total trades, Win rate, Volume, Commissions, Winners/Losers, Profit factor), trades table with side pills, P&L, edit/delete, plus day-note section with mood chips, editor toolbar, Preparation & Game plan, Session log, EOD Performance Recap and Save. Persists to `users/{uid}/accounts/{id}/journal/{yyyy-MM-dd}`. `?date=` deep link, calendar navigation, add/edit/delete trade flows, mood/reviewed fields and search/filter all preserved. |
+
+### Harder than expected
+
+- Keeping `?date=` deep links and the sidebar-shell layout intact while
+  replacing the old month-summary + scorecard rail with the calendar-first
+  Day View layout.
+- TradeZella-specific copy replaced: no "Zella AI" / "Zella Scale"; actions
+  renamed to "Start my day", "Save note", "Mark day as reviewed".
+- Every visible action wired: day cards open notes/trades, calendar days
+  select the day, note modal persists to Firestore, add/edit/delete flows
+  all functional in preview and live modes.
+

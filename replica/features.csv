@@ -37,3 +37,13 @@ T03,Note editor with save and template,should,yes,Persists notes; preview mode s
 T03,Reviewed share edit delete actions,must,yes,Share copies a summary; delete opens the confirm modal
 T04,Analytics tab,must,yes,Equity curve donut daily P&L symbol P&L and statistics
 T04,P&L calendar tab,must,yes,Daily and weekly totals with a day deep link
+D01,Day View header with Day/Week tabs,must,yes,Day / Week toggle plus filter pills search account chip Start my day and settings
+D01,Right-rail month calendar,must,yes,Per-day tinted chips (green red amber) with note dot; today and selected day highlighted
+D01,Day cards with sparkline and stats,must,yes,Date signed Net P&L equity sparkline two-row stats rail Total trades Win rate Volume Commissions Winners/Losers Profit factor
+D01,Day card trades table,must,yes,Time Symbol Side Lots R:R Net P&L with side pills and edit/delete per entry
+D01,Day note modal with sections,must,yes,Mood chips editor toolbar Preparation & Game plan Session log EOD Performance Recap Save; persists to journal collection
+D01,Deep link ?date=,must,yes,Opens selected day from dashboard or tracking view
+D01,Add edit delete trade flows,must,yes,Reuses existing entry modal delete confirm and clear day flows
+D01,Mood and reviewed fields,must,yes,Mood chip toggle Mark as reviewed checkbox persisted with note
+D01,Search and filter,must,yes,All days Green Red With notes filters plus symbol search
+D01,Dismissible promo banner,should,yes,Day View intro banner with Dismiss action

@@ -16,12 +16,26 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Palette,
   Target,
   Search,
   Flame,
   CalendarDays,
-  Calendar,
+  Settings,
+  DollarSign,
+  Percent,
+  Clock,
+  CreditCard,
+  Maximize,
+  Edit,
+  TrendingUp,
+  TrendingDown,
+  BarChart3,
+  Star,
+  RefreshCw,
+  List,
+  Image,
 } from "lucide-react";
 import {
   format,
@@ -50,6 +64,7 @@ import {
 } from "chart.js";
 import { Radar, Line } from "react-chartjs-2";
 import { useTheme } from "../Theme-provider";
+import demoDashboardTrades from "../lib/demoDashboardData";
 import DeleteConfirmModal from "../components/ui/DeleteConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -99,6 +114,9 @@ const FIELD =
   "w-full h-10 rounded-lg border border-[#e6e8f2] dark:border-[#262645] bg-white dark:bg-[#101024] px-3 text-sm outline-none focus:ring-2 focus:ring-[#6C47FF]";
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF]";
+const ICON_BTN =
+  "flex h-9 w-9 items-center justify-center rounded-lg text-[#6b7090] transition-colors hover:bg-[#f1f2f8] hover:text-[#14142b] dark:text-[#8a8fb5] dark:hover:bg-[#1e1e3a] dark:hover:text-white " +
+  FOCUS;
 
 // Same accent palette + storage key as the Dashboard and Sidebar
 const ACCENTS = {
@@ -257,6 +275,7 @@ function dayStats(list) {
     grossW,
     grossL,
     lots: list.reduce((s, e) => s + (Number(e.lotSize) || 0), 0),
+    commission: list.reduce((s, e) => s + (Number(e.commission) || 0), 0),
     winRate: ex.length ? Math.round((wins.length / ex.length) * 100) : 0,
     pf: grossL ? (grossW / grossL).toFixed(2) : grossW > 0 ? "∞" : "—",
     avgRR: rrVals.length ? (rrVals.reduce((a, b) => a + b, 0) / rrVals.length).toFixed(2) : "—",
@@ -337,6 +356,11 @@ const DayNote = ({ dateKey, saved, onSave, accent }) => {
   const [moods, setMoods] = useState(saved?.moods || []);
   const [reviewed, setReviewed] = useState(!!saved?.reviewed);
   const [busy, setBusy] = useState(false);
+  const [sections, setSections] = useState({
+    plan: true,
+    session: false,
+    recap: false,
+  });
 
   useEffect(() => {
     setNote(saved?.note || "");
@@ -350,6 +374,9 @@ const DayNote = ({ dateKey, saved, onSave, accent }) => {
     moods.join("|") !== savedMoods;
 
   const toggleMood = (m) => setMoods((cur) => (cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m]));
+
+  const toggleSection = (key) =>
+    setSections((cur) => ({ ...cur, [key]: !cur[key] }));
 
   const save = async () => {
     setBusy(true);
@@ -396,14 +423,138 @@ const DayNote = ({ dateKey, saved, onSave, accent }) => {
         })}
       </div>
 
+      {/* Editor toolbar */}
+      <div className={`flex flex-wrap items-center gap-1 border-b mb-3 ${DIVIDER}`}>
+        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Undo">
+          <X size={13} />
+        </button>
+        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Redo">
+          <ChevronDown size={13} />
+        </button>
+        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Bold">
+          <b />
+        </button>
+        <span className="h-3 w-px bg-[#e6e8f2] dark:bg-[#262645] my-0.5" />
+        <div className="flex items-center gap-1">
+          <span className={`text-[10px] ${MUTED}`}>Font</span>
+          <select
+            defaultValue="Arial"
+            className="text-[10px] bg-transparent border-none outline-none text-xs font-medium"
+          >
+            <option>Arial</option>
+            <option>Georgia</option>
+            <option>Courier New</option>
+          </select>
+          <span className={`text-[10px] ${MUTED}`}>14</span>
+        </div>
+        <span className="h-3 w-px bg-[#e6e8f2] dark:bg-[#262645] my-0.5" />
+        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="List">
+          <List size={13} />
+        </button>
+        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Link">
+          <Link size={13} />
+        </button>
+        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Image">
+          <Image size={13} />
+        </button>
+        <div className="ml-auto flex items-center gap-1">
+          <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Templates">
+            <RefreshCw size={13} />
+          </button>
+          <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Favorite">
+            <Star size={13} />
+          </button>
+        </div>
+      </div>
+
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        placeholder="What went well? What would you change? Market context, emotions, lessons for tomorrow."
-        className={`w-full min-h-[96px] resize-y rounded-lg border bg-white dark:bg-[#101024] p-3 text-sm outline-none focus:ring-2 focus:ring-[#6C47FF] ${DIVIDER}`}
+        placeholder="Log your thoughts with timestamps for future recaps."
+        aria-label="Session log"
+        className={`w-full min-h-[120px] resize-y rounded-lg border bg-white dark:bg-[#101024] p-3 text-sm outline-none focus:ring-2 focus:ring-[#6C47FF] ${DIVIDER}`}
       />
 
-      <div className="mt-3 flex items-center justify-end gap-3">
+      {/* Preparation & Game plan */}
+      <section className="mt-4">
+        <button
+          onClick={() => toggleSection("plan")}
+          className="flex w-full items-center justify-between gap-2 text-left"
+          aria-expanded={sections.plan}
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#14142b] dark:text-white">
+            <Target size={15} style={{ color: accent }} />
+            Preparation and Game plan
+          </div>
+          <ChevronDown size={14} className={`transition-transform ${MUTED} ${!sections.plan ? "-rotate-90" : ""}`} />
+        </button>
+        {sections.plan && (
+          <div className="mt-2 space-y-1.5 text-xs">
+            {[
+              "Watchlist",
+              "Economic events",
+              "Daily/Weekly Bias",
+              "Levels to Watch",
+              "Gameplan",
+            ].map((item) => (
+              <div key={item} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left cursor-pointer hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}">
+                <span className="flex items-center gap-1">{item}</span>
+                <ChevronRight size={12} className={MUTED} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Session log */}
+      <section className="mt-4">
+        <button
+          onClick={() => toggleSection("session")}
+          className="flex w-full items-center justify-between gap-2 text-left"
+          aria-expanded={sections.session}
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#14142b] dark:text-white">
+            <FileText size={15} style={{ color: accent }} />
+            Session log
+          </div>
+          <ChevronDown size={14} className={`transition-transform ${MUTED} ${!sections.session ? "-rotate-90" : ""}`} />
+        </button>
+        {sections.session && (
+          <div className="mt-2">
+            <p className={`text-[11px] leading-relaxed ${MUTED} mb-2`}>
+              Log your thoughts with timestamps for future recaps. Use voice-to-text to help you.
+            </p>
+            <div className="rounded-lg border bg-[#f7f8fc] dark:bg-[#101024] px-3 py-3 ${DIVIDER}" />
+          </div>
+        )}
+      </section>
+
+      {/* EOD Performance Recap */}
+      <section className="mt-4">
+        <button
+          onClick={() => toggleSection("recap")}
+          className="flex w-full items-center justify-between gap-2 text-left"
+          aria-expanded={sections.recap}
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#14142b] dark:text-white">
+            <BarChart3 size={15} style={{ color: accent }} />
+            EOD Performance Recap
+          </div>
+          <ChevronDown size={14} className={`transition-transform ${MUTED} ${!sections.recap ? "-rotate-90" : ""}`} />
+        </button>
+        {sections.recap && (
+          <div className="mt-2 space-y-1.5 text-xs">
+            {["Overall Day Recap", 'The "Plus/Minus"'].map((item) => (
+              <div key={item} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left cursor-pointer hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}">
+                <span className="flex items-center gap-1">{item}</span>
+                <ChevronRight size={12} className={MUTED} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <div className="mt-4 flex items-center justify-end gap-3">
         {dirty && <span className={`text-xs ${MUTED}`}>Unsaved changes</span>}
         <button
           type="button"
@@ -428,7 +579,6 @@ export default function DailyJournal({ currentAccount }) {
   const isDark = theme === "dark";
 
   const [entries, setEntries] = useState([]);
-  const navigate = useNavigate();
   const [dayNotes, setDayNotes] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -444,8 +594,11 @@ export default function DailyJournal({ currentAccount }) {
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState("day");
   const [collapsed, setCollapsed] = useState({});
+  const [promoDismissed, setPromoDismissed] = useState(false);
+  const [viewMode, setViewMode] = useState("day");
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [noteDateKey, setNoteDateKey] = useState(selectedDate);
   const [accent, setAccent] = useState(() => {
     try {
       const saved = localStorage.getItem("forgexAccent");
@@ -455,12 +608,19 @@ export default function DailyJournal({ currentAccount }) {
     }
   });
   const ac = ACCENTS[accent] || ACCENTS.zella;
+  const [PREVIEW] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV !== "production" &&
+      new URLSearchParams(window.location.search).get("preview") === "1"
+  );
+  const navigate = useNavigate();
   const [form, setForm] = useState(emptyForm());
 
   const modalContentRef = useRef(null);
   const uploadRef = useRef(null);
   const accountLeverage = currentAccount?.leverage || 100;
-  const isAccountReady = user && currentAccount;
+  const isAccountReady = (user || PREVIEW) && currentAccount;
   const todayKey = dayKey(new Date());
 
   useEffect(() => {
@@ -523,7 +683,18 @@ export default function DailyJournal({ currentAccount }) {
 
   // ─── Fetch journal entries + day notes ─────────────────────────────
   const refreshEntries = async () => {
-    if (!user || !currentAccount?.id) {
+    if (!currentAccount?.id) {
+      setEntries([]);
+      setLoading(false);
+      return;
+    }
+    if (PREVIEW) {
+      setEntries(demoDashboardTrades());
+      setDayNotes({});
+      setLoading(false);
+      return;
+    }
+    if (!user) {
       setEntries([]);
       setLoading(false);
       return;
@@ -562,7 +733,7 @@ export default function DailyJournal({ currentAccount }) {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((authUser) => {
       setUser(authUser);
-      if (!authUser) {
+      if (!authUser && !PREVIEW) {
         setEntries([]);
         setLoading(false);
       }
@@ -571,8 +742,8 @@ export default function DailyJournal({ currentAccount }) {
   }, []);
 
   useEffect(() => {
-    if (user && currentAccount) refreshEntries();
-  }, [currentAccount, user]);
+    if (currentAccount && (user || PREVIEW)) refreshEntries();
+  }, [currentAccount, user, PREVIEW]);
 
   // ─── Auto‑calculate PnL and R:R (only if executed and exit given) ─
   useEffect(() => {
@@ -887,7 +1058,18 @@ export default function DailyJournal({ currentAccount }) {
     setError(null);
     setSuccessMsg(null);
 
-    if (!user || !currentAccount?.id) {
+    if (!currentAccount?.id) {
+      setError("Please select an account");
+      return;
+    }
+    if (PREVIEW) {
+      setSuccessMsg("Entry saved (preview mode – not persisted)");
+      setModalOpen(false);
+      setEditingEntry(null);
+      setForm(emptyForm());
+      return;
+    }
+    if (!user) {
       setError("Please log in and select an account");
       return;
     }
@@ -939,7 +1121,13 @@ export default function DailyJournal({ currentAccount }) {
 
   // ─── Save day note ─────────────────────────────────────────────────
   const saveDayNote = async (key, data) => {
-    if (!user || !currentAccount?.id) return;
+    if (!currentAccount?.id) return;
+    if (PREVIEW) {
+      setDayNotes((m) => ({ ...m, [key]: { ...(m[key] || {}), ...data, date: key } }));
+      setSuccessMsg("Note saved (preview mode – not persisted)");
+      return;
+    }
+    if (!user) return;
     try {
       await setDoc(
         doc(db, "users", user.uid, "accounts", currentAccount.id, "journal", key),
@@ -1014,151 +1202,116 @@ export default function DailyJournal({ currentAccount }) {
       className={`${isDark ? "dark bg-[#0b0b19] text-[#e8e9f7]" : "bg-[#f4f5fa] text-[#14142b]"} min-h-screen w-full p-3 sm:p-6 lg:p-8`}
     >
       <div className="mx-auto max-w-[1600px]">
-        {/* ───────── Header ───────── */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-          <div className="min-w-0">
-            <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${HEAD}`}>Day View</h1>
+        {/* ───────── Promo banner ───────── */}
+        {!promoDismissed && (
+          <div className="mb-3 rounded-lg border border-[#e6e8f2] bg-[#fef3c7] px-4 py-3 text-sm dark:border-[#3a3a2e] dark:bg-[#45320c] dark:text-[#fde68a]">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={14} className="shrink-0" />
+              <span className="font-semibold">Day View</span>
+              <span className="text-[#92400e] dark:text-[#fcd34d]">— Your trades, notes and calendar in one place.</span>
+            </div>
+            <button
+              onClick={() => setPromoDismissed(true)}
+              className="ml-auto rounded text-[#92400e] dark:text-[#fcd34d] hover:underline"
+              aria-label="Dismiss"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* ───────── Header / toolbar ───────── */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
+          <div className="min-w-0 flex items-center gap-3">
+            <div className={`flex items-center rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b]`}>
+              <button
+                type="button"
+                onClick={() => setViewMode("day")}
+                aria-pressed={viewMode === "day"}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${FOCUS} ${viewMode === "day" ? "bg-[#6C47FF] text-white" : MUTED}`}
+              >
+                Day
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("week")}
+                aria-pressed={viewMode === "week"}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${FOCUS} ${viewMode === "week" ? "bg-[#6C47FF] text-white" : MUTED}`}
+              >
+                Week
+              </button>
+            </div>
+            <h1 className={`text-xl sm:text-2xl font-bold tracking-tight ${HEAD}`}>Day View</h1>
             <p className={`mt-1 text-sm ${MUTED}`}>
-              Your trades and day notes by trading day
+              {currentAccount.name} · auto P&L at {accountLeverage}:1 leverage
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            <div className={`flex rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-1`}>
+              {FILTERS.map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  aria-pressed={filter === key}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${FOCUS} ${filter === key ? "text-white shadow-sm" : `${MUTED} hover:text-[#14142b] dark:hover:text-white`}`}
+                  style={filter === key ? { backgroundColor: ac.hex } : undefined}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2`}>
               <Search size={15} className={MUTED} />
-              <span className={`text-sm font-medium ${HEAD}`}>Filter</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search symbol"
+                aria-label="Search by symbol"
+                className="w-32 sm:w-40 bg-transparent text-sm outline-none"
+              />
+              {search && (
+                <button onClick={() => setSearch("")} aria-label="Clear search" className={MUTED}>
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            <div
+              className={`cursor-pointer flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2 text-sm font-semibold ${HEAD}`}
+              onClick={() => selectDay(todayKey)}
+            >
+              {format(subDays(new Date(), 30), "MMM d")} – {format(new Date(), "MMM d, yyyy")}
               <ChevronDown size={14} className={MUTED} />
             </div>
 
             <div className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2`}>
-              <Calendar size={14} className={MUTED} />
-              <span className={`text-sm font-medium ${HEAD}`}>
-                {format(parseISO(selectedDate), "MMM d, yyyy")}
+              <span className={`h-1.5 w-1.5 rounded-full ${currentAccount?.mt5Connected ? "bg-[#22c493]" : "bg-[#8a8fb5]"}`} />
+              <span className="max-w-[140px] truncate text-[13px] font-semibold text-[#14142b] dark:text-white">
+                {currentAccount.name}
               </span>
               <ChevronDown size={14} className={MUTED} />
             </div>
 
-            <div className={`flex items-center gap-1.5 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-2 py-2`}>
-              <span className={`text-sm font-medium ${HEAD}`}>All accounts</span>
-              <ChevronDown size={14} className={MUTED} />
-            </div>
+            <button
+              onClick={() => setNoteModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+              style={{ backgroundColor: ac.hex }}
+              aria-label="Start my day"
+            >
+              <Target size={14} />
+              Start my day
+            </button>
 
-            <div className="flex items-center gap-2 pl-3">
-              <div className={`flex items-center gap-1 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] pl-1`} role="radiogroup" aria-label="Accent theme">
-                <Palette size={15} className={MUTED} />
-                {Object.entries(ACCENTS).map(([key, a]) => (
-                  <button
-                    key={key}
-                    role="radio"
-                    aria-checked={accent === key}
-                    onClick={() => setAccent(key)}
-                    title={a.name}
-                    aria-label={`${a.name} theme`}
-                    className={`h-5 w-5 rounded-full transition-transform ${FOCUS} ${
-                      accent === key
-                        ? "scale-110 ring-2 ring-offset-2 ring-[#8a8fb5] ring-offset-[#f4f5fa] dark:ring-white/70 dark:ring-offset-[#0b0b19]"
-                        : "opacity-75 hover:scale-110 hover:opacity-100"
-                    }`}
-                    style={{ backgroundImage: `linear-gradient(135deg, ${a.hex}, ${a.hex2})` }}
-                  />
-                ))}
-              </div>
-            </div>
+            <button
+              onClick={() => navigate("/settings")}
+              className={ICON_BTN}
+              aria-label="Settings"
+            >
+              <Settings size={18} />
+            </button>
           </div>
-        </div>
-
-        {/* Promo banner */}
-        <div className={`flex items-center justify-between rounded-lg border border-[#e6e8f2] dark:border-[#262645] bg-[#eef0f7] dark:bg-[#15152b] p-3 sm:p-4 mb-6`}>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center rounded-full bg-[#6C47FF]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-tight text-[#6C47FF]">NEW</span>
-            <p className={`text-sm font-medium ${HEAD}`}>
-              Generate in-depth analysis for your existing accounts and receive monthly performance reports
-            </p>
-          </div>
-          <button
-            onClick={() => navigate("/accounts")}
-            className="inline-flex items-center gap-1 rounded border border-[#6C47FF] bg-[#6C47FF] px-3 py-1.5 text-[12px] font-semibold text-white hover:brightness-110 disabled:opacity-50"
-          >
-            To Accounts
-          </button>
-          <button className="ml-auto rounded p-1.5 text-[#94a3b8] hover:text-[#14142b] dark:hover:text-white hover:bg-[#f1f5f9] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}" aria-label="Dismiss promo">
-            <X size={14} />
-          </button>
-        </div>
-
-        {/* Day / Week tabs */}
-        <div className="flex items-center gap-3 mb-6">
-          <button
-            onClick={() => setViewMode("day")}
-            aria-pressed={viewMode === "day"}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${FOCUS} ${
-              viewMode === "day"
-                ? "bg-[#6C47FF] text-white shadow-sm"
-                : `${MUTED} hover:text-[#14142b] dark:hover:text-white hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`
-            }`}
-          >
-            Day
-          </button>
-          <button
-            onClick={() => setViewMode("week")}
-            aria-pressed={viewMode === "week"}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${FOCUS} ${
-              viewMode === "week"
-                ? "bg-[#6C47FF] text-white shadow-sm"
-                : `${MUTED} hover:text-[#14142b] dark:hover:text-white hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`
-            }`}
-          >
-            Week
-          </button>
-          <div className="h-4 w-px bg-[#cbd5e1] dark:bg-[#333646]" />
-          <span className={`text-xs font-medium ${MUTED}`}>
-            {viewMode === "day" ? "Trading days" : "Weekly summary"}
-          </span>
-          <span className="ml-auto" />
-        </div>
-
-        {/* ───────── Toolbar ───────── */}
-        <div className="flex flex-wrap items-center gap-3 mb-5">
-          <div className="flex rounded-lg bg-[#e9eaf4] dark:bg-[#15152b] p-1 text-xs" role="group" aria-label="Filter days">
-            {FILTERS.map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                aria-pressed={filter === key}
-                className={`rounded-md px-3 py-1.5 font-semibold transition-colors ${FOCUS} ${
-                  filter === key ? "text-white shadow-sm" : `${MUTED} hover:text-[#14142b] dark:hover:text-white`
-                }`}
-                style={filter === key ? { backgroundColor: ac.hex } : undefined}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2`}>
-            <Search size={15} className={MUTED} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search symbol"
-              aria-label="Search by symbol"
-              className="w-32 sm:w-40 bg-transparent text-sm outline-none"
-            />
-            {search && (
-              <button onClick={() => setSearch("")} aria-label="Clear search" className={MUTED}>
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          <input
-            type="date"
-            value={selectedDate}
-            max="2100-12-31"
-            onChange={(e) => e.target.value && selectDay(e.target.value)}
-            className={`ml-auto rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#6C47FF]`}
-            aria-label="Jump to date"
-          />
         </div>
 
         {/* Feedback */}
@@ -1186,33 +1339,17 @@ export default function DailyJournal({ currentAccount }) {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
-            {/* ───────── Right rail: month calendar ───────── */}
-            <div className="flex flex-col gap-4 xl:sticky xl:top-6 hidden xl:flex">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start">
+            {/* ───────── Right rail (first on phones) ───────── */}
+            <div className="order-first lg:order-last flex flex-col gap-4 lg:sticky lg:top-6">
+              {/* Month calendar */}
               <Card className={`${CARD} p-0`}>
-                <div className={`flex items-center justify-between border-b px-4 py-3 ${DIVIDER}`}>
+                <div className={`border-b px-4 py-3 ${DIVIDER}`}>
                   <h3 className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
                     <CalendarDays size={16} style={{ color: ac.hex }} />
                     {monthLabel}
                   </h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setViewMonth((m) => subMonths(m, 1))}
-                      aria-label="Previous month"
-                      className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded-md transition-colors ${FOCUS}`}
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <button
-                      onClick={() => setViewMonth((m) => addMonths(m, 1))}
-                      aria-label="Next month"
-                      className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded-md transition-colors ${FOCUS}`}
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
                 </div>
-
                 <div className="p-4">
                   <div className="grid grid-cols-7 gap-1">
                     {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
@@ -1229,10 +1366,10 @@ export default function DailyJournal({ currentAccount }) {
                       const tone =
                         t && t.executed
                           ? t.net >= 0
-                            ? "rgba(34,196,147,0.22)"
-                            : "rgba(242,85,110,0.22)"
+                            ? "rgba(34,196,147,0.16)"
+                            : "rgba(242,85,110,0.16)"
                           : t
-                          ? "rgba(245,158,11,0.2)"
+                          ? "rgba(245,158,11,0.12)"
                           : undefined;
                       return (
                         <button
@@ -1240,9 +1377,7 @@ export default function DailyJournal({ currentAccount }) {
                           onClick={() => selectDay(k)}
                           aria-label={`${format(d, "d MMMM")}${t ? `, ${t.count} entries` : ""}`}
                           aria-current={isToday(d) ? "date" : undefined}
-                          className={`relative aspect-square rounded-md text-xs font-semibold tabular-nums transition-colors ${FOCUS} ${
-                            cur ? HEAD : `${MUTED} opacity-40`
-                          } hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`}
+                          className={`relative aspect-square rounded-md text-xs font-semibold tabular-nums transition-colors ${FOCUS} ${cur ? HEAD : `${MUTED} opacity-40`} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`}
                           style={{
                             backgroundColor: tone,
                             boxShadow: sel ? `inset 0 0 0 2px ${ac.hex}` : isToday(d) ? `inset 0 0 0 1px ${ac.hex}88` : undefined,
@@ -1250,29 +1385,25 @@ export default function DailyJournal({ currentAccount }) {
                         >
                           {format(d, "d")}
                           {noted && (
-                            <i
-                              className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full"
-                              style={{ backgroundColor: ac.hex }}
-                            />
+                            <i className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full" style={{ backgroundColor: ac.hex }} />
                           )}
                         </button>
                       );
                     })}
                   </div>
                   <div className={`mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] ${MUTED}`}>
-                    <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm" style={{ backgroundColor: POS }} />Green</span>
-                    <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm" style={{ backgroundColor: NEG }} />Red</span>
-                    <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-amber-500" />Pending</span>
-                    <span className="inline-flex items-center gap-1.5"><i className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ac.hex }} />Note</span>
+                    <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm" style={{ backgroundColor: POS }} /> Green</span>
+                    <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm" style={{ backgroundColor: NEG }} /> Red</span>
+                    <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-amber-500" /> Pending</span>
+                    <span className="inline-flex items-center gap-1.5"><i className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ac.hex }} /> Note</span>
                   </div>
                 </div>
-
                 <div className={`grid grid-cols-2 gap-px border-t bg-[#e6e8f2] dark:bg-[#262645] ${DIVIDER} overflow-hidden rounded-b-xl`}>
                   {[
                     ["Win rate", monthStats.executed ? `${monthStats.winRate}%` : "—"],
                     ["Profit factor", monthStats.pf],
                     ["Trades", monthStats.count],
-                    ["Journaled days", `${monthJournaled}/${monthDaysElapsed}`],
+                    ["Commissions", money(monthStats.commission, false)],
                   ].map(([label, value]) => (
                     <div key={label} className="bg-white dark:bg-[#15152b] px-4 py-3">
                       <div className={`text-[11px] font-medium ${MUTED}`}>{label}</div>
@@ -1280,7 +1411,6 @@ export default function DailyJournal({ currentAccount }) {
                     </div>
                   ))}
                 </div>
-
                 <div className={`flex items-center justify-between border-t px-4 py-3 ${DIVIDER}`}>
                   <span className={`flex items-center gap-2 text-sm ${MUTED}`}>
                     <Flame size={16} className={streak ? "text-amber-500" : ""} />
@@ -1289,52 +1419,6 @@ export default function DailyJournal({ currentAccount }) {
                   <span className={`text-sm font-bold ${streak ? HEAD : MUTED}`}>
                     {streak} {streak === 1 ? "day" : "days"}
                   </span>
-                </div>
-              </Card>
-
-              {/* Scorecard */}
-              <Card className={`${CARD} p-0`}>
-                <div className={`flex items-start justify-between gap-3 border-b px-4 py-3 ${DIVIDER}`}>
-                  <div className="min-w-0">
-                    <h3 className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
-                      <Target size={16} style={{ color: ac.hex }} />
-                      Journal scorecard
-                    </h3>
-                    <p className={`mt-0.5 text-xs ${MUTED}`}>
-                      {scoreDay
-                        ? `${selectedIsToday ? "Today" : format(parseISO(selectedDate), "d MMM")} vs last 30 days`
-                        : "Last 30 days (no entries on this day)"}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className={`text-[11px] ${MUTED}`}>Discipline</div>
-                    <div className="text-2xl font-bold leading-none mt-1 tabular-nums" style={{ color: ac.hex }}>
-                      {scoreMain ? scoreMain.score : "—"}
-                      <span className={`text-xs font-semibold ${MUTED}`}>/100</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-4">
-                  {scoreMain ? (
-                    <>
-                      <div className="relative h-64">
-                        <Radar data={radarData} options={radarOptions} />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 mt-3">
-                        {SCORE_LABELS.map((label, i) => (
-                          <div key={label} className={`${PANEL} px-2 py-2 text-center`}>
-                            <div className={`text-[10px] truncate ${MUTED}`}>{label}</div>
-                            <div className={`text-sm font-bold tabular-nums ${HEAD}`}>{scoreMain.scores[i]}%</div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className={`h-56 flex flex-col items-center justify-center text-center gap-2 ${MUTED}`}>
-                      <Target size={32} className="opacity-40" />
-                      <p className="text-sm">Log entries to see your scorecard.</p>
-                    </div>
-                  )}
                 </div>
               </Card>
             </div>
@@ -1385,35 +1469,40 @@ export default function DailyJournal({ currentAccount }) {
                   const dateObj = parseISO(d.key);
                   const cells = [
                     ["Total trades", s.count],
-                    ["Winners", s.wins],
-                    ["Losers", s.losses],
                     ["Win rate", s.executed ? `${s.winRate}%` : "—"],
+                    ["Volume", s.lots.toFixed(2)],
+                    ["Commissions", money(s.commission, false)],
+                    ["Winners / Losers", `${s.wins} / ${s.losses}`],
                     ["Profit factor", s.pf],
-                    ["Avg R:R", s.avgRR],
-                    ["Gross profit", money(s.grossW, false)],
-                    ["Gross loss", money(s.grossL, false)],
-                    ["Volume (lots)", s.lots.toFixed(2)],
                   ];
+                  const pnl = Number(s.net) || 0;
+                  const hadTrades = s.executed > 0;
+                  const noteCount = (d.note?.moods || []).length;
                   return (
                     <Card
                       key={d.key}
                       id={`day-${d.key}`}
-                      className={`${CARD} scroll-mt-6 p-0 overflow-hidden`}
-                      style={isSel ? { boxShadow: `0 0 0 2px ${ac.hex}` } : undefined}
+                      className={`${CARD} scroll-mt-6 p-0 overflow-hidden border ${DIVIDER}`}
+                      style={
+                        isSel
+                          ? { boxShadow: `0 0 0 2px ${ac.hex}`, borderColor: ac.hex }
+                          : undefined
+                      }
                     >
                       {/* Day header */}
-                      <div className={`flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 ${isCollapsed ? "" : `border-b ${DIVIDER}`}`}>
-                        <button
-                          onClick={() => setCollapsed((c) => ({ ...c, [d.key]: !c[d.key] }))}
-                          aria-expanded={!isCollapsed}
-                          className={`flex min-w-0 items-center gap-3 text-left rounded ${FOCUS}`}
-                        >
+                      <button
+                        onClick={() => setCollapsed((c) => ({ ...c, [d.key]: !c[d.key] }))}
+                        aria-expanded={!isCollapsed}
+                        aria-label={`Toggle ${format(dateObj, "EEE, MMM d, yyyy")}`}
+                        className={`flex w-full items-start justify-between gap-3 px-4 sm:px-5 py-3.5 ${isCollapsed ? "" : "border-b " + DIVIDER} bg-white dark:bg-[#15152b] transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                      >
+                        <div className="min-w-0 flex items-center gap-3">
                           <ChevronDown
-                            size={18}
+                            size={16}
                             className={`shrink-0 transition-transform ${MUTED} ${isCollapsed ? "-rotate-90" : ""}`}
                           />
                           <div className="min-w-0">
-                            <div className={`flex flex-wrap items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
+                            <div className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
                               {format(dateObj, "EEE, MMM d, yyyy")}
                               {isToday(dateObj) && (
                                 <span
@@ -1429,35 +1518,65 @@ export default function DailyJournal({ currentAccount }) {
                                 </span>
                               )}
                             </div>
-                            <div className={`mt-0.5 flex flex-wrap items-center gap-x-2 text-xs ${MUTED}`}>
+                            <div className={`mt-0.5 flex items-center gap-2 text-xs ${MUTED}`}>
                               <span>
                                 {s.count} {s.count === 1 ? "entry" : "entries"}
                                 {s.pending > 0 ? `, ${s.pending} pending` : ""}
                               </span>
-                              {(d.note?.moods || []).slice(0, 3).map((m) => (
-                                <span key={m} className={`rounded px-1.5 py-0.5 bg-[#f1f2f8] dark:bg-[#1e1e3a]`}>{m}</span>
-                              ))}
+                              {noteCount > 0 && <span>{noteCount} note{noteCount > 1 ? "s" : ""}</span>}
                             </div>
                           </div>
-                        </button>
+                        </div>
 
-                        <div className="flex shrink-0 items-center gap-3">
-                          <div className="text-right">
+                        <div className="ml-4 flex shrink-0 items-center gap-3 text-right min-w-[150px]">
+                          <div>
                             <div className={`text-[11px] ${MUTED}`}>Net P&L</div>
-                            <div className={`text-lg font-bold tabular-nums ${s.executed ? pnlClass(s.net) : MUTED}`}>
-                              {s.executed ? money(s.net) : "—"}
+                            <div className={`text-lg font-bold tabular-nums ${hadTrades ? pnlClass(pnl) : MUTED}`}>
+                              {hadTrades ? money(pnl) : "—"}
                             </div>
                           </div>
+                          <div className="h-6 w-[1px] bg-[#e6e8f2] dark:bg-[#262645] self-stretch" />
+                          <div className="flex items-end gap-1 text-xs tabular-nums">
+                            {hadTrades && pnl > 0 ? (
+                              <TrendingUp size={10} className="text-[#22c493]" />
+                            ) : hadTrades && pnl < 0 ? (
+                              <TrendingDown size={10} className="text-[#f2556e]" />
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {/* Day actions */}
+                        <div className="flex items-center gap-2 ml-2 shrink-0">
                           <button
-                            onClick={() => openNewEntry(d.key)}
-                            aria-label={`Add entry on ${format(dateObj, "d MMMM")}`}
-                            title="Add entry"
-                            className={`rounded-lg border ${DIVIDER} p-2 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
+                            type="button"
+                            onClick={() => setNoteDateKey(d.key)}
+                            onMouseDown={(e) => e.preventDefault()}
+                            aria-label={`Add note for ${format(dateObj, "d MMMM")}`}
+                            className={`rounded-md p-1.5 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
+                            title="Add note"
                           >
-                            <Plus size={16} />
+                            <FileText size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openNewEntry(d.key)}
+                            disabled={!isAccountReady}
+                            aria-label={`Add trade on ${format(dateObj, "d MMMM")}`}
+                            className={`rounded-md p-1.5 ${MUTED} ${!isAccountReady ? "opacity-50 cursor-not-allowed" : "hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]"} transition-colors ${FOCUS}`}
+                            title="Add trade"
+                          >
+                            <Plus size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/journal?date=${d.key}`)}
+                            className={`rounded-md p-1.5 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
+                            title="Open day view"
+                          >
+                            <Maximize size={15} />
                           </button>
                         </div>
-                      </div>
+                      </button>
 
                       {!isCollapsed && (
                         <>
@@ -1466,42 +1585,41 @@ export default function DailyJournal({ currentAccount }) {
                               <p className={`text-sm ${MUTED}`}>No trades logged on this day.</p>
                               <button
                                 onClick={() => openNewEntry(d.key)}
+                                disabled={!isAccountReady}
                                 style={{ color: ac.hex }}
-                                className={`mt-2 text-sm font-semibold hover:underline rounded ${FOCUS}`}
+                                className={`mt-2 text-sm font-semibold hover:underline rounded ${FOCUS} ${!isAccountReady ? "opacity-50 cursor-not-allowed" : ""}`}
                               >
-                                Add an entry
+                                Log an entry
                               </button>
                             </div>
                           ) : (
                             <>
-                              {/* Chart + stats */}
-                              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+                              {/* Sparkline + stats rail */}
+                              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-0 border-t ${DIVIDER}">
                                 <div className={`p-4 sm:p-5 lg:border-r ${DIVIDER}`}>
-                                  <div className={`mb-2 text-xs font-medium ${MUTED}`}>Cumulative P&L through the day</div>
-                                  <div className="relative h-36">
+                                  <div className={`mb-2 text-xs font-medium ${MUTED}`}>
+                                    Cumulative P&L through the day
+                                  </div>
+                                  <div className="relative h-32">
                                     <Line data={sparkData(d.list, s.net)} options={sparkOptions} />
                                   </div>
-                                </div>
-                                <div className="bg-[#e6e8f2] dark:bg-[#262645] p-px">
-                                  <div className="grid h-full grid-cols-3 gap-px">
+                                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
                                     {cells.map(([label, value]) => (
-                                      <div key={label} className="bg-white dark:bg-[#15152b] px-3.5 py-3">
-                                        <div className={`text-[11px] font-medium ${MUTED}`}>{label}</div>
-                                        <div
-                                          className={`mt-0.5 text-sm sm:text-base font-bold tabular-nums ${
-                                            label === "Gross profit" ? POS_T : label === "Gross loss" ? NEG_T : HEAD
-                                          }`}
-                                        >
+                                      <div
+                                        key={label}
+                                        className={`rounded-lg border px-3 py-2 bg-[#f7f8fc] dark:bg-[#101024] ${DIVIDER}`}
+                                      >
+                                        <div className={`font-medium ${MUTED}`}>{label}</div>
+                                        <div className="mt-0.5 text-xs font-bold tabular-nums text-[#14142b] dark:text-[#e8e9f7]">
                                           {value}
                                         </div>
                                       </div>
                                     ))}
                                   </div>
                                 </div>
-                              </div>
 
                               {/* Trades table */}
-                              <div className={`overflow-x-auto border-t ${DIVIDER}`}>
+                              <div className={`overflow-x-auto border-l ${DIVIDER}`}>
                                 <table className="w-full min-w-[560px] text-sm">
                                   <thead>
                                     <tr className={`border-b text-left text-xs ${MUTED} ${DIVIDER}`}>
@@ -1615,6 +1733,7 @@ export default function DailyJournal({ currentAccount }) {
                                     })}
                                   </tbody>
                                 </table>
+                              </div>
                               </div>
                             </>
                           )}
@@ -1935,8 +2054,10 @@ export default function DailyJournal({ currentAccount }) {
             title={entryToDelete ? "Delete Entry" : "Clear Day's Entries"}
             message={
               entryToDelete
-                ? "Are you sure you want to delete this journal entry? This action cannot be undone."
-                : `Are you sure you want to delete all ${(grouped[clearDayKey] || []).length} entries from this day? This cannot be undone.`
+                ? "Are you sure you want to delete this journal entry. This action cannot be undone."
+                : "Are you sure you want to delete all " +
+                  (grouped[clearDayKey] || []).length +
+                  " entries from this day? This cannot be undone."
             }
           />
         )}
