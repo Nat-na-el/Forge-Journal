@@ -37,9 +37,9 @@ async function call(payload) {
   if (!res.ok) {
     const raw = data.error || `Request failed (${res.status})`;
     // MetaApi forces "high reliability" on cloud-g2 accounts, which needs a funded balance.
-    if (/top up your account/i.test(raw)) {
+    if (/top up your account|insufficient balance|action is not allowed|payment required/i.test(raw)) {
       throw new Error(
-        "MetaApi needs credit for high-reliability hosting. This app requests a regular cloud-g1 account, so try again after redeploying the Netlify function — or add credit at app.metaapi.cloud."
+        "MetaApi needs credits to host MT5 connections. Add credit at app.metaapi.cloud, then try again. (Or use 'Create one manually instead' to add trades without MT5.)"
       );
     }
     throw new Error(raw);

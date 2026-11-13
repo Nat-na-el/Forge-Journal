@@ -129,7 +129,7 @@ export default function MT5ConnectPage() {
             >
               <AlertCircle size={14} className="mt-0.5 shrink-0" />
               <span>{error}</span>
-              {error.includes("FTMO") || error.includes("server") || error.includes("Couldn't connect") ? (
+              {error.includes("FTMO") || error.includes("server") || error.includes("Couldn't connect") || error.includes("MetaApi needs credits") ? (
                 <p className="mt-1 text-[11px] leading-relaxed text-[#f2556e]">
                   FTMO demo servers are usually named like <b>FTMO-Demo</b>, <b>FTMO-Demo2</b>, etc. Use the
                   <b>investor (read-only)</b> password — never your master trading password.

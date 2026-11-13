@@ -1,6 +1,6 @@
 // src/pages/DailyJournal.jsx
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Trash2,
   Plus,
@@ -21,6 +21,7 @@ import {
   Search,
   Flame,
   CalendarDays,
+  Calendar,
 } from "lucide-react";
 import {
   format,
@@ -427,6 +428,7 @@ export default function DailyJournal({ currentAccount }) {
   const isDark = theme === "dark";
 
   const [entries, setEntries] = useState([]);
+  const navigate = useNavigate();
   const [dayNotes, setDayNotes] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -442,6 +444,7 @@ export default function DailyJournal({ currentAccount }) {
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState("day");
   const [collapsed, setCollapsed] = useState({});
   const [accent, setAccent] = useState(() => {
     try {
@@ -1012,70 +1015,106 @@ export default function DailyJournal({ currentAccount }) {
     >
       <div className="mx-auto max-w-[1600px]">
         {/* ───────── Header ───────── */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div className="min-w-0">
-            <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${HEAD}`}>Daily Journal</h1>
+            <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${HEAD}`}>Day View</h1>
             <p className={`mt-1 text-sm ${MUTED}`}>
-              {currentAccount.name}, auto P&L at {accountLeverage}:1 leverage
+              Your trades and day notes by trading day
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-            <div className={`flex items-center rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b]`}>
-              <button
-                onClick={() => setViewMonth((m) => subMonths(m, 1))}
-                aria-label="Previous month"
-                className={`p-2.5 rounded-l-lg ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className={`min-w-[8.5rem] px-2 text-center text-sm font-semibold ${HEAD}`}>{monthLabel}</span>
-              <button
-                onClick={() => setViewMonth((m) => addMonths(m, 1))}
-                aria-label="Next month"
-                className={`p-2.5 rounded-r-lg ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-              >
-                <ChevronRight size={16} />
-              </button>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2`}>
+              <Search size={15} className={MUTED} />
+              <span className={`text-sm font-medium ${HEAD}`}>Filter</span>
+              <ChevronDown size={14} className={MUTED} />
             </div>
 
-            <button
-              onClick={() => selectDay(todayKey)}
-              className={`rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3.5 py-2.5 text-sm font-semibold ${HEAD} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-            >
-              Today
-            </button>
+            <div className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2`}>
+              <Calendar size={14} className={MUTED} />
+              <span className={`text-sm font-medium ${HEAD}`}>
+                {format(parseISO(selectedDate), "MMM d, yyyy")}
+              </span>
+              <ChevronDown size={14} className={MUTED} />
+            </div>
 
-            <Button
-              onClick={() => openNewEntry(selectedDate)}
-              disabled={!isAccountReady}
-              style={{ backgroundColor: ac.hex }}
-              className="hidden md:inline-flex items-center gap-2 text-white font-semibold px-4 hover:brightness-110 disabled:opacity-50"
-            >
-              <Plus size={16} />
-              Add entry
-            </Button>
+            <div className={`flex items-center gap-1.5 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-2 py-2`}>
+              <span className={`text-sm font-medium ${HEAD}`}>All accounts</span>
+              <ChevronDown size={14} className={MUTED} />
+            </div>
 
-            <div className="flex items-center gap-1.5 pl-1" role="radiogroup" aria-label="Accent theme">
-              <Palette size={15} className={MUTED} />
-              {Object.entries(ACCENTS).map(([key, a]) => (
-                <button
-                  key={key}
-                  role="radio"
-                  aria-checked={accent === key}
-                  onClick={() => setAccent(key)}
-                  title={a.name}
-                  aria-label={`${a.name} theme`}
-                  className={`h-5 w-5 rounded-full transition-transform ${FOCUS} ${
-                    accent === key
-                      ? "scale-110 ring-2 ring-offset-2 ring-[#8a8fb5] ring-offset-[#f4f5fa] dark:ring-white/70 dark:ring-offset-[#0b0b19]"
-                      : "opacity-75 hover:scale-110 hover:opacity-100"
-                  }`}
-                  style={{ backgroundImage: `linear-gradient(135deg, ${a.hex}, ${a.hex2})` }}
-                />
-              ))}
+            <div className="flex items-center gap-2 pl-3">
+              <div className={`flex items-center gap-1 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] pl-1`} role="radiogroup" aria-label="Accent theme">
+                <Palette size={15} className={MUTED} />
+                {Object.entries(ACCENTS).map(([key, a]) => (
+                  <button
+                    key={key}
+                    role="radio"
+                    aria-checked={accent === key}
+                    onClick={() => setAccent(key)}
+                    title={a.name}
+                    aria-label={`${a.name} theme`}
+                    className={`h-5 w-5 rounded-full transition-transform ${FOCUS} ${
+                      accent === key
+                        ? "scale-110 ring-2 ring-offset-2 ring-[#8a8fb5] ring-offset-[#f4f5fa] dark:ring-white/70 dark:ring-offset-[#0b0b19]"
+                        : "opacity-75 hover:scale-110 hover:opacity-100"
+                    }`}
+                    style={{ backgroundImage: `linear-gradient(135deg, ${a.hex}, ${a.hex2})` }}
+                  />
+                ))}
+              </div>
             </div>
           </div>
+        </div>
+
+        {/* Promo banner */}
+        <div className={`flex items-center justify-between rounded-lg border border-[#e6e8f2] dark:border-[#262645] bg-[#eef0f7] dark:bg-[#15152b] p-3 sm:p-4 mb-6`}>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center rounded-full bg-[#6C47FF]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-tight text-[#6C47FF]">NEW</span>
+            <p className={`text-sm font-medium ${HEAD}`}>
+              Generate in-depth analysis for your existing accounts and receive monthly performance reports
+            </p>
+          </div>
+          <button
+            onClick={() => navigate("/accounts")}
+            className="inline-flex items-center gap-1 rounded border border-[#6C47FF] bg-[#6C47FF] px-3 py-1.5 text-[12px] font-semibold text-white hover:brightness-110 disabled:opacity-50"
+          >
+            To Accounts
+          </button>
+          <button className="ml-auto rounded p-1.5 text-[#94a3b8] hover:text-[#14142b] dark:hover:text-white hover:bg-[#f1f5f9] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}" aria-label="Dismiss promo">
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Day / Week tabs */}
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            onClick={() => setViewMode("day")}
+            aria-pressed={viewMode === "day"}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${FOCUS} ${
+              viewMode === "day"
+                ? "bg-[#6C47FF] text-white shadow-sm"
+                : `${MUTED} hover:text-[#14142b] dark:hover:text-white hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`
+            }`}
+          >
+            Day
+          </button>
+          <button
+            onClick={() => setViewMode("week")}
+            aria-pressed={viewMode === "week"}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${FOCUS} ${
+              viewMode === "week"
+                ? "bg-[#6C47FF] text-white shadow-sm"
+                : `${MUTED} hover:text-[#14142b] dark:hover:text-white hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`
+            }`}
+          >
+            Week
+          </button>
+          <div className="h-4 w-px bg-[#cbd5e1] dark:bg-[#333646]" />
+          <span className={`text-xs font-medium ${MUTED}`}>
+            {viewMode === "day" ? "Trading days" : "Weekly summary"}
+          </span>
+          <span className="ml-auto" />
         </div>
 
         {/* ───────── Toolbar ───────── */}
@@ -1147,19 +1186,31 @@ export default function DailyJournal({ currentAccount }) {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
-            {/* ───────── Right rail (first on phones) ───────── */}
-            <div className="order-first xl:order-last flex flex-col gap-4 xl:sticky xl:top-6">
-              {/* Month summary */}
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
+            {/* ───────── Right rail: month calendar ───────── */}
+            <div className="flex flex-col gap-4 xl:sticky xl:top-6 hidden xl:flex">
               <Card className={`${CARD} p-0`}>
                 <div className={`flex items-center justify-between border-b px-4 py-3 ${DIVIDER}`}>
                   <h3 className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
                     <CalendarDays size={16} style={{ color: ac.hex }} />
                     {monthLabel}
                   </h3>
-                  <span className={`text-sm font-bold tabular-nums ${pnlClass(monthStats.net)}`}>
-                    {monthStats.executed ? money(monthStats.net) : "—"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setViewMonth((m) => subMonths(m, 1))}
+                      aria-label="Previous month"
+                      className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded-md transition-colors ${FOCUS}`}
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <button
+                      onClick={() => setViewMonth((m) => addMonths(m, 1))}
+                      aria-label="Next month"
+                      className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded-md transition-colors ${FOCUS}`}
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="p-4">
