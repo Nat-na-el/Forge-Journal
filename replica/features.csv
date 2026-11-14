@@ -65,3 +65,19 @@ R03,Generate and reset report,must,yes,Statistics donuts and cumulative P&L per 
 R04,Calendar month grid,must,yes,Per-day P&L chips trade counts month totals and navigation
 R04,Day deep link,must,yes,Clicking a day opens /journal?date= for that date
 R04,Export and copy summary,should,yes,CSV export of filtered trades and clipboard summary with toast feedback
+P01,Empty playbook state,must,yes,Illustration headline explanation toggle and primary create button centred under the tab row
+P01,Playbook pill tabs,must,yes,My playbook / Shared playbook / Templates with shared count and active pill
+P01,Date range and account pills,must,yes,Stats range presets and account chip with balance; range filters every card and detail stat
+P02,Wizard step 1 general information,must,yes,Fully rounded form with two step bars icon picker colour picker name description live preview and Next step list
+P02,Step 1 validation,must,yes,Name required with inline error and focus; Cancel returns to the list without saving
+P03,Wizard step 2 trading rules,must,yes,Summary of general info with Edit details plus market timeframe risk entry exit and rules checklist
+P03,Rules checklist editor,must,yes,Add by Enter or Add button numbered rows inline edit remove duplicates ignored
+P03,Create and edit save,must,yes,Writes to users/{uid}/accounts/{id}/playbooks; edit keeps createdAt and syncs linked trade snapshots on rename
+P04,Playbook detail,must,yes,Mark header chips description entry/exit cards trade stats extra stats rules and linked trades with range filter
+P04,Share toggle,must,yes,Marks the plan as published from the card menu or detail header and lists it on the Shared tab; reversible
+P04,Copy plan,must,yes,Clipboard copy of name description market timeframe risk entry exit and numbered rules with toast
+P05,Playbook grid,must,yes,Cards with mark name chips description trades win rate net P&L and Open; sorted by net and seeded by the shared summary line
+P05,Card actions menu,must,yes,Edit share stop sharing copy plan and delete per card
+P05,Delete confirmation,must,yes,In-page dialog names the playbook and states how many linked trades keep their journal entry
+P05,Second playbook entry point,must,yes,Create playbook button in the tab row so the list is not a dead end
+P06,Templates tab,must,yes,Four original templates that prefill the wizard with market timeframe risk entry exit and five rules; nothing saved until Create

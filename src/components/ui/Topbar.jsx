@@ -58,6 +58,7 @@ const PAGE_TITLES = {
   "/add-trade/mt5": "Add Account",
   "/notebook": "Notebook",
   "/reports": "Reports",
+  "/playbooks": "Playbook",
   "/challenges": "Challenges",
   "/mentor": "Mentor Mode",
   "/backtest": "Backtest",
@@ -104,10 +105,14 @@ export default function Topbar({
   }, [menuOpen]);
 
   const title = PAGE_TITLES[location.pathname] || "Dashboard";
-  // The dashboard and reports pages render their own heading row, so the top
-  // bar keeps only the account / actions cluster there instead of a duplicate
-  // title. The dashboard also swaps to a dark chrome; reports stays light.
-  const hideTitle = location.pathname === "/dashboard" || location.pathname === "/reports";
+  // The dashboard, reports and playbooks pages render their own heading row, so
+  // the top bar keeps only the account / actions cluster there instead of a
+  // duplicate title. The dashboard also swaps to a dark chrome; the rest stay
+  // light so the bar matches the app shell.
+  const hideTitle =
+    location.pathname === "/dashboard" ||
+    location.pathname === "/reports" ||
+    location.pathname === "/playbooks";
   const darkChrome = location.pathname === "/dashboard";
   const accountName = currentAccount?.name || "No account";
   const user = auth.currentUser;

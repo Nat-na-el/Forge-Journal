@@ -105,3 +105,40 @@ report sub-tabs, tag breakdown, compare-groups form and generated comparison).
   keeping the light chrome (only the dashboard swaps to dark chrome).
 - Verified light and dark at 1600x1000 and 390x844; the summary table scrolls
   horizontally on phones and calendar chips drop cents below `sm`.
+
+
+## Phase 6 - Playbooks
+
+Reference: `Playbook.png`, `Playbook description.png` (empty page with pill
+tabs, and the two-step create form with two progress bars side by side).
+
+| ID | Screen | Date | Status | Notes |
+|----|--------|------|--------|-------|
+| P01 | Empty state (`/playbooks`) | 2026-11-14 | done | Always-dark page with a full-bleed `Playbook` heading row, date-range pill and account chip, and My playbook / Shared playbook / Templates pills. Empty state centres a fresh illustration, headline, explainer toggle and the primary create button. |
+| P02 | Create playbook - step 1 | 2026-11-14 | done | Two-column form with two step bars. Left: Add icon picker (12 icons), Choose a color (8 swatches), Playbook name and Description. Right: what the next step covers plus a live card preview. Footer Cancel / Next; both bars span their column and turn violet when complete. |
+| P03 | Create playbook - step 2 | 2026-11-14 | done | Left column collapses to a summary of the general information with Edit details. Right column holds Market, Timeframe, Risk per trade, Entry criteria, Exit criteria and the numbered rules checklist (Enter or Add, inline edit, remove). Footer Back / Create playbook. |
+| P04 | Playbook detail | 2026-11-14 | done | Mark and chips header with Share, Copy plan, Edit and Delete. Four headline stats, entry/exit cards, extra trade stats, numbered rules and the linked-trade table filtered by the selected range. |
+| P05 | Playbook grid | 2026-11-14 | done | Cards with mark, chips, description, Trades / Win rate / Net tiles and Open. Summary line counts playbooks and linked trades in range, sorted by net P&L, with a Create playbook button in the tab row. |
+| P06 | Templates and shared | 2026-11-14 | done | Four original templates (session breakout, trend pullback, range fade, catalyst day) prefill the wizard and only save when Create is pressed. Shared tab lists plans marked as published, with honest copy and Copy plan. |
+
+### Harder than expected
+
+- The reference is a dark page in a light app, so this route is always dark
+  rather than theme-aware, like Trades. Light mode keeps the light topbar and
+  leaves the content dark on purpose.
+- Two visible tabs needed real behaviour, not placeholders. `Shared` marks a
+  playbook as published (stored on the record) and lists it; `Templates`
+  opens the wizard pre-filled and saves nothing until Create is pressed.
+- The wizard replaces the old modal. Cancel from an edit returns to the detail
+  view rather than the list, so a mis-click never loses context.
+- A native validation bug surfaced during the click-through: the risk input
+  used `step=0.1`, so a value like 0.75 failed `checkValidity` and blocked
+  submit with no visible message. It is now `step=0.01` with a decimal
+  keypad, and the name field carries its own inline error.
+- Deleting asks for confirmation in a page dialog that spells out what happens
+  to linked trades, instead of a browser confirm.
+- Linked-trade stats still match old records by strategy name when
+  `playbookId` is missing, and renaming a playbook updates the trade
+  snapshots in batches of 400.
+- Verified the empty state, both wizard steps, create, share, template prefill,
+  rename, delete and the grid at 1600x1000 and 390x844, in dark and light.
