@@ -4,6 +4,7 @@
 // one trade. The reference screens are dark in every theme, so the page keeps
 // its own dark surface like the Dashboard and the Add Trade flow.
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTheme } from "../Theme-provider";
 import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { endOfMonth, format, isWithinInterval, startOfMonth, subDays } from "date-fns";
@@ -1591,6 +1592,9 @@ export default function Trades({ currentAccount }) {
       process.env.NODE_ENV !== "production" &&
       new URLSearchParams(window.location.search).get("preview") === "1"
   );
+
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
