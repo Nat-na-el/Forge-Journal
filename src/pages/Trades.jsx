@@ -59,6 +59,7 @@ import {
 import { Bar, Line } from "react-chartjs-2";
 import DeleteConfirmModal from "../components/ui/DeleteConfirmModal";
 import CsvImportModal from "../components/ui/CsvImportModal";
+import TradeChart from "../components/TradeChart";
 import { MistakePicker, StarRating } from "../components/ui/TradeGrading";
 import demoDashboardTrades from "../lib/demoDashboardData";
 import useAccent from "../hooks/useAccent";
@@ -1035,6 +1036,7 @@ function TrackingOverlay({
   accountName,
   startingBalance,
   accent,
+  demo = false,
   canPrev,
   canNext,
   onPrev,
@@ -1049,6 +1051,7 @@ function TrackingOverlay({
   const [tab, setTab] = useState("stats");
   const [noteTab, setNoteTab] = useState("note");
   const [interval, setInterval] = useState("5");
+  const [chartView, setChartView] = useState("trade");
   const [noteDraft, setNoteDraft] = useState(trade.notes || "");
   const [noteSaved, setNoteSaved] = useState(false);
   const [shared, setShared] = useState(false);
@@ -1423,6 +1426,29 @@ function TrackingOverlay({
                 <span className="text-[10px]" style={{ color: FAINT }}>
                   {symbol}
                 </span>
+                <div
+                  className="flex items-center rounded-md border border-[#23232f] bg-[#0d0d16] p-0.5"
+                  role="tablist"
+                  aria-label="Chart view"
+                >
+                  {[
+                    ["trade", "Trade"],
+                    ["live", "Live"],
+                  ].map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="tab"
+                      aria-selected={chartView === key}
+                      onClick={() => setChartView(key)}
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${FOCUS} ${
+                        chartView === key ? "bg-[#6C47FF] text-white" : "text-[#8b8ba3] hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex items-center rounded-md border border-[#23232f] bg-[#0d0d16] p-0.5">
                   {TV_INTERVALS.map(([value, label]) => (
                     <button
@@ -1441,7 +1467,8 @@ function TrackingOverlay({
               </div>
               <div className="flex items-center gap-2">
                 <span className="hidden items-center gap-1 text-[10px] sm:flex" style={{ color: FAINT }}>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: POS }} /> Live chart
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: POS }} />{" "}
+                  {chartView === "trade" ? "Entry and exit marked" : "Live chart"}
                 </span>
                 <a
                   href={journalUrl}
@@ -1454,7 +1481,17 @@ function TrackingOverlay({
               </div>
             </div>
             <div className="relative h-[380px] w-full bg-[#0b0b13] lg:h-auto lg:min-h-0 lg:flex-1">
-              <TradingViewChart symbol={symbol} interval={interval} accent={accent} />
+              {chartView === "trade" ? (
+                <TradeChart
+                  trade={trade}
+                  intervalKey={interval}
+                  accent={accent}
+                  demo={demo}
+                  onOpenLive={() => setChartView("live")}
+                />
+              ) : (
+                <TradingViewChart symbol={symbol} interval={interval} accent={accent} />
+              )}
             </div>
           </section>
 
@@ -3073,6 +3110,7 @@ export default function Trades({ currentAccount }) {
             accountName={accountName}
             startingBalance={startingBalance}
             accent={accent}
+            demo={PREVIEW}
             canPrev={Boolean(overlayPrev)}
             canNext={Boolean(overlayNext)}
             onPrev={() => overlayPrev && setSelectedTrade(overlayPrev)}

@@ -44,6 +44,7 @@ import {
   X,
 } from "lucide-react";
 import useAccent from "../hooks/useAccent";
+import { useTheme } from "../Theme-provider";
 import demoDashboardTrades from "../lib/demoDashboardData";
 
 // ─── Palette (matches the reference dashboard) ───────────────────────────────
@@ -65,9 +66,9 @@ const PERIODS = [
 ];
 
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF]";
-const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#23232f] bg-[#13131b] px-3 text-[12px] font-medium text-[#c7c7d6] transition-colors hover:border-[#33334a] hover:text-white ${FOCUS}`;
-const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg border border-[#23232f] bg-[#13131b] text-[#8b8ba3] transition-colors hover:text-white ${FOCUS}`;
-const PANEL = `rounded-xl border border-[#23232f] bg-[#13131b]`;
+const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-3 text-[12px] font-medium text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:border-[#33334a] hover:text-white ${FOCUS}`;
+const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] text-[#6b7090] dark:text-[#8b8ba3] transition-colors hover:text-white ${FOCUS}`;
+const PANEL = `rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b]`;
 
 // ─── Numbers & dates ─────────────────────────────────────────────────────────
 const clamp = (value, min = 0, max = 100) => Math.min(max, Math.max(min, Number(value) || 0));
@@ -272,7 +273,7 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-52" })
       {open ? (
         <div
           role="menu"
-          className={`absolute ${align === "right" ? "right-0" : "left-0"} z-40 mt-1.5 ${width} overflow-hidden rounded-lg border border-[#26263a] bg-[#12121b] py-1 shadow-2xl shadow-black/60`}
+          className={`absolute ${align === "right" ? "right-0" : "left-0"} z-40 mt-1.5 ${width} overflow-hidden rounded-lg border border-[#e6e8f2] dark:border-[#26263a] bg-white dark:bg-[#12121b] py-1 shadow-2xl shadow-black/60`}
         >
           {items.map((item) =>
             item.divider ? (
@@ -286,8 +287,8 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-52" })
                   setOpen(false);
                   item.onClick?.();
                 }}
-                className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#1c1c28] ${
-                  item.active ? "text-white" : "text-[#b9b9cc]"
+                className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#eceef6] dark:bg-[#1c1c28] ${
+                  item.active ? "text-white" : "text-[#5a5f7a] dark:text-[#b9b9cc]"
                 }`}
               >
                 <span className="flex min-w-0 items-start gap-2">
@@ -904,7 +905,7 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
               type="button"
               onClick={onClose}
               aria-label="Close day details"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-[#9a9aae] transition-colors hover:bg-white/5 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#6b7090] dark:text-[#9a9aae] transition-colors hover:bg-white/5 hover:text-white"
             >
               <X size={18} />
             </button>
@@ -914,34 +915,34 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
         {/* Rich note editor */}
         <div className="px-5 py-3 border-b" style={{ borderColor: "#23232f" }}>
           <div className="flex items-center gap-2 mb-2 overflow-x-auto px-1">
-            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#b9b9cc] hover:text-white" aria-label="Undo" title="Undo">
+            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Undo" title="Undo">
               <ArrowUpRight size={12} />
             </button>
-            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#b9b9cc] hover:text-white" aria-label="Redo" title="Redo">
+            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Redo" title="Redo">
               <ArrowUpRight size={12} />
             </button>
-            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+            <div className="flex items-center gap-1 text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] border-r border-[#e6e8f2] dark:border-[#23232f] pr-1">
               <span className="flex items-center gap-1">Normal</span>
               <ChevronDown size={10} />
             </div>
-            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+            <div className="flex items-center gap-1 text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] border-r border-[#e6e8f2] dark:border-[#23232f] pr-1">
               <span className="flex items-center gap-1">Arial</span>
               <ChevronDown size={10} />
             </div>
-            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+            <div className="flex items-center gap-1 text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] border-r border-[#e6e8f2] dark:border-[#23232f] pr-1">
               <span>15</span>
-              <button type="button" className="ml-0.5 text-[#b9b9cc] hover:text-white" title="Increase">+</button>
-              <button type="button" className="ml-0.5 text-[#b9b9cc] hover:text-white" title="Decrease">−</button>
+              <button type="button" className="ml-0.5 text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Increase">+</button>
+              <button type="button" className="ml-0.5 text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Decrease">−</button>
             </div>
-            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#b9b9cc] hover:text-white" aria-label="Bold" title="Bold">B</button>
-            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#b9b9cc] hover:text-white" aria-label="Italic" title="Italic">I</button>
-            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#b9b9cc] hover:text-white" aria-label="Underline" title="Underline">U</button>
-            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#b9b9cc] hover:text-white" aria-label="Strikethrough" title="Strikethrough">S</button>
-            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Bold" title="Bold">B</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Italic" title="Italic">I</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Underline" title="Underline">U</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Strikethrough" title="Strikethrough">S</button>
+            <div className="flex items-center gap-1 text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] border-r border-[#e6e8f2] dark:border-[#23232f] pr-1">
               <span>Left Align</span>
               <ChevronDown size={10} />
             </div>
-            <div className="flex items-center gap-1 text-[10px] text-[#b9b9cc] border-r border-[#23232f] pr-1">
+            <div className="flex items-center gap-1 text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] border-r border-[#e6e8f2] dark:border-[#23232f] pr-1">
               <span>Insert</span>
               <ChevronDown size={10} />
             </div>
@@ -950,16 +951,16 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Enter some text..."
-            className="w-full min-h-[110px] resize-y rounded-lg border border-[#23232f] bg-[#0a0a10] p-3 text-sm outline-none focus:ring-2 focus:ring-[#6C47FF] text-[#e9e9f2]"
+            className="w-full min-h-[110px] resize-y rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#f4f5fa] dark:bg-[#0a0a10] p-3 text-sm outline-none focus:ring-2 focus:ring-[#6C47FF] text-[#14142b] dark:text-[#e9e9f2]"
           />
           <div className="flex items-center gap-2 mt-2">
             <button type="button" onClick={handleVoice} aria-label={voiceListening ? "Stop voice" : "Start voice recording"} title={voiceListening ? "Stop voice" : "Voice note"} className="flex h-7 w-7 items-center justify-center rounded-full transition-colors" style={{ backgroundColor: voiceListening ? "#f2556e" : "#1e1e28" }}>
               <Mic size={13} />
             </button>
-            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#b9b9cc] hover:text-white" title="Upload" aria-label="Upload file"><Upload size={13} /></button>
-            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#b9b9cc] hover:text-white" title="Download" aria-label="Download note"><Download size={13} /></button>
-            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#b9b9cc] hover:text-white" title="Share" aria-label="Share note"><Copy size={13} /></button>
-            <button type="button" className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-[#b9b9cc] hover:text-[#f2556e]" title="Delete note" aria-label="Delete note"><X size={13} /></button>
+            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Upload" aria-label="Upload file"><Upload size={13} /></button>
+            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Download" aria-label="Download note"><Download size={13} /></button>
+            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Share" aria-label="Share note"><Copy size={13} /></button>
+            <button type="button" className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#f2556e]" title="Delete note" aria-label="Delete note"><X size={13} /></button>
           </div>
         </div>
 
@@ -1050,7 +1051,7 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-4 py-2 text-[12px] font-semibold text-[#c7c7d6] transition-colors hover:bg-white/5"
+              className="rounded-lg px-4 py-2 text-[12px] font-semibold text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:bg-white/5"
             >
               Cancel
             </button>
@@ -1072,6 +1073,8 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
 export default function Dashboard({ currentAccount }) {
   const navigate = useNavigate();
   const { ac } = useAccent();
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   const accent = ac.hex;
 
   const [trades, setTrades] = useState([]);
@@ -1300,7 +1303,7 @@ export default function Dashboard({ currentAccount }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center" style={{ backgroundColor: BG }}>
+      <div className="flex min-h-[70vh] items-center justify-center" style={{ backgroundColor: isDark ? BG : "#f4f5fa" }}>
         <div
           className="h-10 w-10 animate-spin rounded-full border-2"
           style={{ borderColor: BORDER, borderTopColor: accent }}
@@ -1314,7 +1317,7 @@ export default function Dashboard({ currentAccount }) {
   const rows = bottomTab === "recent" ? recent : openPositions.slice(0, 6);
 
   return (
-    <div className="-m-1 min-h-screen sm:-m-3" style={{ backgroundColor: BG, color: TEXT }}>
+    <div className="-m-1 min-h-screen sm:-m-3" style={{ backgroundColor: isDark ? BG : "#f4f5fa", color: isDark ? TEXT : "#14142b" }}>
       <div className="mx-auto max-w-[1600px] p-3 sm:p-5">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1660,7 +1663,7 @@ export default function Dashboard({ currentAccount }) {
               <button
                 type="button"
                 onClick={() => setViewDate((current) => addMonths(current, -1))}
-                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#1c1c28]"
+                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#eceef6] dark:bg-[#1c1c28]"
                 style={{ color: MUTED }}
                 aria-label="Previous month"
               >
@@ -1672,7 +1675,7 @@ export default function Dashboard({ currentAccount }) {
               <button
                 type="button"
                 onClick={() => setViewDate((current) => addMonths(current, 1))}
-                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#1c1c28]"
+                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#eceef6] dark:bg-[#1c1c28]"
                 style={{ color: MUTED }}
                 aria-label="Next month"
               >
@@ -1682,7 +1685,7 @@ export default function Dashboard({ currentAccount }) {
               <button
                 type="button"
                 onClick={() => setViewDate(new Date())}
-                className={`ml-1 rounded-md border px-2.5 py-1 text-[11px] font-medium text-[#c7c7d6] transition-colors hover:text-white ${FOCUS}`}
+                className={`ml-1 rounded-md border px-2.5 py-1 text-[11px] font-medium text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:text-white ${FOCUS}`}
                 style={{ borderColor: "#2a2a3a" }}
               >
                 This month
