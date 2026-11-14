@@ -92,15 +92,15 @@ const CHART_TICK = "#8a8fb5";
 
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a10]";
-const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#23232f] bg-[#13131b] px-2.5 text-[12px] font-medium text-[#c7c7d6] transition-colors hover:border-[#33334a] hover:text-white ${FOCUS}`;
-const ICON_BTN = `flex h-8 w-8 items-center justify-center rounded-lg border border-[#23232f] bg-[#13131b] text-[#8b8ba3] transition-colors hover:border-[#33334a] hover:text-white ${FOCUS}`;
+const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-2.5 text-[12px] font-medium text-[#c7c7d6] transition-colors hover:border-[#e6e8f2] dark:border-[#33334a] hover:text-white ${FOCUS}`;
+const ICON_BTN = `flex h-8 w-8 items-center justify-center rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] text-[#8b8ba3] transition-colors hover:border-[#e6e8f2] dark:border-[#33334a] hover:text-white ${FOCUS}`;
 const PRIMARY = `inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#6C47FF] px-3.5 text-[12.5px] font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
-const GHOST = `inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-[#262633] bg-[#12121b] px-3 text-[12px] font-medium text-[#c9cbe0] transition-colors hover:border-[#33334a] hover:bg-[#171722] ${FOCUS}`;
+const GHOST = `inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-[#262633] bg-white dark:bg-[#12121b] px-3 text-[12px] font-medium text-[#3b3f5e] dark:text-[#c9cbe0] transition-colors hover:border-[#e6e8f2] dark:border-[#33334a] hover:bg-[#171722] ${FOCUS}`;
 const FIELD =
-  "h-10 w-full rounded-lg border border-[#262633] bg-[#101018] px-3 text-sm text-[#e8e9f7] outline-none transition-colors placeholder:text-[#5d6078] focus:border-[#6C47FF] focus:ring-2 focus:ring-[#6C47FF]/25";
+  "h-10 w-full rounded-lg border border-[#262633] bg-[#101018] px-3 text-sm text-[#14142b] dark:text-[#e8e9f7] outline-none transition-colors placeholder:text-[#8a8fb5] dark:placeholder:text-[#5d6078] focus:border-[#6C47FF] focus:ring-2 focus:ring-[#6C47FF]/25";
 const LABEL = "mb-1.5 block text-[11px] font-medium text-[#8b8ba3]";
-const TH = "whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wide text-[#6b7090]";
-const TD = "whitespace-nowrap px-3 py-2.5 align-middle text-[12px] text-[#c9cbe0]";
+const TH = "whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wide text-[#6b7090] dark:text-[#6b7090]";
+const TD = "whitespace-nowrap px-3 py-2.5 align-middle text-[12px] text-[#3b3f5e] dark:text-[#c9cbe0]";
 
 const PERIODS = [
   ["all", "All time"],
@@ -292,7 +292,7 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-64", i
       {open ? (
         <div
           role="menu"
-          className={`absolute ${align === "right" ? "right-0" : "left-0"} z-50 mt-1.5 ${width} overflow-hidden rounded-lg border border-[#26263a] bg-[#12121b] py-1 shadow-2xl shadow-black/60`}
+          className={`absolute ${align === "right" ? "right-0" : "left-0"} z-50 mt-1.5 ${width} overflow-hidden rounded-lg border border-[#e6e8f2] dark:border-[#26263a] bg-white dark:bg-[#12121b] py-1 shadow-2xl shadow-black/60`}
         >
           {items.map((item) =>
             item.divider ? (
@@ -306,8 +306,8 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-64", i
                   setOpen(false);
                   item.onClick?.();
                 }}
-                className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#1c1c28] ${
-                  item.active ? "text-white" : "text-[#b9b9cc]"
+                className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] ${
+                  item.active ? "text-white" : "text-[#5a5f7a] dark:text-[#b9b9cc]"
                 }`}
               >
                 <span className="flex min-w-0 items-start gap-2">
@@ -338,7 +338,7 @@ function FilterGroup({ id, label, options, selected, expanded, onExpand, onToggl
   const allSelected = options.length > 0 && selected.length === options.length;
   const someSelected = selected.length > 0 && !allSelected;
   return (
-    <div className="border-b border-[#1f1f2b] last:border-0">
+    <div className="border-b border-[#e6e8f2] dark:border-[#1f1f2b] last:border-0">
       <div className="flex items-center gap-2 px-1 py-2">
         <input
           type="checkbox"
@@ -348,13 +348,13 @@ function FilterGroup({ id, label, options, selected, expanded, onExpand, onToggl
           }}
           onChange={() => onToggleAll(options.map((option) => option.value))}
           aria-label={`Select all ${label}`}
-          className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-[#33334a] bg-transparent accent-[#6C47FF]"
+          className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-[#e6e8f2] dark:border-[#33334a] bg-transparent accent-[#6C47FF]"
         />
         <button
           type="button"
           onClick={() => onExpand(expanded ? "" : id)}
           aria-expanded={expanded}
-          className={`flex flex-1 items-center justify-between gap-2 rounded text-left text-[12px] font-medium text-[#d4d6e6] hover:text-white ${FOCUS}`}
+          className={`flex flex-1 items-center justify-between gap-2 rounded text-left text-[12px] font-medium text-[#3b3f5e] dark:text-[#d4d6e6] hover:text-white ${FOCUS}`}
         >
           <span>
             {label}
@@ -378,13 +378,13 @@ function FilterGroup({ id, label, options, selected, expanded, onExpand, onToggl
             options.map((option) => (
               <label
                 key={option.value}
-                className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-1 text-[11.5px] text-[#b9b9cc] hover:bg-[#1a1a24] hover:text-white"
+                className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-1 text-[11.5px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:bg-[#eceef6] dark:hover:bg-[#1a1a24] hover:text-white"
               >
                 <input
                   type="checkbox"
                   checked={selected.includes(option.value)}
                   onChange={() => onToggle(option.value)}
-                  className="h-3 w-3 shrink-0 cursor-pointer rounded border-[#33334a] bg-transparent accent-[#6C47FF]"
+                  className="h-3 w-3 shrink-0 cursor-pointer rounded border-[#e6e8f2] dark:border-[#33334a] bg-transparent accent-[#6C47FF]"
                 />
                 <span className="truncate">{option.label}</span>
               </label>
@@ -463,17 +463,17 @@ function FilterPanel({
       ref={panelRef}
       role="dialog"
       aria-label="Filter trades"
-      className="absolute right-0 top-full z-50 mt-2 w-[min(560px,calc(100vw-24px))] overflow-hidden rounded-xl border border-[#26263a] bg-[#12121b] shadow-2xl shadow-black/70"
+      className="absolute right-0 top-full z-50 mt-2 w-[min(560px,calc(100vw-24px))] overflow-hidden rounded-xl border border-[#e6e8f2] dark:border-[#26263a] bg-white dark:bg-[#12121b] shadow-2xl shadow-black/70"
     >
       <div className="grid grid-cols-1 sm:grid-cols-[168px_minmax(0,1fr)]">
-        <div className="flex flex-row gap-1 overflow-x-auto border-b border-[#1f1f2b] p-2 sm:flex-col sm:border-b-0 sm:border-r">
+        <div className="flex flex-row gap-1 overflow-x-auto border-b border-[#e6e8f2] dark:border-[#1f1f2b] p-2 sm:flex-col sm:border-b-0 sm:border-r">
           {tabs.map(([key, label, Icon]) => (
             <button
               key={key}
               type="button"
               onClick={() => setTab(key)}
               className={`flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11.5px] font-medium transition-colors ${FOCUS} ${
-                tab === key ? "bg-[#1d1d2c] text-white" : "text-[#9a9ab2] hover:bg-[#181822] hover:text-white"
+                tab === key ? "bg-[#eceef6] dark:bg-[#1d1d2c] text-white" : "text-[#5a5f7a] dark:text-[#9a9ab2] hover:bg-[#eceef6] dark:hover:bg-[#181822] hover:text-white"
               }`}
             >
               <Icon size={13} className="shrink-0" />
@@ -558,7 +558,7 @@ function FilterPanel({
                         className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${FOCUS} ${
                           active
                             ? "border-[#6C47FF] bg-[#6C47FF]/25 text-white"
-                            : "border-[#2a2a3a] text-[#b9b9cc] hover:border-[#3a3a4e] hover:text-white"
+                            : "border-[#2a2a3a] text-[#5a5f7a] dark:text-[#b9b9cc] hover:border-[#e6e8f2] dark:hover:border-[#3a3a4e] hover:text-white"
                         }`}
                       >
                         {tag}
@@ -609,7 +609,7 @@ function FilterPanel({
                     key={label}
                     type="button"
                     onClick={action}
-                    className={`rounded-lg border border-[#2a2a3a] px-2.5 py-1 text-[11px] font-medium text-[#b9b9cc] transition-colors hover:border-[#3a3a4e] hover:text-white ${FOCUS}`}
+                    className={`rounded-lg border border-[#2a2a3a] px-2.5 py-1 text-[11px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] transition-colors hover:border-[#e6e8f2] dark:hover:border-[#3a3a4e] hover:text-white ${FOCUS}`}
                   >
                     {label}
                   </button>
@@ -632,13 +632,13 @@ function FilterPanel({
                   {[...new Set([...books, ...playbooks])].map((name) => (
                     <label
                       key={name}
-                      className="flex cursor-pointer items-center gap-2 rounded px-1 py-1.5 text-[11.5px] text-[#b9b9cc] hover:bg-[#1a1a24] hover:text-white"
+                      className="flex cursor-pointer items-center gap-2 rounded px-1 py-1.5 text-[11.5px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:bg-[#eceef6] dark:hover:bg-[#1a1a24] hover:text-white"
                     >
                       <input
                         type="checkbox"
                         checked={draft.playbooks.includes(name)}
                         onChange={() => toggle("playbooks", name)}
-                        className="h-3 w-3 shrink-0 cursor-pointer rounded border-[#33334a] bg-transparent accent-[#6C47FF]"
+                        className="h-3 w-3 shrink-0 cursor-pointer rounded border-[#e6e8f2] dark:border-[#33334a] bg-transparent accent-[#6C47FF]"
                       />
                       <span className="truncate">{name}</span>
                     </label>
@@ -650,11 +650,11 @@ function FilterPanel({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-[#1f1f2b] px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2 border-t border-[#e6e8f2] dark:border-[#1f1f2b] px-3 py-2.5">
         <button
           type="button"
           onClick={onReset}
-          className={`flex items-center gap-1.5 rounded px-1 text-[11.5px] font-medium text-[#9a9ab2] transition-colors hover:text-white ${FOCUS}`}
+          className={`flex items-center gap-1.5 rounded px-1 text-[11.5px] font-medium text-[#5a5f7a] dark:text-[#9a9ab2] transition-colors hover:text-white ${FOCUS}`}
         >
           <RotateCcw size={12} /> Reset all
         </button>
@@ -673,10 +673,10 @@ function FilterPanel({
 
 // ─── Small building blocks ───────────────────────────────────────────────────
 const Panel = ({ title, action, children, className = "" }) => (
-  <section className={`overflow-hidden rounded-xl border border-[#23232f] bg-[#13131b] ${className}`}>
+  <section className={`overflow-hidden rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] ${className}`}>
     {title ? (
-      <div className="flex items-center justify-between gap-2 border-b border-[#1f1f2b] px-4 py-3">
-        <h3 className="text-[13px] font-semibold text-[#e9e9f2]">{title}</h3>
+      <div className="flex items-center justify-between gap-2 border-b border-[#e6e8f2] dark:border-[#1f1f2b] px-4 py-3">
+        <h3 className="text-[13px] font-semibold text-[#14142b] dark:text-[#e9e9f2]">{title}</h3>
         {action}
       </div>
     ) : null}
@@ -685,7 +685,7 @@ const Panel = ({ title, action, children, className = "" }) => (
 );
 
 const StatRow = ({ label, value, tone }) => (
-  <div className="flex items-center justify-between gap-3 border-b border-[#1f1f2b] py-2 text-[11.5px] last:border-0">
+  <div className="flex items-center justify-between gap-3 border-b border-[#e6e8f2] dark:border-[#1f1f2b] py-2 text-[11.5px] last:border-0">
     <span style={{ color: MUTED }}>{label}</span>
     <span className="text-right font-semibold tabular-nums" style={{ color: tone || "#d4d6e6" }}>
       {value}
@@ -759,7 +759,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   const keyOf = (d) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   const monthTotal = cells.reduce((sum, d) => sum + (d ? daily[keyOf(d)]?.pnl || 0 : 0), 0);
-  const nav = `rounded-lg border border-[#23232f] p-1.5 text-[#8b8ba3] transition-colors hover:bg-[#1c1c28] hover:text-white ${FOCUS}`;
+  const nav = `rounded-lg border border-[#e6e8f2] dark:border-[#23232f] p-1.5 text-[#8b8ba3] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] hover:text-white ${FOCUS}`;
 
   return (
     <Panel
@@ -790,7 +790,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
                 if (!d) return <div key={di} />;
                 const rec = daily[keyOf(d)];
                 const tone = !rec
-                  ? "border-[#1f1f2b] bg-[#0d0d16]"
+                  ? "border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#0d0d16]"
                   : rec.pnl > 0
                   ? "border-[#22c493]/30 bg-[#22c493]/10"
                   : rec.pnl < 0
@@ -824,7 +824,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
                   </button>
                 );
               })}
-              <div className="rounded-lg border border-[#1f1f2b] bg-[#0f0f18] p-1.5">
+              <div className="rounded-lg border border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#0f0f18] p-1.5">
                 <div className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: FAINT }}>
                   Wk {wi + 1}
                 </div>
@@ -975,7 +975,7 @@ function TradingViewChart({ symbol, interval, accent = "#6C47FF" }) {
           >
             <BarChart3 size={18} />
           </span>
-          <p className="text-[13px] font-medium text-[#c9cbe0]">The live chart could not load</p>
+          <p className="text-[13px] font-medium text-[#3b3f5e] dark:text-[#c9cbe0]">The live chart could not load</p>
           <p className="max-w-[300px] text-[11px] leading-relaxed" style={{ color: FAINT }}>
             Check the connection, or open this market on TradingView in a new tab.
           </p>
@@ -1162,18 +1162,18 @@ function TrackingOverlay({
 
   return (
     <div className="fixed inset-0 z-[1050] flex flex-col" style={{ backgroundColor: "#07070c", color: TEXT }}>
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[#1f1f2b] bg-[#0a0a10] px-2.5 sm:px-4">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#f4f5fa] dark:bg-[#0a0a10] px-2.5 sm:px-4">
         <button type="button" onClick={onClose} className={ICON_BTN} aria-label="Back to the trade log">
           <ArrowLeft size={16} />
         </button>
 
-        <div className="hidden shrink-0 items-center rounded-lg border border-[#23232f] bg-[#12121b] sm:flex">
+        <div className="hidden shrink-0 items-center rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#12121b] sm:flex">
           <button
             type="button"
             onClick={onPrev}
             disabled={!canPrev}
             aria-label="Previous trade"
-            className={`flex h-8 w-8 items-center justify-center rounded-l-lg text-[#8b8ba3] transition-colors hover:bg-[#1c1c28] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${FOCUS}`}
+            className={`flex h-8 w-8 items-center justify-center rounded-l-lg text-[#8b8ba3] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${FOCUS}`}
           >
             <ChevronLeft size={15} />
           </button>
@@ -1183,7 +1183,7 @@ function TrackingOverlay({
             onClick={onNext}
             disabled={!canNext}
             aria-label="Next trade"
-            className={`flex h-8 w-8 items-center justify-center rounded-r-lg text-[#8b8ba3] transition-colors hover:bg-[#1c1c28] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${FOCUS}`}
+            className={`flex h-8 w-8 items-center justify-center rounded-r-lg text-[#8b8ba3] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${FOCUS}`}
           >
             <ChevronRight size={15} />
           </button>
@@ -1249,9 +1249,9 @@ function TrackingOverlay({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:grid-cols-[304px_minmax(0,1fr)] lg:overflow-hidden">
-        <aside className="shrink-0 border-b border-[#1f1f2b] p-3 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r">
-          <div className="overflow-hidden rounded-xl border border-[#23232f] bg-[#13131b]">
-            <div className="flex flex-wrap gap-1 border-b border-[#1f1f2b] p-1.5" role="tablist" aria-label="Trade details">
+        <aside className="shrink-0 border-b border-[#e6e8f2] dark:border-[#1f1f2b] p-3 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+          <div className="overflow-hidden rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b]">
+            <div className="flex flex-wrap gap-1 border-b border-[#e6e8f2] dark:border-[#1f1f2b] p-1.5" role="tablist" aria-label="Trade details">
               {tabs.map(([key, label]) => (
                 <button
                   key={key}
@@ -1260,7 +1260,7 @@ function TrackingOverlay({
                   aria-selected={tab === key}
                   onClick={() => setTab(key)}
                   className={`rounded-lg px-2 py-1.5 text-[10.5px] font-medium transition-colors ${FOCUS} ${
-                    tab === key ? "bg-[#1d1d2c] text-white" : "text-[#8b8ba3] hover:bg-[#181822] hover:text-white"
+                    tab === key ? "bg-[#eceef6] dark:bg-[#1d1d2c] text-white" : "text-[#8b8ba3] hover:bg-[#eceef6] dark:hover:bg-[#181822] hover:text-white"
                   }`}
                 >
                   {label}
@@ -1270,7 +1270,7 @@ function TrackingOverlay({
 
             {tab === "stats" ? (
               <div className="p-3">
-                <div className="rounded-lg border border-[#23232f] bg-[#0d0d16] px-3 py-2.5">
+                <div className="rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0d0d16] px-3 py-2.5">
                   <p className="text-[10px] uppercase tracking-wide" style={{ color: MUTED }}>
                     Net P&amp;L
                   </p>
@@ -1305,7 +1305,7 @@ function TrackingOverlay({
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[#23232f] bg-[#0d0d16] px-2.5 py-2">
+                <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0d0d16] px-2.5 py-2">
                   <span className="text-[10.5px]" style={{ color: MUTED }}>
                     Trade rating
                   </span>
@@ -1355,7 +1355,7 @@ function TrackingOverlay({
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-t border-[#1f1f2b]">
+                    <tr className="border-t border-[#e6e8f2] dark:border-[#1f1f2b]">
                       <td className="py-1.5 tabular-nums">{open ? format(open, "HH:mm:ss") : "—"}</td>
                       <td className="py-1.5 text-right tabular-nums">{trade.entry || "—"}</td>
                       <td className="py-1.5 text-right tabular-nums">{trade.lotSize || "—"}</td>
@@ -1364,7 +1364,7 @@ function TrackingOverlay({
                       </td>
                     </tr>
                     {!pending ? (
-                      <tr className="border-t border-[#1f1f2b]">
+                      <tr className="border-t border-[#e6e8f2] dark:border-[#1f1f2b]">
                         <td className="py-1.5 tabular-nums">{close ? format(close, "HH:mm:ss") : "—"}</td>
                         <td className="py-1.5 text-right tabular-nums">{trade.exit || "—"}</td>
                         <td className="py-1.5 text-right tabular-nums">{trade.lotSize || "—"}</td>
@@ -1375,7 +1375,7 @@ function TrackingOverlay({
                     ) : null}
                   </tbody>
                 </table>
-                <p className="mt-3 border-t border-[#1f1f2b] pt-2 text-[10px] leading-relaxed" style={{ color: FAINT }}>
+                <p className="mt-3 border-t border-[#e6e8f2] dark:border-[#1f1f2b] pt-2 text-[10px] leading-relaxed" style={{ color: FAINT }}>
                   Fills come from the trade record. Imports with partial fills are grouped into a single average entry and exit.
                 </p>
               </div>
@@ -1388,7 +1388,7 @@ function TrackingOverlay({
                     href={trade.screenshotUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block overflow-hidden rounded-lg border border-[#23232f] bg-[#0b0b13]"
+                    className="block overflow-hidden rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0b0b13]"
                   >
                     <img
                       src={trade.screenshotUrl}
@@ -1399,7 +1399,7 @@ function TrackingOverlay({
                 ) : (
                   <div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-[#2a2a3a] px-3 py-8 text-center">
                     <Paperclip size={18} style={{ color: FAINT }} />
-                    <p className="text-[11.5px] text-[#9a9ab2]">No attachments yet</p>
+                    <p className="text-[11.5px] text-[#5a5f7a] dark:text-[#9a9ab2]">No attachments yet</p>
                     <p className="text-[10px] leading-relaxed" style={{ color: FAINT }}>
                       Add a chart snapshot URL to keep the setup with the trade.
                     </p>
@@ -1412,7 +1412,7 @@ function TrackingOverlay({
             ) : null}
           </div>
 
-          <div className="mt-3 space-y-3 rounded-xl border border-[#23232f] bg-[#13131b] p-3">
+          <div className="mt-3 space-y-3 rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] p-3">
             <TagSection title="Setups" items={name ? [name] : []} color={POS} onManage={onEdit} />
             <TagSection title="Mistakes" items={trade.mistakes} color={NEG} />
             <TagSection title="Custom tags" items={trade.confluences} color={accent} />
@@ -1421,14 +1421,14 @@ function TrackingOverlay({
 
         <main className="flex min-h-0 flex-1 flex-col">
           <section className="flex min-h-[380px] flex-1 flex-col">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1f1f2b] bg-[#101018] px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#101018] px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11.5px] font-semibold text-white">{trade.pair || "Chart"}</span>
                 <span className="text-[10px]" style={{ color: FAINT }}>
                   {symbol}
                 </span>
                 <div
-                  className="flex items-center rounded-md border border-[#23232f] bg-[#0d0d16] p-0.5"
+                  className="flex items-center rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-[#0d0d16] p-0.5"
                   role="tablist"
                   aria-label="Chart view"
                 >
@@ -1450,7 +1450,7 @@ function TrackingOverlay({
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center rounded-md border border-[#23232f] bg-[#0d0d16] p-0.5">
+                <div className="flex items-center rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-[#0d0d16] p-0.5">
                   {TV_INTERVALS.map(([value, label]) => (
                     <button
                       key={value}
@@ -1496,8 +1496,8 @@ function TrackingOverlay({
             </div>
           </section>
 
-          <section className="shrink-0 border-t border-[#1f1f2b] bg-[#0d0d16]">
-            <div className="flex flex-wrap items-center gap-1 border-b border-[#1f1f2b] px-2.5 py-1.5">
+          <section className="shrink-0 border-t border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#0d0d16]">
+            <div className="flex flex-wrap items-center gap-1 border-b border-[#e6e8f2] dark:border-[#1f1f2b] px-2.5 py-1.5">
               {[
                 ["note", "Trade note", FileText],
                 ["journal", "Daily journal", CalendarDays],
@@ -1507,7 +1507,7 @@ function TrackingOverlay({
                   type="button"
                   onClick={() => setNoteTab(key)}
                   className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors ${FOCUS} ${
-                    noteTab === key ? "bg-[#1d1d2c] text-white" : "text-[#8b8ba3] hover:bg-[#181822] hover:text-white"
+                    noteTab === key ? "bg-[#eceef6] dark:bg-[#1d1d2c] text-white" : "text-[#8b8ba3] hover:bg-[#eceef6] dark:hover:bg-[#181822] hover:text-white"
                   }`}
                 >
                   <Icon size={12} /> {label}
@@ -1523,7 +1523,7 @@ function TrackingOverlay({
                     <button
                       type="button"
                       onClick={insertTemplate}
-                      className={`flex items-center gap-1 rounded-md border border-[#2a2a3a] px-2 py-1 text-[10.5px] font-medium text-[#b9b9cc] transition-colors hover:border-[#3a3a4e] hover:text-white ${FOCUS}`}
+                      className={`flex items-center gap-1 rounded-md border border-[#2a2a3a] px-2 py-1 text-[10.5px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] transition-colors hover:border-[#e6e8f2] dark:hover:border-[#3a3a4e] hover:text-white ${FOCUS}`}
                     >
                       <Sparkles size={11} /> Template
                     </button>
@@ -1531,7 +1531,7 @@ function TrackingOverlay({
                       type="button"
                       onClick={saveNote}
                       disabled={!dirty}
-                      className={`${PRIMARY} !h-7 !px-2.5 disabled:cursor-not-allowed disabled:!border disabled:!border-[#2a2a3a] disabled:!bg-[#171722] disabled:!text-[#6b7090] disabled:opacity-100`}
+                      className={`${PRIMARY} !h-7 !px-2.5 disabled:cursor-not-allowed disabled:!border disabled:!border-[#2a2a3a] disabled:!bg-[#171722] disabled:!text-[#6b7090] dark:text-[#6b7090] disabled:opacity-100`}
                     >
                       {noteSaved ? <Check size={12} /> : null}
                       {noteSaved ? "Saved" : "Save note"}
@@ -1555,12 +1555,12 @@ function TrackingOverlay({
                 onChange={(event) => setNoteDraft(event.target.value)}
                 placeholder="What did you see, how did you execute, and what would you repeat?"
                 aria-label="Trade note"
-                className="h-[132px] w-full resize-none bg-transparent px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[#c9cbe0] outline-none placeholder:text-[#5d6078]"
+                className="h-[132px] w-full resize-none bg-transparent px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[#3b3f5e] dark:text-[#c9cbe0] outline-none placeholder:text-[#8a8fb5] dark:placeholder:text-[#5d6078]"
               />
             ) : (
               <div className="flex h-[132px] flex-col items-center justify-center gap-1.5 text-center">
                 <CalendarDays size={18} style={{ color: FAINT }} />
-                <p className="text-[12px] text-[#9a9ab2]">
+                <p className="text-[12px] text-[#5a5f7a] dark:text-[#9a9ab2]">
                   Daily journal entries live alongside the trading day.
                 </p>
                 <button
@@ -2243,7 +2243,7 @@ export default function Trades({ currentAccount }) {
   if (!currentAccount && !PREVIEW) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6" style={{ backgroundColor: BG, color: TEXT }}>
-        <div className="max-w-md rounded-xl border border-[#23232f] bg-[#13131b] p-8 text-center">
+        <div className="max-w-md rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] p-8 text-center">
           <AlertCircle size={34} className="mx-auto mb-3" style={{ color: "#f59e0b" }} />
           <h2 className="mb-1.5 text-lg font-semibold">No account selected</h2>
           <p className="mb-4 text-[12.5px] leading-relaxed" style={{ color: MUTED }}>
@@ -2439,7 +2439,7 @@ export default function Trades({ currentAccount }) {
 
         {/* KPI strip */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <div className="rounded-xl border border-[#23232f] bg-[#13131b] px-4 py-3.5">
+          <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[11.5px] font-medium" style={{ color: MUTED }}>
                 Net P&amp;L
@@ -2464,7 +2464,7 @@ export default function Trades({ currentAccount }) {
             </div>
           </div>
 
-          <div className="rounded-xl border border-[#23232f] bg-[#13131b] px-4 py-3.5">
+          <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
             <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
               Win rate
             </div>
@@ -2476,7 +2476,7 @@ export default function Trades({ currentAccount }) {
             </div>
           </div>
 
-          <div className="rounded-xl border border-[#23232f] bg-[#13131b] px-4 py-3.5">
+          <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
             <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
               Profit factor
             </div>
@@ -2486,7 +2486,7 @@ export default function Trades({ currentAccount }) {
             </div>
           </div>
 
-          <div className="rounded-xl border border-[#23232f] bg-[#13131b] px-4 py-3.5">
+          <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
             <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
               Avg win / loss
             </div>
@@ -2496,7 +2496,7 @@ export default function Trades({ currentAccount }) {
             </div>
           </div>
 
-          <div className="rounded-xl border border-[#23232f] bg-[#13131b] px-4 py-3.5">
+          <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
             <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
               Expectancy
             </div>
@@ -2511,7 +2511,7 @@ export default function Trades({ currentAccount }) {
             </div>
           </div>
 
-          <div className="rounded-xl border border-[#23232f] bg-[#13131b] px-4 py-3.5">
+          <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
             <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
               Max drawdown
             </div>
@@ -2528,7 +2528,7 @@ export default function Trades({ currentAccount }) {
         </div>
 
         {/* View tabs */}
-        <div className="mt-4 flex items-center gap-1 border-b border-[#1f1f2b]">
+        <div className="mt-4 flex items-center gap-1 border-b border-[#e6e8f2] dark:border-[#1f1f2b]">
           {[
             ["log", "Trade log", filteredTrades.length],
             ["analytics", "Analytics", null],
@@ -2541,12 +2541,12 @@ export default function Trades({ currentAccount }) {
               className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[12px] font-medium transition-colors ${FOCUS} ${
                 view === key
                   ? "border-[#6C47FF] text-white"
-                  : "border-transparent text-[#8b8ba3] hover:text-[#d4d6e6]"
+                  : "border-transparent text-[#8b8ba3] hover:text-[#3b3f5e] dark:text-[#d4d6e6]"
               }`}
             >
               {label}
               {count != null ? (
-                <span className="rounded bg-[#1d1d2c] px-1.5 py-0.5 text-[9.5px] font-semibold text-[#9a9ab2]">
+                <span className="rounded bg-[#eceef6] dark:bg-[#1d1d2c] px-1.5 py-0.5 text-[9.5px] font-semibold text-[#5a5f7a] dark:text-[#9a9ab2]">
                   {count}
                 </span>
               ) : null}
@@ -2555,9 +2555,9 @@ export default function Trades({ currentAccount }) {
         </div>
 
         {view === "log" ? (
-          <section className="mt-3 overflow-hidden rounded-xl border border-[#23232f] bg-[#13131b]">
+          <section className="mt-3 overflow-hidden rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b]">
             {/* Table toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1f1f2b] px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e6e8f2] dark:border-[#1f1f2b] px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <h2 className="text-[13px] font-semibold">Trade log</h2>
                 <span className="text-[11px]" style={{ color: MUTED }}>
@@ -2566,7 +2566,7 @@ export default function Trades({ currentAccount }) {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative flex items-center gap-1.5 rounded-lg border border-[#23232f] bg-[#0f0f18] px-2.5 py-1.5">
+                <div className="relative flex items-center gap-1.5 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0f0f18] px-2.5 py-1.5">
                   <Search size={13} style={{ color: MUTED }} />
                   <input
                     type="text"
@@ -2574,7 +2574,7 @@ export default function Trades({ currentAccount }) {
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search symbol, notes, tags…"
                     aria-label="Search trades"
-                    className="w-40 bg-transparent text-[11.5px] text-[#e9e9f2] outline-none placeholder:text-[#5d6078] sm:w-52"
+                    className="w-40 bg-transparent text-[11.5px] text-[#14142b] dark:text-[#e9e9f2] outline-none placeholder:text-[#8a8fb5] dark:placeholder:text-[#5d6078] sm:w-52"
                   />
                   {searchQuery ? (
                     <button type="button" onClick={() => setSearchQuery("")} aria-label="Clear search" className={FOCUS}>
@@ -2587,10 +2587,10 @@ export default function Trades({ currentAccount }) {
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value)}
                   aria-label="Sort trades"
-                  className="h-8 rounded-lg border border-[#23232f] bg-[#0f0f18] px-2 text-[11.5px] text-[#c7c7d6] outline-none focus:border-[#6C47FF]"
+                  className="h-8 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0f0f18] px-2 text-[11.5px] text-[#c7c7d6] outline-none focus:border-[#6C47FF]"
                 >
                   {SORT_OPTIONS.map(([value, label]) => (
-                    <option key={value} value={value} className="bg-[#12121b]">
+                    <option key={value} value={value} className="bg-white dark:bg-[#12121b]">
                       {label}
                     </option>
                   ))}
@@ -2613,7 +2613,7 @@ export default function Trades({ currentAccount }) {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1040px] border-collapse">
                 <thead>
-                  <tr className="border-b border-[#1f1f2b] bg-[#111119]">
+                  <tr className="border-b border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#111119]">
                     <th scope="col" className="w-9 px-3 py-2.5">
                       <input
                         type="checkbox"
@@ -2626,7 +2626,7 @@ export default function Trades({ currentAccount }) {
                             return current.filter((id) => !ids.includes(id));
                           })
                         }
-                        className="h-3.5 w-3.5 cursor-pointer rounded border-[#33334a] bg-transparent accent-[#6C47FF]"
+                        className="h-3.5 w-3.5 cursor-pointer rounded border-[#e6e8f2] dark:border-[#33334a] bg-transparent accent-[#6C47FF]"
                       />
                     </th>
                     <th scope="col" className={TH}>Date</th>
@@ -2649,7 +2649,7 @@ export default function Trades({ currentAccount }) {
                         {Array.from({ length: 12 }).map((__, cell) => (
                           <td key={cell} className="px-3 py-3">
                             <div
-                              className="h-2.5 animate-pulse rounded bg-[#1c1c28]"
+                              className="h-2.5 animate-pulse rounded bg-[#eceef6] dark:bg-[#1c1c28]"
                               style={{ width: cell === 1 ? "70%" : "50%" }}
                             />
                           </td>
@@ -2729,11 +2729,11 @@ export default function Trades({ currentAccount }) {
                                     : current.filter((id) => id !== trade.id)
                                 )
                               }
-                              className="h-3.5 w-3.5 cursor-pointer rounded border-[#33334a] bg-transparent accent-[#6C47FF]"
+                              className="h-3.5 w-3.5 cursor-pointer rounded border-[#e6e8f2] dark:border-[#33334a] bg-transparent accent-[#6C47FF]"
                             />
                           </td>
                           <td className={TD}>
-                            <div className="text-[11.5px] text-[#d4d6e6]">
+                            <div className="text-[11.5px] text-[#3b3f5e] dark:text-[#d4d6e6]">
                               {date ? format(date, "MMM d, yyyy") : "—"}
                             </div>
                             <div className="text-[10px]" style={{ color: FAINT }}>
@@ -2757,7 +2757,7 @@ export default function Trades({ currentAccount }) {
                               >
                                 {(trade.pair || "?").slice(0, 2)}
                               </span>
-                              <span className="text-[12px] font-semibold text-[#e9e9f2]">{trade.pair || "—"}</span>
+                              <span className="text-[12px] font-semibold text-[#14142b] dark:text-[#e9e9f2]">{trade.pair || "—"}</span>
                             </div>
                           </td>
                           <td className={TD}>
@@ -2829,7 +2829,7 @@ export default function Trades({ currentAccount }) {
             </div>
 
             {/* Footer */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#1f1f2b] px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#e6e8f2] dark:border-[#1f1f2b] px-3 py-2.5">
               <div className="flex items-center gap-3 text-[11px]" style={{ color: MUTED }}>
                 <span>
                   {filteredTrades.length
@@ -2851,10 +2851,10 @@ export default function Trades({ currentAccount }) {
                   value={pageSize}
                   onChange={(event) => setPageSize(Number(event.target.value))}
                   aria-label="Rows per page"
-                  className="h-7 rounded-md border border-[#23232f] bg-[#0f0f18] px-1.5 text-[11px] text-[#c7c7d6] outline-none focus:border-[#6C47FF]"
+                  className="h-7 rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-[#0f0f18] px-1.5 text-[11px] text-[#c7c7d6] outline-none focus:border-[#6C47FF]"
                 >
                   {[10, 25, 50, 100].map((size) => (
-                    <option key={size} value={size} className="bg-[#12121b]">
+                    <option key={size} value={size} className="bg-white dark:bg-[#12121b]">
                       {size} / page
                     </option>
                   ))}
@@ -2965,7 +2965,7 @@ export default function Trades({ currentAccount }) {
                     ["Long", analytics.long],
                     ["Short", analytics.short],
                   ].map(([name, data]) => (
-                    <div key={name} className="rounded-lg border border-[#23232f] bg-[#0f0f18] p-3">
+                    <div key={name} className="rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0f0f18] p-3">
                       <div className="text-[10.5px] font-medium" style={{ color: MUTED }}>
                         {name}
                       </div>
@@ -3142,8 +3142,8 @@ export default function Trades({ currentAccount }) {
         {/* Edit modal */}
         {editModalOpen && editingTrade ? (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-4">
-            <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[#262633] bg-[#12121b] text-[#e9e9f2] shadow-2xl shadow-black/70">
-              <div className="flex items-center justify-between border-b border-[#1f1f2b] px-4 py-3">
+            <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[#262633] bg-white dark:bg-[#12121b] text-[#14142b] dark:text-[#e9e9f2] shadow-2xl shadow-black/70">
+              <div className="flex items-center justify-between border-b border-[#e6e8f2] dark:border-[#1f1f2b] px-4 py-3">
                 <div>
                   <h2 className="text-[14px] font-semibold">Edit trade</h2>
                   <p className="text-[10.5px]" style={{ color: MUTED }}>
@@ -3174,8 +3174,8 @@ export default function Trades({ currentAccount }) {
                       onChange={(event) => setEditForm({ ...editForm, direction: event.target.value })}
                       className={FIELD}
                     >
-                      <option value="Long" className="bg-[#12121b]">Long</option>
-                      <option value="Short" className="bg-[#12121b]">Short</option>
+                      <option value="Long" className="bg-white dark:bg-[#12121b]">Long</option>
+                      <option value="Short" className="bg-white dark:bg-[#12121b]">Short</option>
                     </select>
                   </div>
                 </div>
@@ -3288,8 +3288,8 @@ export default function Trades({ currentAccount }) {
                       onChange={(event) => setEditForm({ ...editForm, status: event.target.value })}
                       className={FIELD}
                     >
-                      <option value="executed" className="bg-[#12121b]">Executed</option>
-                      <option value="pending" className="bg-[#12121b]">Pending / open</option>
+                      <option value="executed" className="bg-white dark:bg-[#12121b]">Executed</option>
+                      <option value="pending" className="bg-white dark:bg-[#12121b]">Pending / open</option>
                     </select>
                   </div>
                   <div>
@@ -3300,9 +3300,9 @@ export default function Trades({ currentAccount }) {
                       onChange={(event) => setEditForm({ ...editForm, playbookId: event.target.value })}
                       className={FIELD}
                     >
-                      <option value="" className="bg-[#12121b]">No playbook</option>
+                      <option value="" className="bg-white dark:bg-[#12121b]">No playbook</option>
                       {playbooks.map((playbook) => (
-                        <option key={playbook.id} value={playbook.id} className="bg-[#12121b]">
+                        <option key={playbook.id} value={playbook.id} className="bg-white dark:bg-[#12121b]">
                           {playbook.name}
                         </option>
                       ))}
@@ -3382,7 +3382,7 @@ export default function Trades({ currentAccount }) {
                   />
                 </div>
 
-                <div className="flex gap-2.5 border-t border-[#1f1f2b] pt-4">
+                <div className="flex gap-2.5 border-t border-[#e6e8f2] dark:border-[#1f1f2b] pt-4">
                   <button type="submit" className={`${PRIMARY} flex-1`}>
                     Save changes
                   </button>
@@ -3476,7 +3476,7 @@ function ConfluenceTags({ tags, onChange, accent = "#6C47FF" }) {
             }
           }}
           placeholder="Add a confluence and press Enter"
-          className="h-8 flex-1 rounded-md border border-[#262633] bg-[#101018] px-2.5 text-[11.5px] text-[#e9e9f2] outline-none placeholder:text-[#5d6078] focus:border-[#6C47FF]"
+          className="h-8 flex-1 rounded-md border border-[#262633] bg-[#101018] px-2.5 text-[11.5px] text-[#14142b] dark:text-[#e9e9f2] outline-none placeholder:text-[#8a8fb5] dark:placeholder:text-[#5d6078] focus:border-[#6C47FF]"
         />
         <button type="button" onClick={commit} className={`${GHOST} !h-8 !px-2.5`}>
           Add

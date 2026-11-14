@@ -66,8 +66,8 @@ const PERIODS = [
 ];
 
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF]";
-const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-3 text-[12px] font-medium text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:border-[#33334a] hover:text-white ${FOCUS}`;
-const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] text-[#6b7090] dark:text-[#8b8ba3] transition-colors hover:text-white ${FOCUS}`;
+const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-3 text-[12px] font-medium text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:border-[#e6e8f2] dark:border-[#33334a] hover:text-white ${FOCUS}`;
+const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] text-[#6b7090] dark:text-[#6b7090] dark:text-[#8b8ba3] transition-colors hover:text-white ${FOCUS}`;
 const PANEL = `rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b]`;
 
 // ─── Numbers & dates ─────────────────────────────────────────────────────────
@@ -287,7 +287,7 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-52" })
                   setOpen(false);
                   item.onClick?.();
                 }}
-                className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#eceef6] dark:bg-[#1c1c28] ${
+                className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] ${
                   item.active ? "text-white" : "text-[#5a5f7a] dark:text-[#b9b9cc]"
                 }`}
               >
@@ -905,7 +905,7 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
               type="button"
               onClick={onClose}
               aria-label="Close day details"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-[#6b7090] dark:text-[#9a9aae] transition-colors hover:bg-white/5 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#6b7090] dark:text-[#6b7090] dark:text-[#9a9aae] transition-colors hover:bg-white/5 hover:text-white"
             >
               <X size={18} />
             </button>
@@ -1663,7 +1663,7 @@ export default function Dashboard({ currentAccount }) {
               <button
                 type="button"
                 onClick={() => setViewDate((current) => addMonths(current, -1))}
-                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#eceef6] dark:bg-[#1c1c28]"
+                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28]"
                 style={{ color: MUTED }}
                 aria-label="Previous month"
               >
@@ -1675,7 +1675,7 @@ export default function Dashboard({ currentAccount }) {
               <button
                 type="button"
                 onClick={() => setViewDate((current) => addMonths(current, 1))}
-                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#eceef6] dark:bg-[#1c1c28]"
+                className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28]"
                 style={{ color: MUTED }}
                 aria-label="Next month"
               >

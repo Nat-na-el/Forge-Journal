@@ -15,6 +15,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "../firebase";
+import { useTheme } from "../Theme-provider";
 import demoDashboardTrades from "../lib/demoDashboardData";
 import { money, pct, ratio, tradeDate, tradeStats } from "../lib/analytics";
 import {
@@ -54,10 +55,10 @@ const ACCENT = "#6C47FF";
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d86ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a10]";
 
-const FIELD = `w-full rounded-md border border-[#262636] bg-[#10101a] px-3 py-2 text-[13px] text-[#e8e8f4] placeholder:text-[#5f5f78] outline-none transition-colors focus:border-[#6C47FF] focus:ring-1 focus:ring-[#6C47FF] ${FOCUS}`;
-const LABEL = "mb-1.5 block text-[11.5px] font-semibold text-[#b9b9cf]";
+const FIELD = `w-full rounded-md border border-[#e6e8f2] dark:border-[#262636] bg-white dark:bg-[#10101a] px-3 py-2 text-[13px] text-[#14142b] dark:text-[#e8e8f4] placeholder:text-[#8a8fb5] dark:text-[#5f5f78] outline-none transition-colors focus:border-[#6C47FF] focus:ring-1 focus:ring-[#6C47FF] ${FOCUS}`;
+const LABEL = "mb-1.5 block text-[11.5px] font-semibold text-[#5a5f7a] dark:text-[#b9b9cf]";
 const GHOST =
-  "inline-flex items-center justify-center gap-1.5 rounded-md border border-[#2a2a3c] bg-transparent px-3 py-2 text-[12px] font-semibold text-[#c9c9dc] transition-colors hover:bg-white/5 hover:text-white";
+  "inline-flex items-center justify-center gap-1.5 rounded-md border border-[#e6e8f2] dark:border-[#2a2a3c] bg-transparent px-3 py-2 text-[12px] font-semibold text-[#3b3f5e] dark:text-[#c9c9dc] transition-colors hover:bg-white/5 hover:text-white";
 const PRIMARY =
   "inline-flex items-center justify-center gap-1.5 rounded-md bg-[#6C47FF] px-3.5 py-2 text-[12px] font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -331,7 +332,7 @@ function Popover({ trigger, children, width = "w-60", align = "right" }) {
           role="menu"
           className={`absolute top-[calc(100%+6px)] z-50 ${width} ${
             align === "right" ? "right-0" : "left-0"
-          } overflow-hidden rounded-lg border border-[#2a2a3c] bg-[#14141f] p-1.5 shadow-2xl shadow-black/60`}
+          } overflow-hidden rounded-lg border border-[#e6e8f2] dark:border-[#2a2a3c] bg-white dark:bg-[#14141f] p-1.5 shadow-2xl shadow-black/60`}
         >
           {children({ close: () => setOpen(false) })}
         </div>
@@ -349,7 +350,7 @@ function MenuItem({ icon: Icon, children, onClick, active = false, tone = "" }) 
       className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[12.5px] font-medium transition-colors ${FOCUS} ${
         tone === "danger"
           ? "text-[#fb7185] hover:bg-[#fb7185]/10"
-          : "text-[#c9c9dc] hover:bg-white/5 hover:text-white"
+          : "text-[#3b3f5e] dark:text-[#c9c9dc] hover:bg-white/5 hover:text-white"
       } ${active ? "bg-white/[0.06] text-white" : ""}`}
     >
       {Icon ? <Icon size={14} className="shrink-0 opacity-80" /> : null}
@@ -377,7 +378,7 @@ function Chip({ children, tone = "muted" }) {
   const styles =
     tone === "accent"
       ? "border-[#6C47FF]/40 bg-[#6C47FF]/15 text-[#c3b5ff]"
-      : "border-[#2a2a3c] bg-[#161622] text-[#a4a6bd]";
+      : "border-[#e6e8f2] dark:border-[#2a2a3c] bg-white dark:bg-[#161622] text-[#3b3f5e] dark:text-[#a4a6bd]";
   return (
     <span
       className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10.5px] font-medium ${styles}`}
@@ -417,7 +418,7 @@ function EmptyState({ onCreate, onExplain, explainOpen }) {
       <h2 className="mt-4 text-[22px] font-bold tracking-tight text-white sm:text-[26px]">
         Create your first playbook
       </h2>
-      <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-[#8f8fa6]">
+      <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">
         Write down the setup you repeat, then track how it actually performs.
       </p>
       <button
@@ -436,9 +437,9 @@ function EmptyState({ onCreate, onExplain, explainOpen }) {
             ["Rules you can audit", "List what must be true before you enter, and check yourself against it later."],
             ["Stats that follow", "Tag a trade with a playbook and its win rate, profit factor and net P&L update here."],
           ].map(([title, body]) => (
-            <div key={title} className="rounded-lg border border-[#232332] bg-[#101019] p-3.5">
+            <div key={title} className="rounded-lg border border-[#e6e8f2] dark:border-[#232332] bg-white dark:bg-[#101019] p-3.5">
               <div className="text-[12.5px] font-semibold text-white">{title}</div>
-              <p className="mt-1 text-[11.5px] leading-relaxed text-[#8f8fa6]">{body}</p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">{body}</p>
             </div>
           ))}
         </div>
@@ -454,11 +455,11 @@ function EmptyState({ onCreate, onExplain, explainOpen }) {
 function SharedEmpty({ hasPlaybooks, onGoMine, onExplain, explainOpen }) {
   return (
     <div className="flex min-h-[calc(100vh-16rem)] flex-col items-center justify-center px-4 py-12 text-center">
-      <span className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#2a2a3c] bg-[#13131d]">
+      <span className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#e6e8f2] dark:border-[#2a2a3c] bg-white dark:bg-[#13131d]">
         <Share2 size={26} className="text-[#a48fff]" />
       </span>
       <h2 className="mt-4 text-[21px] font-bold tracking-tight text-white">Nothing shared yet</h2>
-      <p className="mt-2 max-w-md text-[13px] leading-relaxed text-[#8f8fa6]">
+      <p className="mt-2 max-w-md text-[13px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">
         {hasPlaybooks
           ? "Open a playbook and switch on Share to keep your published plans together here."
           : "Create a playbook first, then share it to keep the published version in one place."}
@@ -472,7 +473,7 @@ function SharedEmpty({ hasPlaybooks, onGoMine, onExplain, explainOpen }) {
         {explainOpen ? "Hide what sharing does" : "What does sharing do?"}
       </button>
       {explainOpen ? (
-        <p className="mt-4 max-w-lg rounded-lg border border-[#232332] bg-[#101019] px-4 py-3 text-[12px] leading-relaxed text-[#a4a6bd]">
+        <p className="mt-4 max-w-lg rounded-lg border border-[#e6e8f2] dark:border-[#232332] bg-white dark:bg-[#101019] px-4 py-3 text-[12px] leading-relaxed text-[#3b3f5e] dark:text-[#a4a6bd]">
           Sharing marks a playbook as published and moves it onto this tab. It does not change the rules or the
           stats, and you can stop sharing at any time. Copy plan puts the whole plan on your clipboard so you can
           paste it wherever you coach.
@@ -489,19 +490,19 @@ function SkeletonGrid() {
   return (
     <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
       {[0, 1, 2].map((index) => (
-        <div key={index} className="rounded-xl border border-[#1c1c28] bg-[#101019] p-4">
+        <div key={index} className="rounded-xl border border-[#e6e8f2] dark:border-[#1c1c28] bg-white dark:bg-[#101019] p-4">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 animate-pulse rounded-lg bg-[#1c1c2a]" />
+            <div className="h-10 w-10 animate-pulse rounded-lg bg-[#e6e8f2] dark:bg-[#1c1c2a]" />
             <div className="flex-1 space-y-2">
-              <div className="h-3 w-2/3 animate-pulse rounded bg-[#1c1c2a]" />
-              <div className="h-2.5 w-1/3 animate-pulse rounded bg-[#191926]" />
+              <div className="h-3 w-2/3 animate-pulse rounded bg-[#e6e8f2] dark:bg-[#1c1c2a]" />
+              <div className="h-2.5 w-1/3 animate-pulse rounded bg-[#e6e8f2] dark:bg-[#191926]" />
             </div>
           </div>
-          <div className="mt-4 h-2.5 w-full animate-pulse rounded bg-[#191926]" />
-          <div className="mt-2 h-2.5 w-4/5 animate-pulse rounded bg-[#191926]" />
+          <div className="mt-4 h-2.5 w-full animate-pulse rounded bg-[#e6e8f2] dark:bg-[#191926]" />
+          <div className="mt-2 h-2.5 w-4/5 animate-pulse rounded bg-[#e6e8f2] dark:bg-[#191926]" />
           <div className="mt-4 grid grid-cols-3 gap-2">
             {[0, 1, 2].map((cell) => (
-              <div key={cell} className="h-12 animate-pulse rounded-md bg-[#15151f]" />
+              <div key={cell} className="h-12 animate-pulse rounded-md bg-[#ffffff] dark:bg-[#15151f]" />
             ))}
           </div>
         </div>
@@ -512,7 +513,7 @@ function SkeletonGrid() {
 
 function PageHeader({ rangeKey, rangeLabel, onRangeChange, accountName, onManageAccounts, currentAccount }) {
   return (
-    <div className="-mx-3 flex flex-col justify-between gap-3 border-b border-[#1c1c28] px-3 py-4 sm:-mx-6 sm:px-6 lg:flex-row lg:items-center">
+    <div className="-mx-3 flex flex-col justify-between gap-3 border-b border-[#e6e8f2] dark:border-[#1c1c28] px-3 py-4 sm:-mx-6 sm:px-6 lg:flex-row lg:items-center">
       <h1 className="text-[21px] font-bold tracking-tight text-white sm:text-[22px]">Playbook</h1>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -523,7 +524,7 @@ function PageHeader({ rangeKey, rangeLabel, onRangeChange, accountName, onManage
               type="button"
               onClick={toggle}
               aria-label={`Date range ${rangeLabel}`}
-              className={`flex h-8 items-center gap-1.5 rounded-md border border-[#2a2a3c] bg-[#11111a] px-2.5 text-[11.5px] font-medium tabular-nums text-[#b9b9cf] transition-colors hover:bg-[#1a1a27] ${FOCUS}`}
+              className={`flex h-8 items-center gap-1.5 rounded-md border border-[#e6e8f2] dark:border-[#2a2a3c] bg-[#f4f5fa] dark:bg-[#11111a] px-2.5 text-[11.5px] font-medium tabular-nums text-[#5a5f7a] dark:text-[#b9b9cf] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1a1a27] ${FOCUS}`}
             >
               <CalendarDays size={13} className="text-[#9d86ff]" />
               {rangeLabel}
@@ -533,7 +534,7 @@ function PageHeader({ rangeKey, rangeLabel, onRangeChange, accountName, onManage
         >
           {({ close }) => (
             <>
-              <div className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6f6f87]">
+              <div className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6b7090] dark:text-[#6f6f87]">
                 Stats range
               </div>
               {RANGE_PRESETS.map((preset) => (
@@ -560,7 +561,7 @@ function PageHeader({ rangeKey, rangeLabel, onRangeChange, accountName, onManage
               type="button"
               onClick={toggle}
               aria-label="Account filter"
-              className={`flex h-8 items-center gap-1.5 rounded-md border border-[#2a2a3c] bg-[#11111a] px-2.5 text-[11.5px] font-medium text-[#b9b9cf] transition-colors hover:bg-[#1a1a27] ${FOCUS}`}
+              className={`flex h-8 items-center gap-1.5 rounded-md border border-[#e6e8f2] dark:border-[#2a2a3c] bg-[#f4f5fa] dark:bg-[#11111a] px-2.5 text-[11.5px] font-medium text-[#5a5f7a] dark:text-[#b9b9cf] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1a1a27] ${FOCUS}`}
             >
               <Wallet size={13} className="text-[#9d86ff]" />
               <span className="max-w-[130px] truncate">{accountName}</span>
@@ -570,7 +571,7 @@ function PageHeader({ rangeKey, rangeLabel, onRangeChange, accountName, onManage
         >
           {({ close }) => (
             <>
-              <div className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6f6f87]">
+              <div className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6b7090] dark:text-[#6f6f87]">
                 Account
               </div>
               <MenuItem icon={Check} active onClick={close}>
@@ -581,7 +582,7 @@ function PageHeader({ rangeKey, rangeLabel, onRangeChange, accountName, onManage
                   {money(currentAccount.current_balance ?? currentAccount.starting_balance, false)} balance
                 </div>
               ) : null}
-              <div className="my-1.5 border-t border-[#2a2a3c]" />
+              <div className="my-1.5 border-t border-[#e6e8f2] dark:border-[#2a2a3c]" />
               <MenuItem icon={Plus} onClick={() => { close(); onManageAccounts(); }}>
                 Manage accounts
               </MenuItem>
@@ -608,7 +609,7 @@ function TabsBar({ tab, onChange, sharedCount, onCreate, showCreate }) {
             className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold transition-colors ${FOCUS} ${
               active
                 ? "bg-[#6C47FF] text-white"
-                : "border border-[#242432] bg-[#11111a] text-[#b9b9cf] hover:bg-[#191924] hover:text-white"
+                : "border border-[#242432] bg-[#f4f5fa] dark:bg-[#11111a] text-[#5a5f7a] dark:text-[#b9b9cf] hover:bg-[#191924] hover:text-white"
             }`}
           >
             {entry.label}
@@ -643,7 +644,7 @@ function PlaybookCard({ item, onOpen, onEdit, onShare, onDelete, onCopy }) {
   const colour = colourOf(playbook);
 
   return (
-    <article className="flex flex-col rounded-xl border border-[#21212f] bg-[#101019] p-4 transition-colors hover:border-[#34344d]">
+    <article className="flex flex-col rounded-xl border border-[#21212f] bg-white dark:bg-[#101019] p-4 transition-colors hover:border-[#34344d]">
       <div className="flex items-start gap-3">
         <span
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white"
@@ -709,7 +710,7 @@ function PlaybookCard({ item, onOpen, onEdit, onShare, onDelete, onCopy }) {
               >
                 Copy plan
               </MenuItem>
-              <div className="my-1.5 border-t border-[#2a2a3c]" />
+              <div className="my-1.5 border-t border-[#e6e8f2] dark:border-[#2a2a3c]" />
               <MenuItem
                 tone="danger"
                 icon={Trash2}
@@ -726,9 +727,9 @@ function PlaybookCard({ item, onOpen, onEdit, onShare, onDelete, onCopy }) {
       </div>
 
       {playbook.description ? (
-        <p className="mt-3 line-clamp-2 text-[11.5px] leading-relaxed text-[#8f8fa6]">{playbook.description}</p>
+        <p className="mt-3 line-clamp-2 text-[11.5px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">{playbook.description}</p>
       ) : (
-        <p className="mt-3 text-[11.5px] italic leading-relaxed text-[#5f5f78]">No description yet.</p>
+        <p className="mt-3 text-[11.5px] italic leading-relaxed text-[#8a8fb5] dark:text-[#5f5f78]">No description yet.</p>
       )}
 
       <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-md border border-[#21212f] bg-[#21212f]">
@@ -778,7 +779,7 @@ function Breadcrumb({ current, onRoot }) {
 function TemplateTab({ onUse }) {
   return (
     <div>
-      <p className="mb-4 max-w-2xl text-[12.5px] leading-relaxed text-[#8f8fa6]">
+      <p className="mb-4 max-w-2xl text-[12.5px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">
         Start from an outline and make it yours. A template opens in the editor with the market, risk and rules
         already filled in - nothing is saved until you press Create.
       </p>
@@ -788,7 +789,7 @@ function TemplateTab({ onUse }) {
           return (
             <article
               key={template.id}
-              className="flex flex-col rounded-xl border border-[#21212f] bg-[#101019] p-4 transition-colors hover:border-[#34344d]"
+              className="flex flex-col rounded-xl border border-[#21212f] bg-white dark:bg-[#101019] p-4 transition-colors hover:border-[#34344d]"
             >
               <div className="flex items-start gap-3">
                 <span
@@ -808,17 +809,17 @@ function TemplateTab({ onUse }) {
                 </div>
               </div>
 
-              <p className="mt-3 text-[11.5px] leading-relaxed text-[#8f8fa6]">{template.tagline}</p>
+              <p className="mt-3 text-[11.5px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">{template.tagline}</p>
 
               <ul className="mt-3 space-y-1">
                 {template.rules.slice(0, 3).map((rule, index) => (
-                  <li key={index} className="flex items-start gap-1.5 text-[11px] leading-relaxed text-[#a4a6bd]">
+                  <li key={index} className="flex items-start gap-1.5 text-[11px] leading-relaxed text-[#3b3f5e] dark:text-[#a4a6bd]">
                     <Check size={11} className="mt-0.5 shrink-0 text-[#6C47FF]" />
                     <span className="line-clamp-1">{rule}</span>
                   </li>
                 ))}
                 {template.rules.length > 3 ? (
-                  <li className="pl-4 text-[10.5px] text-[#5f5f78]">
+                  <li className="pl-4 text-[10.5px] text-[#8a8fb5] dark:text-[#5f5f78]">
                     +{template.rules.length - 3} more rules
                   </li>
                 ) : null}
@@ -898,7 +899,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
 
   return (
     <div className="mx-auto w-full max-w-[920px] pb-16">
-      <form onSubmit={submit} className="overflow-hidden rounded-xl border border-[#232332] bg-[#0e0e16] shadow-2xl shadow-black/40">
+      <form onSubmit={submit} className="overflow-hidden rounded-xl border border-[#e6e8f2] dark:border-[#232332] bg-[#0e0e16] shadow-2xl shadow-black/40">
         <div className="grid gap-x-8 gap-y-9 px-5 pb-8 pt-7 sm:px-8 md:grid-cols-2">
           {/* General information */}
           <section className="min-w-0" aria-labelledby="wizard-general">
@@ -906,7 +907,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
             <h2 id="wizard-general" className="mt-3 text-[15px] font-semibold text-white">
               General information
             </h2>
-            <p className="mt-1 text-[11.5px] leading-relaxed text-[#8f8fa6]">
+            <p className="mt-1 text-[11.5px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">
               Pick a mark and a colour, then name the setup in your own words.
             </p>
 
@@ -921,7 +922,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                         type="button"
                         onClick={toggle}
                         aria-haspopup="menu"
-                        className={`flex items-center gap-2 rounded-md border border-[#2a2a3c] bg-[#11111a] px-2.5 py-2 text-[12px] font-semibold text-[#d6d6e4] transition-colors hover:bg-[#1a1a27] ${FOCUS}`}
+                        className={`flex items-center gap-2 rounded-md border border-[#e6e8f2] dark:border-[#2a2a3c] bg-[#f4f5fa] dark:bg-[#11111a] px-2.5 py-2 text-[12px] font-semibold text-[#d6d6e4] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1a1a27] ${FOCUS}`}
                       >
                         <span
                           className="flex h-6 w-6 items-center justify-center rounded text-white"
@@ -937,7 +938,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                   >
                     {({ close }) => (
                       <div>
-                        <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6f6f87]">
+                        <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6b7090] dark:text-[#6f6f87]">
                           Icon
                         </div>
                         <div className="grid grid-cols-6 gap-1">
@@ -954,7 +955,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                               className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${FOCUS} ${
                                 values.icon === option.key
                                   ? "bg-[#6C47FF] text-white"
-                                  : "text-[#a4a6bd] hover:bg-white/5 hover:text-white"
+                                  : "text-[#3b3f5e] dark:text-[#a4a6bd] hover:bg-white/5 hover:text-white"
                               }`}
                             >
                               <option.Icon size={15} />
@@ -973,7 +974,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                         type="button"
                         onClick={toggle}
                         aria-haspopup="menu"
-                        className={`flex items-center gap-2 rounded-md border border-[#2a2a3c] bg-[#11111a] px-2.5 py-2 text-[12px] font-semibold text-[#d6d6e4] transition-colors hover:bg-[#1a1a27] ${FOCUS}`}
+                        className={`flex items-center gap-2 rounded-md border border-[#e6e8f2] dark:border-[#2a2a3c] bg-[#f4f5fa] dark:bg-[#11111a] px-2.5 py-2 text-[12px] font-semibold text-[#d6d6e4] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1a1a27] ${FOCUS}`}
                       >
                         <span
                           className="h-5 w-5 rounded border border-white/20"
@@ -987,7 +988,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                   >
                     {({ close }) => (
                       <div>
-                        <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6f6f87]">
+                        <div className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6b7090] dark:text-[#6f6f87]">
                           Color
                         </div>
                         <div className="grid grid-cols-4 gap-1.5">
@@ -1015,7 +1016,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                   </Popover>
                 </div>
 
-                <p className="text-[11px] leading-relaxed text-[#6f6f87]">
+                <p className="text-[11px] leading-relaxed text-[#6b7090] dark:text-[#6f6f87]">
                   The icon and colour appear on the card and at the top of the playbook.
                 </p>
 
@@ -1059,7 +1060,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                 </div>
               </div>
             ) : (
-              <div className="mt-5 rounded-lg border border-[#232332] bg-[#11111a] p-4">
+              <div className="mt-5 rounded-lg border border-[#e6e8f2] dark:border-[#232332] bg-[#f4f5fa] dark:bg-[#11111a] p-4">
                 <div className="flex items-start gap-3">
                   <span
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white"
@@ -1070,7 +1071,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                   </span>
                   <div className="min-w-0">
                     <div className="truncate text-[13.5px] font-semibold text-white">{values.name}</div>
-                    <p className="mt-0.5 line-clamp-3 text-[11.5px] leading-relaxed text-[#8f8fa6]">
+                    <p className="mt-0.5 line-clamp-3 text-[11.5px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">
                       {values.description || "No description yet."}
                     </p>
                   </div>
@@ -1092,14 +1093,14 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
             <h2 id="wizard-rules" className="mt-3 text-[15px] font-semibold text-white">
               Trading playbook rules
             </h2>
-            <p className="mt-1 text-[11.5px] leading-relaxed text-[#8f8fa6]">
+            <p className="mt-1 text-[11.5px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">
               List the rules you follow and the stats you want to hold yourself to.
             </p>
 
             {stepOne ? (
               <div className="mt-5 space-y-4">
-                <div className="rounded-lg border border-[#232332] bg-[#0c0c14] p-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[#6f6f87]">
+                <div className="rounded-lg border border-[#e6e8f2] dark:border-[#232332] bg-[#0c0c14] p-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[#6b7090] dark:text-[#6f6f87]">
                     Next step
                   </div>
                   <ul className="mt-2.5 space-y-2">
@@ -1109,7 +1110,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                       "Entry and exit rules",
                       "A checklist to score the setup",
                     ].map((line) => (
-                      <li key={line} className="flex items-center gap-2 text-[12px] text-[#a4a6bd]">
+                      <li key={line} className="flex items-center gap-2 text-[12px] text-[#3b3f5e] dark:text-[#a4a6bd]">
                         <span className="flex h-4 w-4 items-center justify-center rounded-full border border-[#34344a]">
                           <Check size={9} className="text-[#6C47FF]" />
                         </span>
@@ -1119,7 +1120,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                   </ul>
                 </div>
 
-                <div className="flex items-center gap-3 rounded-lg border border-[#232332] bg-[#101019] px-3 py-2.5">
+                <div className="flex items-center gap-3 rounded-lg border border-[#e6e8f2] dark:border-[#232332] bg-white dark:bg-[#101019] px-3 py-2.5">
                   <span
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white"
                     style={{ backgroundColor: colour }}
@@ -1235,8 +1236,8 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
 
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[11.5px] font-semibold text-[#b9b9cf]">Rules checklist</span>
-                    <span className="text-[10.5px] tabular-nums text-[#6f6f87]">
+                    <span className="text-[11.5px] font-semibold text-[#5a5f7a] dark:text-[#b9b9cf]">Rules checklist</span>
+                    <span className="text-[10.5px] tabular-nums text-[#6b7090] dark:text-[#6f6f87]">
                       {values.rules.length} added
                     </span>
                   </div>
@@ -1244,7 +1245,7 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                     {values.rules.map((rule, index) => (
                       <div
                         key={index}
-                        className="flex items-center gap-2 rounded-md border border-[#262636] bg-[#10101a] px-2.5 py-1.5"
+                        className="flex items-center gap-2 rounded-md border border-[#e6e8f2] dark:border-[#262636] bg-white dark:bg-[#10101a] px-2.5 py-1.5"
                       >
                         <span className="w-4 shrink-0 text-[11px] font-bold tabular-nums text-[#9d86ff]">
                           {index + 1}
@@ -1259,20 +1260,20 @@ function PlaybookWizard({ mode, initial, saving, error, onCancel, onSave }) {
                             })
                           }
                           aria-label={`Rule ${index + 1}`}
-                          className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#e8e8f4] outline-none"
+                          className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#14142b] dark:text-[#e8e8f4] outline-none"
                         />
                         <button
                           type="button"
                           onClick={() => removeRule(index)}
                           aria-label={`Remove rule ${index + 1}`}
-                          className={`rounded p-1 text-[#6f6f87] transition-colors hover:bg-white/5 hover:text-[#fb7185] ${FOCUS}`}
+                          className={`rounded p-1 text-[#6b7090] dark:text-[#6f6f87] transition-colors hover:bg-white/5 hover:text-[#fb7185] ${FOCUS}`}
                         >
                           <X size={12} />
                         </button>
                       </div>
                     ))}
                     {values.rules.length === 0 ? (
-                      <p className="rounded-md border border-dashed border-[#2a2a3c] px-3 py-2.5 text-[11.5px] text-[#6f6f87]">
+                      <p className="rounded-md border border-dashed border-[#e6e8f2] dark:border-[#2a2a3c] px-3 py-2.5 text-[11.5px] text-[#6b7090] dark:text-[#6f6f87]">
                         No rules yet. Add the first one below.
                       </p>
                     ) : null}
@@ -1361,7 +1362,7 @@ function PlaybookDetail({ playbook, linked, stats, onEdit, onShare, onDelete, on
 
   return (
     <div className="mx-auto w-full max-w-[1060px] pb-16">
-      <div className="overflow-hidden rounded-xl border border-[#232332] bg-[#0e0e16] shadow-2xl shadow-black/30">
+      <div className="overflow-hidden rounded-xl border border-[#e6e8f2] dark:border-[#232332] bg-[#0e0e16] shadow-2xl shadow-black/30">
         <div className="flex flex-col gap-4 border-b border-[#22222f] p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
           <div className="flex min-w-0 items-start gap-3.5">
             <span
@@ -1399,7 +1400,7 @@ function PlaybookDetail({ playbook, linked, stats, onEdit, onShare, onDelete, on
               className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold transition-colors ${FOCUS} ${
                 playbook.shared
                   ? "border-[#6C47FF]/50 bg-[#6C47FF]/15 text-[#c3b5ff]"
-                  : "border-[#2a2a3c] text-[#c9c9dc] hover:bg-white/5 hover:text-white"
+                  : "border-[#e6e8f2] dark:border-[#2a2a3c] text-[#3b3f5e] dark:text-[#c9c9dc] hover:bg-white/5 hover:text-white"
               }`}
             >
               <Share2 size={13} /> {playbook.shared ? "Shared" : "Share"}
@@ -1408,7 +1409,7 @@ function PlaybookDetail({ playbook, linked, stats, onEdit, onShare, onDelete, on
               type="button"
               onClick={onCopy}
               aria-label="Copy plan"
-              className={`rounded-md border border-[#2a2a3c] p-2 text-[#a4a6bd] transition-colors hover:bg-white/5 hover:text-white ${FOCUS}`}
+              className={`rounded-md border border-[#e6e8f2] dark:border-[#2a2a3c] p-2 text-[#3b3f5e] dark:text-[#a4a6bd] transition-colors hover:bg-white/5 hover:text-white ${FOCUS}`}
             >
               <Copy size={14} />
             </button>
@@ -1437,15 +1438,15 @@ function PlaybookDetail({ playbook, linked, stats, onEdit, onShare, onDelete, on
 
         <div className="space-y-6 p-5 sm:p-6">
           {playbook.description ? (
-            <p className="max-w-3xl text-[13px] leading-relaxed text-[#a4a6bd]">{playbook.description}</p>
+            <p className="max-w-3xl text-[13px] leading-relaxed text-[#3b3f5e] dark:text-[#a4a6bd]">{playbook.description}</p>
           ) : (
-            <p className="text-[12.5px] italic text-[#5f5f78]">No description yet. Edit the playbook to add one.</p>
+            <p className="text-[12.5px] italic text-[#8a8fb5] dark:text-[#5f5f78]">No description yet. Edit the playbook to add one.</p>
           )}
 
           {(playbook.entryCriteria || playbook.exitCriteria) && (
             <div className="grid gap-4 sm:grid-cols-2">
               {playbook.entryCriteria ? (
-                <div className="rounded-lg border border-[#232332] bg-[#11111a] p-4">
+                <div className="rounded-lg border border-[#e6e8f2] dark:border-[#232332] bg-[#f4f5fa] dark:bg-[#11111a] p-4">
                   <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#74748c]">
                     <ArrowRight size={11} className="text-[#34d399]" /> Entry
                   </div>
@@ -1455,7 +1456,7 @@ function PlaybookDetail({ playbook, linked, stats, onEdit, onShare, onDelete, on
                 </div>
               ) : null}
               {playbook.exitCriteria ? (
-                <div className="rounded-lg border border-[#232332] bg-[#11111a] p-4">
+                <div className="rounded-lg border border-[#e6e8f2] dark:border-[#232332] bg-[#f4f5fa] dark:bg-[#11111a] p-4">
                   <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#74748c]">
                     <ArrowLeft size={11} className="text-[#fb7185]" /> Exit
                   </div>
@@ -1467,9 +1468,9 @@ function PlaybookDetail({ playbook, linked, stats, onEdit, onShare, onDelete, on
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#232332] bg-[#232332] sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#e6e8f2] dark:border-[#232332] bg-[#232332] sm:grid-cols-4">
             {extraStats.map(([label, value, tone]) => (
-              <div key={label} className="bg-[#11111a] px-3 py-2.5">
+              <div key={label} className="bg-[#f4f5fa] dark:bg-[#11111a] px-3 py-2.5">
                 <div className="text-[10px] font-medium text-[#74748c]">{label}</div>
                 <div className={`text-[12.5px] font-bold tabular-nums ${tone}`}>{value}</div>
               </div>
@@ -1500,15 +1501,15 @@ function PlaybookDetail({ playbook, linked, stats, onEdit, onShare, onDelete, on
                 Linked trades ({linked.length})
               </span>
               {linked.length ? (
-                <span className="text-[10.5px] text-[#5f5f78]">Newest first</span>
+                <span className="text-[10.5px] text-[#8a8fb5] dark:text-[#5f5f78]">Newest first</span>
               ) : null}
             </div>
             {linked.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-[#2a2a3c] px-4 py-5 text-center text-[12px] leading-relaxed text-[#74748c]">
+              <p className="rounded-lg border border-dashed border-[#e6e8f2] dark:border-[#2a2a3c] px-4 py-5 text-center text-[12px] leading-relaxed text-[#74748c]">
                 No trades yet. Pick this playbook when you log a trade and its numbers will appear here.
               </p>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-[#232332]">
+              <div className="overflow-hidden rounded-lg border border-[#e6e8f2] dark:border-[#232332]">
                 {recent.slice(0, 12).map((trade) => {
                   const pnl = Number(trade.pnl) || 0;
                   const when = tradeDate(trade);
@@ -1517,7 +1518,7 @@ function PlaybookDetail({ playbook, linked, stats, onEdit, onShare, onDelete, on
                       key={trade.id}
                       className="flex items-center gap-3 border-b border-[#1f1f2c] px-3 py-2 text-[12px] last:border-0"
                     >
-                      <span className="min-w-0 flex-1 truncate font-semibold text-[#e8e8f4]">
+                      <span className="min-w-0 flex-1 truncate font-semibold text-[#14142b] dark:text-[#e8e8f4]">
                         {trade.pair || "—"}
                         <span className="font-normal text-[#74748c]"> · {trade.direction || "—"}</span>
                       </span>
@@ -1561,12 +1562,12 @@ function ConfirmDialog({ playbook, tradeCount, busy, onCancel, onConfirm }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-playbook-title"
-        className="w-full max-w-md rounded-xl border border-[#2a2a3c] bg-[#12121c] p-5 shadow-2xl"
+        className="w-full max-w-md rounded-xl border border-[#e6e8f2] dark:border-[#2a2a3c] bg-[#12121c] p-5 shadow-2xl"
       >
         <h2 id="delete-playbook-title" className="text-[15px] font-semibold text-white">
           Delete &ldquo;{playbook.name}&rdquo;?
         </h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-[#a4a6bd]">
+        <p className="mt-2 text-[12.5px] leading-relaxed text-[#3b3f5e] dark:text-[#a4a6bd]">
           The plan and its rules are removed. {tradeCount} linked trade{tradeCount === 1 ? "" : "s"} stay in your
           journal, but they will no longer point at this playbook.
         </p>
@@ -1591,6 +1592,9 @@ function ConfirmDialog({ playbook, tradeCount, busy, onCancel, onConfirm }) {
 
 export default function Playbooks({ currentAccount }) {
   const navigate = useNavigate();
+
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   const [PREVIEW] = useState(
     () =>
@@ -1868,7 +1872,7 @@ export default function Playbooks({ currentAccount }) {
     content = <SkeletonGrid />;
   } else if (error) {
     content = (
-      <div className="rounded-xl border border-[#2a2a3c] bg-[#0e0e16] p-8 text-center">
+      <div className="rounded-xl border border-[#e6e8f2] dark:border-[#2a2a3c] bg-[#0e0e16] p-8 text-center">
         <p className="text-[13px] font-semibold text-white">{error}</p>
         <button type="button" onClick={load} className={`mt-4 ${PRIMARY}`}>
           Try again
@@ -1877,10 +1881,10 @@ export default function Playbooks({ currentAccount }) {
     );
   } else if (noAccount) {
     content = (
-      <div className="rounded-xl border border-[#2a2a3c] bg-[#0e0e16] p-8 text-center">
-        <Wallet size={28} className="mx-auto text-[#6f6f87]" />
+      <div className="rounded-xl border border-[#e6e8f2] dark:border-[#2a2a3c] bg-[#0e0e16] p-8 text-center">
+        <Wallet size={28} className="mx-auto text-[#6b7090] dark:text-[#6f6f87]" />
         <p className="mt-3 text-[15px] font-semibold text-white">Connect an account first</p>
-        <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-[#8f8fa6]">
+        <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">
           Playbooks live inside an account. Add or pick one and this page will fill in.
         </p>
         <button type="button" onClick={() => navigate("/add-trade")} className={`mt-5 ${PRIMARY}`}>
@@ -1893,7 +1897,7 @@ export default function Playbooks({ currentAccount }) {
   } else if (tab === "shared") {
     content = sharedCards.length ? (
       <>
-        <p className="mb-4 max-w-2xl text-[12px] leading-relaxed text-[#8f8fa6]">
+        <p className="mb-4 max-w-2xl text-[12px] leading-relaxed text-[#6b7090] dark:text-[#8f8fa6]">
           {sharedCards.length} shared playbook{sharedCards.length === 1 ? "" : "s"}. Sharing marks a plan as
           published and lists it here. Copy plan puts the whole plan on your clipboard.
         </p>
@@ -1957,7 +1961,7 @@ export default function Playbooks({ currentAccount }) {
   }
 
   return (
-    <div className="-m-1 min-h-screen bg-[#0a0a10] sm:-m-3" style={{ backgroundColor: BG, color: TEXT }}>
+    <div className="-m-1 min-h-screen bg-[#f4f5fa] dark:bg-[#0a0a10] sm:-m-3" style={{ backgroundColor: BG, color: TEXT }}>
       <div className="mx-auto w-full max-w-[1600px] px-3 pb-20 sm:px-6">
         <PageHeader
           rangeKey={rangeKey}
@@ -2024,7 +2028,7 @@ export default function Playbooks({ currentAccount }) {
       {toast ? (
         <div
           role="status"
-          className="pointer-events-none fixed bottom-5 left-1/2 z-[900] -translate-x-1/2 rounded-lg border border-[#2a2a3c] bg-[#161622] px-4 py-2 text-[12px] font-medium text-white shadow-xl"
+          className="pointer-events-none fixed bottom-5 left-1/2 z-[900] -translate-x-1/2 rounded-lg border border-[#e6e8f2] dark:border-[#2a2a3c] bg-white dark:bg-[#161622] px-4 py-2 text-[12px] font-medium text-white shadow-xl"
         >
           {toast}
         </div>
