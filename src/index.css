@@ -52,6 +52,7 @@
   --app-border: #e6e8f2;
   --app-text: #14142b;
   --app-muted: #6b7090;
+  --app-faint: #71768f;
 
   /* chart chrome that lives inside SVG <stroke> attributes */
   --chart-grid: #e6e8f2;
@@ -85,6 +86,7 @@
   --app-border: #262645;
   --app-text: #e8e9f7;
   --app-muted: #8a8fb5;
+  --app-faint: #66667c;
 
   --chart-grid: #1e1e28;
   --chart-axis: #2c2c3a;

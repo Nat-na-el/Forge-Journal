@@ -59,10 +59,10 @@ import {
 import { Bar, Line } from "react-chartjs-2";
 import DeleteConfirmModal from "../components/ui/DeleteConfirmModal";
 import CsvImportModal from "../components/ui/CsvImportModal";
-import TradeChart from "../components/TradeChart";
 import { MistakePicker, StarRating } from "../components/ui/TradeGrading";
 import demoDashboardTrades from "../lib/demoDashboardData";
 import useAccent from "../hooks/useAccent";
+import { useTheme } from "../Theme-provider";
 import { auth, db } from "../firebase";
 import {
   collection,
@@ -79,9 +79,9 @@ import {
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler, Tooltip);
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
-const TEXT = "#e9e9f2";
-const MUTED = "#8b8ba3";
-const FAINT = "#66667c";
+const TEXT = "var(--app-text)";
+const MUTED = "var(--app-muted)";
+const FAINT = "var(--app-faint)";
 const POS = "#22c493";
 const NEG = "#f2556e";
 const BE = "#6C47FF";
@@ -313,7 +313,7 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-64", i
                   <span className="flex min-w-0 flex-col">
                     <span>{item.label}</span>
                     {item.description ? (
-                      <span className="mt-0.5 text-[10px] font-normal leading-snug" style={{ color: FAINT }}>
+                      <span className="mt-0.5 text-[10px] font-normal leading-snug" style={{ color: "var(--app-faint)" }}>
                         {item.description}
                       </span>
                     ) : null}
@@ -369,7 +369,7 @@ function FilterGroup({ id, label, options, selected, expanded, onExpand, onToggl
       {expanded ? (
         <div className="grid max-h-44 grid-cols-2 gap-x-3 gap-y-0.5 overflow-y-auto pb-2.5 pl-5 pr-1">
           {options.length === 0 ? (
-            <p className="col-span-2 py-1 text-[11px]" style={{ color: FAINT }}>
+            <p className="col-span-2 py-1 text-[11px]" style={{ color: "var(--app-faint)" }}>
               Nothing to choose from yet.
             </p>
           ) : (
@@ -536,11 +536,11 @@ function FilterPanel({
 
           {tab === "tags" ? (
             <div className="px-1 py-2">
-              <p className="mb-2 text-[11px]" style={{ color: MUTED }}>
+              <p className="mb-2 text-[11px]" style={{ color: "var(--app-muted)" }}>
                 Show trades that carry any of these tags.
               </p>
               {tags.length === 0 ? (
-                <p className="text-[11px]" style={{ color: FAINT }}>
+                <p className="text-[11px]" style={{ color: "var(--app-faint)" }}>
                   No tags have been saved on this account yet.
                 </p>
               ) : (
@@ -613,7 +613,7 @@ function FilterPanel({
                   </button>
                 ))}
               </div>
-              <p className="text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
+              <p className="text-[10.5px] leading-relaxed" style={{ color: "var(--app-faint)" }}>
                 Dates use the close time of each trade, falling back to the open time for positions that are still running.
               </p>
             </div>
@@ -622,7 +622,7 @@ function FilterPanel({
           {tab === "playbook" ? (
             <div className="px-1 py-2">
               {books.length === 0 && playbooks.length === 0 ? (
-                <p className="text-[11px]" style={{ color: FAINT }}>
+                <p className="text-[11px]" style={{ color: "var(--app-faint)" }}>
                   No playbooks or strategies have been saved yet.
                 </p>
               ) : (
@@ -684,8 +684,8 @@ const Panel = ({ title, action, children, className = "" }) => (
 
 const StatRow = ({ label, value, tone }) => (
   <div className="flex items-center justify-between gap-3 border-b border-[#e6e8f2] dark:border-[#1f1f2b] py-2 text-[11.5px] last:border-0">
-    <span style={{ color: MUTED }}>{label}</span>
-    <span className="text-right font-semibold tabular-nums" style={{ color: tone || "#d4d6e6" }}>
+    <span style={{ color: "var(--app-muted)" }}>{label}</span>
+    <span className="text-right font-semibold tabular-nums" style={{ color: tone || "var(--app-text)" }}>
       {value}
     </span>
   </div>
@@ -773,7 +773,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
         </div>
       }
     >
-      <div className="mb-1.5 grid grid-cols-8 gap-1.5 text-center text-[10px] font-semibold uppercase tracking-wider" style={{ color: MUTED }}>
+      <div className="mb-1.5 grid grid-cols-8 gap-1.5 text-center text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--app-muted)" }}>
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Week"].map((d) => (
           <div key={d}>{d}</div>
         ))}
@@ -814,7 +814,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
                         >
                           {fmtCompact(rec.pnl, true)}
                         </div>
-                        <div className="text-[9.5px]" style={{ color: MUTED }}>
+                        <div className="text-[9.5px]" style={{ color: "var(--app-muted)" }}>
                           {rec.count} trade{rec.count > 1 ? "s" : ""}
                         </div>
                       </>
@@ -823,7 +823,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
                 );
               })}
               <div className="rounded-lg border border-[#e6e8f2] dark:border-[#1f1f2b] bg-white dark:bg-[#0f0f18] p-1.5">
-                <div className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: FAINT }}>
+                <div className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: "var(--app-faint)" }}>
                   Wk {wi + 1}
                 </div>
                 <div
@@ -832,7 +832,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
                 >
                   {fmtCompact(weekTotal, true)}
                 </div>
-                <div className="text-[9.5px]" style={{ color: MUTED }}>
+                <div className="text-[9.5px]" style={{ color: "var(--app-muted)" }}>
                   {weekCount} day{weekCount === 1 ? "" : "s"}
                 </div>
               </div>
@@ -888,6 +888,8 @@ const TV_INTERVALS = [
 function TradingViewChart({ symbol, interval, accent = "#6C47FF" }) {
   const hostRef = useRef(null);
   const [status, setStatus] = useState("loading");
+  const { theme } = useTheme();
+  const isDark = theme !== "light";
 
   useEffect(() => {
     const host = hostRef.current;
@@ -910,11 +912,11 @@ function TradingViewChart({ symbol, interval, accent = "#6C47FF" }) {
       symbol,
       interval,
       timezone: "Etc/UTC",
-      theme: "dark",
+      theme: isDark ? "dark" : "light",
       style: "1",
       locale: "en",
-      backgroundColor: "rgba(11, 11, 18, 1)",
-      gridColor: "rgba(148, 163, 184, 0.08)",
+      backgroundColor: isDark ? "rgba(11, 11, 18, 1)" : "rgba(255, 255, 255, 1)",
+      gridColor: isDark ? "rgba(148, 163, 184, 0.08)" : "rgba(148, 163, 184, 0.22)",
       hide_top_toolbar: false,
       hide_legend: false,
       hide_side_toolbar: false,
@@ -949,7 +951,7 @@ function TradingViewChart({ symbol, interval, accent = "#6C47FF" }) {
       window.clearTimeout(timer);
       host.innerHTML = "";
     };
-  }, [symbol, interval]);
+  }, [symbol, interval, isDark]);
 
   return (
     <div className="relative h-full w-full">
@@ -960,7 +962,7 @@ function TradingViewChart({ symbol, interval, accent = "#6C47FF" }) {
             className="h-7 w-7 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#2a2a3a]"
             style={{ borderTopColor: accent }}
           />
-          <p className="text-[11.5px]" style={{ color: MUTED }}>
+          <p className="text-[11.5px]" style={{ color: "var(--app-muted)" }}>
             Loading the live chart…
           </p>
         </div>
@@ -974,7 +976,7 @@ function TradingViewChart({ symbol, interval, accent = "#6C47FF" }) {
             <BarChart3 size={18} />
           </span>
           <p className="text-[13px] font-medium text-[#3b3f5e] dark:text-[#c9cbe0]">The live chart could not load</p>
-          <p className="max-w-[300px] text-[11px] leading-relaxed" style={{ color: FAINT }}>
+          <p className="max-w-[300px] text-[11px] leading-relaxed" style={{ color: "var(--app-faint)" }}>
             Check the connection, or open this market on TradingView in a new tab.
           </p>
           <a
@@ -996,14 +998,14 @@ function TagSection({ title, items = [], color = "#b9b9cc", onManage }) {
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: MUTED }}>
+        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--app-muted)" }}>
           {title}
         </span>
         {onManage ? (
           <button
             type="button"
             onClick={onManage}
-            className={`rounded text-[10px] font-medium text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
+            className={`rounded text-[10px] font-medium text-[#6C47FF] dark:text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
           >
             Manage
           </button>
@@ -1022,7 +1024,7 @@ function TagSection({ title, items = [], color = "#b9b9cc", onManage }) {
           ))}
         </div>
       ) : (
-        <p className="text-[10.5px]" style={{ color: FAINT }}>
+        <p className="text-[10.5px]" style={{ color: "var(--app-faint)" }}>
           None tagged
         </p>
       )}
@@ -1035,7 +1037,6 @@ function TrackingOverlay({
   accountName,
   startingBalance,
   accent,
-  demo = false,
   canPrev,
   canNext,
   onPrev,
@@ -1050,7 +1051,6 @@ function TrackingOverlay({
   const [tab, setTab] = useState("stats");
   const [noteTab, setNoteTab] = useState("note");
   const [interval, setInterval] = useState("5");
-  const [chartView, setChartView] = useState("trade");
   const [noteDraft, setNoteDraft] = useState(trade.notes || "");
   const [noteSaved, setNoteSaved] = useState(false);
   const [shared, setShared] = useState(false);
@@ -1159,7 +1159,7 @@ function TrackingOverlay({
   ];
 
   return (
-    <div className="fixed inset-0 z-[1050] flex flex-col" style={{ backgroundColor: "#07070c", color: TEXT }}>
+    <div className="fixed inset-0 z-[1050] flex flex-col bg-[#f4f5fa] text-[#14142b] dark:bg-[#07070c] dark:text-[#e9e9f2]">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#f4f5fa] dark:bg-[#0a0a10] px-2.5 sm:px-4">
         <button type="button" onClick={onClose} className={ICON_BTN} aria-label="Back to the trade log">
           <ArrowLeft size={16} />
@@ -1192,15 +1192,15 @@ function TrackingOverlay({
             <span className="truncate text-[14px] font-semibold">{trade.pair || "—"}</span>
             <SidePill trade={trade} />
             {pending ? (
-              <span className="rounded bg-[#f59e0b]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#fbbf24]">
+              <span className="rounded bg-[#f59e0b]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#b45309] dark:text-[#fbbf24]">
                 Open
               </span>
             ) : null}
-            <span className="hidden truncate text-[10.5px] sm:inline" style={{ color: MUTED }}>
+            <span className="hidden truncate text-[10.5px] sm:inline" style={{ color: "var(--app-muted)" }}>
               {day ? format(day, "EEE, MMM d, yyyy") : "No date"} · {accountName}
             </span>
           </div>
-          <p className="truncate text-[10.5px] sm:hidden" style={{ color: MUTED }}>
+          <p className="truncate text-[10.5px] sm:hidden" style={{ color: "var(--app-muted)" }}>
             {day ? format(day, "MMM d, yyyy") : "No date"} · {accountName}
           </p>
         </div>
@@ -1209,7 +1209,7 @@ function TrackingOverlay({
           <button
             type="button"
             onClick={onToggleReviewed}
-            className={trade.reviewed ? `${GHOST} !border-[#22c493]/40 !text-[#2dd4a0]` : GHOST}
+            className={trade.reviewed ? `${GHOST} !border-[#22c493]/40 !text-[#12996f] dark:!text-[#2dd4a0]` : GHOST}
             aria-pressed={Boolean(trade.reviewed)}
           >
             <Check size={13} />
@@ -1269,7 +1269,7 @@ function TrackingOverlay({
             {tab === "stats" ? (
               <div className="p-3">
                 <div className="rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0d0d16] px-3 py-2.5">
-                  <p className="text-[10px] uppercase tracking-wide" style={{ color: MUTED }}>
+                  <p className="text-[10px] uppercase tracking-wide" style={{ color: "var(--app-muted)" }}>
                     Net P&amp;L
                   </p>
                   <p className="mt-1 text-[24px] font-bold leading-none tabular-nums" style={{ color: tone }}>
@@ -1280,8 +1280,8 @@ function TrackingOverlay({
                 <dl className="mt-1.5 divide-y divide-[#e6e8f2] dark:divide-[#1f1f2b]">
                   {rows.map(([label, value, valueTone]) => (
                     <div key={label} className="flex items-center justify-between gap-3 py-[6px] text-[11px]">
-                      <dt style={{ color: MUTED }}>{label}</dt>
-                      <dd className="truncate text-right font-medium tabular-nums" style={{ color: valueTone || "#d4d6e6" }}>
+                      <dt style={{ color: "var(--app-muted)" }}>{label}</dt>
+                      <dd className="truncate text-right font-medium tabular-nums" style={{ color: valueTone || "var(--app-text)" }}>
                         {value}
                       </dd>
                     </div>
@@ -1290,7 +1290,7 @@ function TrackingOverlay({
 
                 <div className="mt-3">
                   <div className="flex items-center justify-between text-[10.5px]">
-                    <span style={{ color: MUTED }}>Setup score</span>
+                    <span style={{ color: "var(--app-muted)" }}>Setup score</span>
                     <span className="font-semibold" style={{ color: rating ? accent : FAINT }}>
                       {rating ? `${rating} / 5` : "Not scored"}
                     </span>
@@ -1304,13 +1304,13 @@ function TrackingOverlay({
                 </div>
 
                 <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0d0d16] px-2.5 py-2">
-                  <span className="text-[10.5px]" style={{ color: MUTED }}>
+                  <span className="text-[10.5px]" style={{ color: "var(--app-muted)" }}>
                     Trade rating
                   </span>
                   {rating ? (
                     <StarRating value={rating} accent={accent} readOnly size={13} />
                   ) : (
-                    <span className="text-[10px]" style={{ color: FAINT }}>
+                    <span className="text-[10px]" style={{ color: "var(--app-faint)" }}>
                       Not rated
                     </span>
                   )}
@@ -1321,12 +1321,12 @@ function TrackingOverlay({
             {tab === "playbook" ? (
               <div className="space-y-3.5 p-3">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wide" style={{ color: MUTED }}>
+                  <p className="text-[10px] uppercase tracking-wide" style={{ color: "var(--app-muted)" }}>
                     Playbook
                   </p>
                   <p className="mt-0.5 text-[12.5px] font-semibold text-[#14142b] dark:text-white">{name || "Not linked"}</p>
                   {trade.strategy && trade.playbook && trade.strategy !== trade.playbook ? (
-                    <p className="text-[10.5px]" style={{ color: MUTED }}>
+                    <p className="text-[10.5px]" style={{ color: "var(--app-muted)" }}>
                       Strategy: {trade.strategy}
                     </p>
                   ) : null}
@@ -1345,7 +1345,7 @@ function TrackingOverlay({
               <div className="p-3">
                 <table className="w-full border-collapse text-[10.5px]">
                   <thead>
-                    <tr className="text-left" style={{ color: MUTED }}>
+                    <tr className="text-left" style={{ color: "var(--app-muted)" }}>
                       <th className="pb-1.5 font-medium">Time</th>
                       <th className="pb-1.5 text-right font-medium">Price</th>
                       <th className="pb-1.5 text-right font-medium">Qty</th>
@@ -1366,14 +1366,14 @@ function TrackingOverlay({
                         <td className="py-1.5 tabular-nums">{close ? format(close, "HH:mm:ss") : "—"}</td>
                         <td className="py-1.5 text-right tabular-nums">{trade.exit || "—"}</td>
                         <td className="py-1.5 text-right tabular-nums">{trade.lotSize || "—"}</td>
-                        <td className="py-1.5 text-right font-semibold" style={{ color: MUTED }}>
+                        <td className="py-1.5 text-right font-semibold" style={{ color: "var(--app-muted)" }}>
                           Close
                         </td>
                       </tr>
                     ) : null}
                   </tbody>
                 </table>
-                <p className="mt-3 border-t border-[#e6e8f2] dark:border-[#1f1f2b] pt-2 text-[10px] leading-relaxed" style={{ color: FAINT }}>
+                <p className="mt-3 border-t border-[#e6e8f2] dark:border-[#1f1f2b] pt-2 text-[10px] leading-relaxed" style={{ color: "var(--app-faint)" }}>
                   Fills come from the trade record. Imports with partial fills are grouped into a single average entry and exit.
                 </p>
               </div>
@@ -1396,9 +1396,9 @@ function TrackingOverlay({
                   </a>
                 ) : (
                   <div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-[#e6e8f2] dark:border-[#2a2a3a] px-3 py-8 text-center">
-                    <Paperclip size={18} style={{ color: FAINT }} />
+                    <Paperclip size={18} style={{ color: "var(--app-faint)" }} />
                     <p className="text-[11.5px] text-[#5a5f7a] dark:text-[#9a9ab2]">No attachments yet</p>
-                    <p className="text-[10px] leading-relaxed" style={{ color: FAINT }}>
+                    <p className="text-[10px] leading-relaxed" style={{ color: "var(--app-faint)" }}>
                       Add a chart snapshot URL to keep the setup with the trade.
                     </p>
                   </div>
@@ -1422,32 +1422,9 @@ function TrackingOverlay({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e6e8f2] dark:border-[#1f1f2b] bg-white dark:bg-[#101018] px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11.5px] font-semibold text-[#14142b] dark:text-white">{trade.pair || "Chart"}</span>
-                <span className="text-[10px]" style={{ color: FAINT }}>
+                <span className="text-[10px]" style={{ color: "var(--app-faint)" }}>
                   {symbol}
                 </span>
-                <div
-                  className="flex items-center rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0d0d16] p-0.5"
-                  role="tablist"
-                  aria-label="Chart view"
-                >
-                  {[
-                    ["trade", "Trade"],
-                    ["live", "Live"],
-                  ].map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      role="tab"
-                      aria-selected={chartView === key}
-                      onClick={() => setChartView(key)}
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${FOCUS} ${
-                        chartView === key ? "bg-[#6C47FF] text-white" : "text-[#8b8ba3] hover:text-[#14142b] dark:hover:text-white"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
                 <div className="flex items-center rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0d0d16] p-0.5">
                   {TV_INTERVALS.map(([value, label]) => (
                     <button
@@ -1465,32 +1442,22 @@ function TrackingOverlay({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="hidden items-center gap-1 text-[10px] sm:flex" style={{ color: FAINT }}>
+                <span className="hidden items-center gap-1 text-[10px] sm:flex" style={{ color: "var(--app-faint)" }}>
                   <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: POS }} />{" "}
-                  {chartView === "trade" ? "Entry and exit marked" : "Live chart"}
+                  Live chart
                 </span>
                 <a
                   href={journalUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`rounded text-[10.5px] font-semibold text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
+                  className={`rounded text-[10.5px] font-semibold text-[#6C47FF] dark:text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
                 >
                   TradingView ↗
                 </a>
               </div>
             </div>
             <div className="relative h-[380px] w-full bg-[#f4f5fa] dark:bg-[#0b0b13] lg:h-auto lg:min-h-0 lg:flex-1">
-              {chartView === "trade" ? (
-                <TradeChart
-                  trade={trade}
-                  intervalKey={interval}
-                  accent={accent}
-                  demo={demo}
-                  onOpenLive={() => setChartView("live")}
-                />
-              ) : (
-                <TradingViewChart symbol={symbol} interval={interval} accent={accent} />
-              )}
+              <TradingViewChart symbol={symbol} interval={interval} accent={accent} />
             </div>
           </section>
 
@@ -1515,7 +1482,7 @@ function TrackingOverlay({
               <div className="ml-auto flex items-center gap-2">
                 {noteTab === "note" ? (
                   <>
-                    <span className="hidden text-[10px] sm:inline" style={{ color: FAINT }}>
+                    <span className="hidden text-[10px] sm:inline" style={{ color: "var(--app-faint)" }}>
                       {words} word{words === 1 ? "" : "s"}
                     </span>
                     <button
@@ -1539,7 +1506,7 @@ function TrackingOverlay({
                   <button
                     type="button"
                     onClick={() => onOpenJournal(day)}
-                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-semibold text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
+                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-semibold text-[#6C47FF] dark:text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
                   >
                     <CalendarDays size={11} /> Open the journal for this day
                   </button>
@@ -1557,14 +1524,14 @@ function TrackingOverlay({
               />
             ) : (
               <div className="flex h-[132px] flex-col items-center justify-center gap-1.5 text-center">
-                <CalendarDays size={18} style={{ color: FAINT }} />
+                <CalendarDays size={18} style={{ color: "var(--app-faint)" }} />
                 <p className="text-[12px] text-[#5a5f7a] dark:text-[#9a9ab2]">
                   Day view entries live alongside the trading day.
                 </p>
                 <button
                   type="button"
                   onClick={() => onOpenJournal(day)}
-                  className={`rounded text-[11px] font-semibold text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
+                  className={`rounded text-[11px] font-semibold text-[#6C47FF] dark:text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
                 >
                   Open the journal for this day
                 </button>
@@ -2243,7 +2210,7 @@ export default function Trades({ currentAccount }) {
         <div className="max-w-md rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] p-8 text-center">
           <AlertCircle size={34} className="mx-auto mb-3" style={{ color: "#f59e0b" }} />
           <h2 className="mb-1.5 text-lg font-semibold">No account selected</h2>
-          <p className="mb-4 text-[12.5px] leading-relaxed" style={{ color: MUTED }}>
+          <p className="mb-4 text-[12.5px] leading-relaxed" style={{ color: "var(--app-muted)" }}>
             Pick a trading account first, then its trades will show up here.
           </p>
           <button type="button" onClick={() => navigate("/add-trade")} className={PRIMARY}>
@@ -2266,7 +2233,7 @@ export default function Trades({ currentAccount }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-[22px] font-semibold tracking-tight sm:text-[24px]">Trades</h1>
-            <p className="mt-1 text-[12px]" style={{ color: MUTED }}>
+            <p className="mt-1 text-[12px]" style={{ color: "var(--app-muted)" }}>
               {accountName} · {trades.length} logged · {analytics.total} closed
             </p>
           </div>
@@ -2382,7 +2349,7 @@ export default function Trades({ currentAccount }) {
         </div>
 
         {/* Import line */}
-        <div className="mb-4 mt-2 flex flex-wrap items-center gap-2 text-[11px]" style={{ color: MUTED }}>
+        <div className="mb-4 mt-2 flex flex-wrap items-center gap-2 text-[11px]" style={{ color: "var(--app-muted)" }}>
           <span>
             Last import:{" "}
             <span style={{ color: "#b9b9cc" }}>
@@ -2397,7 +2364,7 @@ export default function Trades({ currentAccount }) {
           >
             {loading ? "Resyncing…" : "Resync"}
           </button>
-          <span className="hidden sm:inline" style={{ color: FAINT }}>
+          <span className="hidden sm:inline" style={{ color: "var(--app-faint)" }}>
             · {rangeLabel}
           </span>
           {selectedDate ? (
@@ -2438,7 +2405,7 @@ export default function Trades({ currentAccount }) {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11.5px] font-medium" style={{ color: MUTED }}>
+              <span className="text-[11.5px] font-medium" style={{ color: "var(--app-muted)" }}>
                 Net P&amp;L
               </span>
               <button
@@ -2456,45 +2423,45 @@ export default function Trades({ currentAccount }) {
             >
               {fmt(analytics.net, true)}
             </div>
-            <div className="mt-1.5 text-[10.5px]" style={{ color: FAINT }}>
+            <div className="mt-1.5 text-[10.5px]" style={{ color: "var(--app-faint)" }}>
               {analytics.total} closed{analytics.pending ? ` · ${analytics.pending} open` : ""}
             </div>
           </div>
 
           <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
-            <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
+            <div className="text-[11.5px] font-medium" style={{ color: "var(--app-muted)" }}>
               Win rate
             </div>
             <div className="mt-1.5 text-[24px] font-bold leading-none tabular-nums">
               {analytics.winRate.toFixed(1)}%
             </div>
-            <div className="mt-1.5 text-[10.5px]" style={{ color: FAINT }}>
+            <div className="mt-1.5 text-[10.5px]" style={{ color: "var(--app-faint)" }}>
               {analytics.wins}W · {analytics.be}BE · {analytics.losses}L
             </div>
           </div>
 
           <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
-            <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
+            <div className="text-[11.5px] font-medium" style={{ color: "var(--app-muted)" }}>
               Profit factor
             </div>
             <div className="mt-1.5 text-[24px] font-bold leading-none tabular-nums">{pfText}</div>
-            <div className="mt-1.5 text-[10.5px]" style={{ color: FAINT }}>
+            <div className="mt-1.5 text-[10.5px]" style={{ color: "var(--app-faint)" }}>
               {fmt(analytics.grossWin)} / {fmt(analytics.grossLoss)}
             </div>
           </div>
 
           <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
-            <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
+            <div className="text-[11.5px] font-medium" style={{ color: "var(--app-muted)" }}>
               Avg win / loss
             </div>
             <div className="mt-1.5 text-[24px] font-bold leading-none tabular-nums">{payoffText}</div>
-            <div className="mt-1.5 text-[10.5px]" style={{ color: FAINT }}>
+            <div className="mt-1.5 text-[10.5px]" style={{ color: "var(--app-faint)" }}>
               {fmt(analytics.avgWin)} / {fmt(analytics.avgLoss)}
             </div>
           </div>
 
           <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
-            <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
+            <div className="text-[11.5px] font-medium" style={{ color: "var(--app-muted)" }}>
               Expectancy
             </div>
             <div
@@ -2503,13 +2470,13 @@ export default function Trades({ currentAccount }) {
             >
               {fmt(analytics.expectancy, true)}
             </div>
-            <div className="mt-1.5 text-[10.5px]" style={{ color: FAINT }}>
+            <div className="mt-1.5 text-[10.5px]" style={{ color: "var(--app-faint)" }}>
               per closed trade
             </div>
           </div>
 
           <div className="rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-4 py-3.5">
-            <div className="text-[11.5px] font-medium" style={{ color: MUTED }}>
+            <div className="text-[11.5px] font-medium" style={{ color: "var(--app-muted)" }}>
               Max drawdown
             </div>
             <div
@@ -2518,7 +2485,7 @@ export default function Trades({ currentAccount }) {
             >
               {analytics.maxDD ? fmt(-analytics.maxDD) : fmt(0)}
             </div>
-            <div className="mt-1.5 text-[10.5px]" style={{ color: FAINT }}>
+            <div className="mt-1.5 text-[10.5px]" style={{ color: "var(--app-faint)" }}>
               peak to trough
             </div>
           </div>
@@ -2557,14 +2524,14 @@ export default function Trades({ currentAccount }) {
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e6e8f2] dark:border-[#1f1f2b] px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <h2 className="text-[13px] font-semibold">Trade log</h2>
-                <span className="text-[11px]" style={{ color: MUTED }}>
+                <span className="text-[11px]" style={{ color: "var(--app-muted)" }}>
                   {filteredTrades.length} trade{filteredTrades.length === 1 ? "" : "s"}
                 </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative flex items-center gap-1.5 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0f0f18] px-2.5 py-1.5">
-                  <Search size={13} style={{ color: MUTED }} />
+                  <Search size={13} style={{ color: "var(--app-muted)" }} />
                   <input
                     type="text"
                     value={searchQuery}
@@ -2575,7 +2542,7 @@ export default function Trades({ currentAccount }) {
                   />
                   {searchQuery ? (
                     <button type="button" onClick={() => setSearchQuery("")} aria-label="Clear search" className={FOCUS}>
-                      <X size={12} style={{ color: MUTED }} />
+                      <X size={12} style={{ color: "var(--app-muted)" }} />
                     </button>
                   ) : null}
                 </div>
@@ -2666,7 +2633,7 @@ export default function Trades({ currentAccount }) {
                           <p className="text-[14px] font-semibold text-[#14142b] dark:text-white">
                             {trades.length ? "No trades match these filters" : "No trades logged yet"}
                           </p>
-                          <p className="mt-1 max-w-[380px] text-[12px] leading-relaxed" style={{ color: MUTED }}>
+                          <p className="mt-1 max-w-[380px] text-[12px] leading-relaxed" style={{ color: "var(--app-muted)" }}>
                             {trades.length
                               ? "Loosen a filter or clear them all to see the rest of the account."
                               : `Start the history for ${accountName} with a manual entry or a CSV import.`}
@@ -2733,7 +2700,7 @@ export default function Trades({ currentAccount }) {
                             <div className="text-[11.5px] text-[#3b3f5e] dark:text-[#d4d6e6]">
                               {date ? format(date, "MMM d, yyyy") : "—"}
                             </div>
-                            <div className="text-[10px]" style={{ color: FAINT }}>
+                            <div className="text-[10px]" style={{ color: "var(--app-faint)" }}>
                               {date ? format(date, "HH:mm") : ""}
                               {pending ? " · open" : ""}
                             </div>
@@ -2776,13 +2743,13 @@ export default function Trades({ currentAccount }) {
                             {Number(trade.rating) > 0 ? (
                               <StarRating value={Number(trade.rating)} accent={accent} readOnly size={11} />
                             ) : (
-                              <span className="text-[10px]" style={{ color: FAINT }}>
+                              <span className="text-[10px]" style={{ color: "var(--app-faint)" }}>
                                 —
                               </span>
                             )}
                           </td>
                           <td className={`${TD} hidden max-w-[150px] 2xl:table-cell`}>
-                            <span className="block truncate text-[11.5px]" style={{ color: "#b9b9cc" }}>
+                            <span className="block truncate text-[11.5px]" style={{ color: "var(--app-muted)" }}>
                               {trade.playbook || trade.strategy || "—"}
                             </span>
                           </td>
@@ -2827,7 +2794,7 @@ export default function Trades({ currentAccount }) {
 
             {/* Footer */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#e6e8f2] dark:border-[#1f1f2b] px-3 py-2.5">
-              <div className="flex items-center gap-3 text-[11px]" style={{ color: MUTED }}>
+              <div className="flex items-center gap-3 text-[11px]" style={{ color: "var(--app-muted)" }}>
                 <span>
                   {filteredTrades.length
                     ? `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, filteredTrades.length)} of ${filteredTrades.length}`
@@ -2856,7 +2823,7 @@ export default function Trades({ currentAccount }) {
                     </option>
                   ))}
                 </select>
-                <span className="text-[11px]" style={{ color: MUTED }}>
+                <span className="text-[11px]" style={{ color: "var(--app-muted)" }}>
                   Page {safePage} of {pageCount}
                 </span>
                 <button
@@ -2924,7 +2891,7 @@ export default function Trades({ currentAccount }) {
                     />
                   </div>
                 ) : (
-                  <div className="flex h-64 items-center justify-center text-[12px]" style={{ color: MUTED }}>
+                  <div className="flex h-64 items-center justify-center text-[12px]" style={{ color: "var(--app-muted)" }}>
                     Close a trade to start the equity curve
                   </div>
                 )}
@@ -2936,22 +2903,22 @@ export default function Trades({ currentAccount }) {
                     <Donut wins={analytics.wins} losses={analytics.losses} be={analytics.be} />
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <div className="text-[20px] font-semibold tabular-nums">{analytics.winRate.toFixed(0)}%</div>
-                      <div className="text-[9px] uppercase tracking-wider" style={{ color: MUTED }}>
+                      <div className="text-[9px] uppercase tracking-wider" style={{ color: "var(--app-muted)" }}>
                         win rate
                       </div>
                     </div>
                   </div>
                   <div className="flex-1 space-y-2 text-[12px]">
                     <div className="flex justify-between">
-                      <span style={{ color: MUTED }}>Wins</span>
+                      <span style={{ color: "var(--app-muted)" }}>Wins</span>
                       <span style={{ color: POS }}>{analytics.wins}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span style={{ color: MUTED }}>Break-even</span>
+                      <span style={{ color: "var(--app-muted)" }}>Break-even</span>
                       <span>{analytics.be}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span style={{ color: MUTED }}>Losses</span>
+                      <span style={{ color: "var(--app-muted)" }}>Losses</span>
                       <span style={{ color: NEG }}>{analytics.losses}</span>
                     </div>
                   </div>
@@ -2963,7 +2930,7 @@ export default function Trades({ currentAccount }) {
                     ["Short", analytics.short],
                   ].map(([name, data]) => (
                     <div key={name} className="rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0f0f18] p-3">
-                      <div className="text-[10.5px] font-medium" style={{ color: MUTED }}>
+                      <div className="text-[10.5px] font-medium" style={{ color: "var(--app-muted)" }}>
                         {name}
                       </div>
                       <div
@@ -2972,7 +2939,7 @@ export default function Trades({ currentAccount }) {
                       >
                         {fmt(data.pnl, true)}
                       </div>
-                      <div className="text-[10px]" style={{ color: FAINT }}>
+                      <div className="text-[10px]" style={{ color: "var(--app-faint)" }}>
                         {data.count} trades · {data.winRate.toFixed(0)}% win
                       </div>
                     </div>
@@ -3043,7 +3010,7 @@ export default function Trades({ currentAccount }) {
                     />
                   </div>
                 ) : (
-                  <div className="flex h-56 items-center justify-center text-[12px]" style={{ color: MUTED }}>
+                  <div className="flex h-56 items-center justify-center text-[12px]" style={{ color: "var(--app-muted)" }}>
                     No closed trades in this range
                   </div>
                 )}
@@ -3111,7 +3078,6 @@ export default function Trades({ currentAccount }) {
             accountName={accountName}
             startingBalance={startingBalance}
             accent={accent}
-            demo={PREVIEW}
             canPrev={Boolean(overlayPrev)}
             canNext={Boolean(overlayNext)}
             onPrev={() => overlayPrev && setSelectedTrade(overlayPrev)}
@@ -3143,7 +3109,7 @@ export default function Trades({ currentAccount }) {
               <div className="flex items-center justify-between border-b border-[#e6e8f2] dark:border-[#1f1f2b] px-4 py-3">
                 <div>
                   <h2 className="text-[14px] font-semibold">Edit trade</h2>
-                  <p className="text-[10.5px]" style={{ color: MUTED }}>
+                  <p className="text-[10.5px]" style={{ color: "var(--app-muted)" }}>
                     {editingTrade.pair || "Trade"} · changes save to this account
                   </p>
                 </div>
@@ -3439,7 +3405,7 @@ function ConfluenceTags({ tags, onChange, accent = "#6C47FF" }) {
     <div className="rounded-lg border border-[#e6e8f2] dark:border-[#262633] bg-white dark:bg-[#0f0f18] p-2.5">
       <div className="flex flex-wrap gap-1.5">
         {tags.length === 0 ? (
-          <span className="text-[11px]" style={{ color: FAINT }}>
+          <span className="text-[11px]" style={{ color: "var(--app-faint)" }}>
             No confluences tagged yet.
           </span>
         ) : (
