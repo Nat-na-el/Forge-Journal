@@ -595,7 +595,6 @@ export default function DailyJournal({ currentAccount }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState({});
-  const [promoDismissed, setPromoDismissed] = useState(false);
   const [viewMode, setViewMode] = useState("day");
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [noteDateKey, setNoteDateKey] = useState(selectedDate);
@@ -1202,24 +1201,6 @@ export default function DailyJournal({ currentAccount }) {
       className={`${isDark ? "dark bg-[#0b0b19] text-[#e8e9f7]" : "bg-[#f4f5fa] text-[#14142b]"} min-h-screen w-full p-3 sm:p-6 lg:p-8`}
     >
       <div className="mx-auto max-w-[1600px]">
-        {/* ───────── Promo banner ───────── */}
-        {!promoDismissed && (
-          <div className="mb-3 rounded-lg border border-[#e6e8f2] bg-[#fef3c7] px-4 py-3 text-sm dark:border-[#3a3a2e] dark:bg-[#45320c] dark:text-[#fde68a]">
-            <div className="flex items-center gap-2">
-              <AlertCircle size={14} className="shrink-0" />
-              <span className="font-semibold">Day View</span>
-              <span className="text-[#92400e] dark:text-[#fcd34d]">— Your trades, notes and calendar in one place.</span>
-            </div>
-            <button
-              onClick={() => setPromoDismissed(true)}
-              className="ml-auto rounded text-[#92400e] dark:text-[#fcd34d] hover:underline"
-              aria-label="Dismiss"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
         {/* ───────── Header / toolbar ───────── */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
           <div className="min-w-0 flex items-center gap-3">
@@ -1241,7 +1222,7 @@ export default function DailyJournal({ currentAccount }) {
                 Week
               </button>
             </div>
-            <h1 className={`text-xl sm:text-2xl font-bold tracking-tight ${HEAD}`}>Day View</h1>
+            <h1 className={`text-xl font-bold tracking-tight sm:text-2xl whitespace-nowrap ${HEAD}`}>Day View</h1>
             <p className={`mt-1 text-sm ${MUTED}`}>
               {currentAccount.name} · auto P&L at {accountLeverage}:1 leverage
             </p>

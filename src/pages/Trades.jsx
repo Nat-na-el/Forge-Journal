@@ -4,7 +4,6 @@
 // one trade. The reference screens are dark in every theme, so the page keeps
 // its own dark surface like the Dashboard and the Add Trade flow.
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useTheme } from "../Theme-provider";
 import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { endOfMonth, format, isWithinInterval, startOfMonth, subDays } from "date-fns";
@@ -80,7 +79,6 @@ import {
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler, Tooltip);
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
-const BG = "#0a0a10";
 const TEXT = "#e9e9f2";
 const MUTED = "#8b8ba3";
 const FAINT = "#66667c";
@@ -92,14 +90,14 @@ const CHART_TICK = "#8a8fb5";
 
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a10]";
-const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-2.5 text-[12px] font-medium text-[#c7c7d6] transition-colors hover:border-[#e6e8f2] dark:border-[#33334a] hover:text-white ${FOCUS}`;
-const ICON_BTN = `flex h-8 w-8 items-center justify-center rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] text-[#8b8ba3] transition-colors hover:border-[#e6e8f2] dark:border-[#33334a] hover:text-white ${FOCUS}`;
+const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-2.5 text-[12px] font-medium text-[#c7c7d6] transition-colors hover:border-[#d8dbea] dark:hover:border-[#33334a] hover:text-[#14142b] dark:hover:text-white ${FOCUS}`;
+const ICON_BTN = `flex h-8 w-8 items-center justify-center rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] text-[#8b8ba3] transition-colors hover:border-[#d8dbea] dark:hover:border-[#33334a] hover:text-[#14142b] dark:hover:text-white ${FOCUS}`;
 const PRIMARY = `inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#6C47FF] px-3.5 text-[12.5px] font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
-const GHOST = `inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-[#262633] bg-white dark:bg-[#12121b] px-3 text-[12px] font-medium text-[#3b3f5e] dark:text-[#c9cbe0] transition-colors hover:border-[#e6e8f2] dark:border-[#33334a] hover:bg-[#171722] ${FOCUS}`;
+const GHOST = `inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-[#e6e8f2] dark:border-[#262633] bg-white dark:bg-[#12121b] px-3 text-[12px] font-medium text-[#3b3f5e] dark:text-[#c9cbe0] transition-colors hover:border-[#d8dbea] dark:hover:border-[#33334a] hover:bg-[#eceef6] dark:hover:bg-[#171722] ${FOCUS}`;
 const FIELD =
-  "h-10 w-full rounded-lg border border-[#262633] bg-[#101018] px-3 text-sm text-[#14142b] dark:text-[#e8e9f7] outline-none transition-colors placeholder:text-[#8a8fb5] dark:placeholder:text-[#5d6078] focus:border-[#6C47FF] focus:ring-2 focus:ring-[#6C47FF]/25";
+  "h-10 w-full rounded-lg border border-[#e6e8f2] dark:border-[#262633] bg-white dark:bg-[#101018] px-3 text-sm text-[#14142b] dark:text-[#e8e9f7] outline-none transition-colors placeholder:text-[#8a8fb5] dark:placeholder:text-[#5d6078] focus:border-[#6C47FF] focus:ring-2 focus:ring-[#6C47FF]/25";
 const LABEL = "mb-1.5 block text-[11px] font-medium text-[#8b8ba3]";
-const TH = "whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wide text-[#6b7090] dark:text-[#6b7090]";
+const TH = "whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-medium uppercase tracking-wide text-[#6b7090] dark:text-[#8f8fa6]";
 const TD = "whitespace-nowrap px-3 py-2.5 align-middle text-[12px] text-[#3b3f5e] dark:text-[#c9cbe0]";
 
 const PERIODS = [
@@ -307,7 +305,7 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-64", i
                   item.onClick?.();
                 }}
                 className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] ${
-                  item.active ? "text-white" : "text-[#5a5f7a] dark:text-[#b9b9cc]"
+                  item.active ? "text-[#14142b] dark:text-white" : "text-[#5a5f7a] dark:text-[#b9b9cc]"
                 }`}
               >
                 <span className="flex min-w-0 items-start gap-2">
@@ -354,7 +352,7 @@ function FilterGroup({ id, label, options, selected, expanded, onExpand, onToggl
           type="button"
           onClick={() => onExpand(expanded ? "" : id)}
           aria-expanded={expanded}
-          className={`flex flex-1 items-center justify-between gap-2 rounded text-left text-[12px] font-medium text-[#3b3f5e] dark:text-[#d4d6e6] hover:text-white ${FOCUS}`}
+          className={`flex flex-1 items-center justify-between gap-2 rounded text-left text-[12px] font-medium text-[#3b3f5e] dark:text-[#d4d6e6] hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
         >
           <span>
             {label}
@@ -378,7 +376,7 @@ function FilterGroup({ id, label, options, selected, expanded, onExpand, onToggl
             options.map((option) => (
               <label
                 key={option.value}
-                className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-1 text-[11.5px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:bg-[#eceef6] dark:hover:bg-[#1a1a24] hover:text-white"
+                className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-1 text-[11.5px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:bg-[#eceef6] dark:hover:bg-[#1a1a24] hover:text-[#14142b] dark:hover:text-white"
               >
                 <input
                   type="checkbox"
@@ -473,7 +471,7 @@ function FilterPanel({
               type="button"
               onClick={() => setTab(key)}
               className={`flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11.5px] font-medium transition-colors ${FOCUS} ${
-                tab === key ? "bg-[#eceef6] dark:bg-[#1d1d2c] text-white" : "text-[#5a5f7a] dark:text-[#9a9ab2] hover:bg-[#eceef6] dark:hover:bg-[#181822] hover:text-white"
+                tab === key ? "bg-[#eceef6] dark:bg-[#1d1d2c] text-[#14142b] dark:text-white" : "text-[#5a5f7a] dark:text-[#9a9ab2] hover:bg-[#eceef6] dark:hover:bg-[#181822] hover:text-[#14142b] dark:hover:text-white"
               }`}
             >
               <Icon size={13} className="shrink-0" />
@@ -558,7 +556,7 @@ function FilterPanel({
                         className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${FOCUS} ${
                           active
                             ? "border-[#6C47FF] bg-[#6C47FF]/25 text-white"
-                            : "border-[#2a2a3a] text-[#5a5f7a] dark:text-[#b9b9cc] hover:border-[#e6e8f2] dark:hover:border-[#3a3a4e] hover:text-white"
+                            : "border-[#e6e8f2] dark:border-[#2a2a3a] text-[#5a5f7a] dark:text-[#b9b9cc] hover:border-[#e6e8f2] dark:hover:border-[#3a3a4e] hover:text-[#14142b] dark:hover:text-white"
                         }`}
                       >
                         {tag}
@@ -609,7 +607,7 @@ function FilterPanel({
                     key={label}
                     type="button"
                     onClick={action}
-                    className={`rounded-lg border border-[#2a2a3a] px-2.5 py-1 text-[11px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] transition-colors hover:border-[#e6e8f2] dark:hover:border-[#3a3a4e] hover:text-white ${FOCUS}`}
+                    className={`rounded-lg border border-[#e6e8f2] dark:border-[#2a2a3a] px-2.5 py-1 text-[11px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] transition-colors hover:border-[#e6e8f2] dark:hover:border-[#3a3a4e] hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
                   >
                     {label}
                   </button>
@@ -632,7 +630,7 @@ function FilterPanel({
                   {[...new Set([...books, ...playbooks])].map((name) => (
                     <label
                       key={name}
-                      className="flex cursor-pointer items-center gap-2 rounded px-1 py-1.5 text-[11.5px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:bg-[#eceef6] dark:hover:bg-[#1a1a24] hover:text-white"
+                      className="flex cursor-pointer items-center gap-2 rounded px-1 py-1.5 text-[11.5px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:bg-[#eceef6] dark:hover:bg-[#1a1a24] hover:text-[#14142b] dark:hover:text-white"
                     >
                       <input
                         type="checkbox"
@@ -654,7 +652,7 @@ function FilterPanel({
         <button
           type="button"
           onClick={onReset}
-          className={`flex items-center gap-1.5 rounded px-1 text-[11.5px] font-medium text-[#5a5f7a] dark:text-[#9a9ab2] transition-colors hover:text-white ${FOCUS}`}
+          className={`flex items-center gap-1.5 rounded px-1 text-[11.5px] font-medium text-[#5a5f7a] dark:text-[#9a9ab2] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
         >
           <RotateCcw size={12} /> Reset all
         </button>
@@ -705,7 +703,7 @@ const Donut = ({ wins, losses, be }) => {
   ];
   return (
     <svg viewBox="0 0 100 100" className="h-32 w-32 shrink-0 -rotate-90">
-      <circle cx="50" cy="50" r={r} fill="none" stroke="#20202c" strokeWidth="10" />
+      <circle cx="50" cy="50" r={r} fill="none" stroke="var(--chart-grid)" strokeWidth="10" />
       {total > 0 &&
         segs.map((sg, i) => {
           if (!sg.v) return null;
@@ -759,7 +757,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   const keyOf = (d) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   const monthTotal = cells.reduce((sum, d) => sum + (d ? daily[keyOf(d)]?.pnl || 0 : 0), 0);
-  const nav = `rounded-lg border border-[#e6e8f2] dark:border-[#23232f] p-1.5 text-[#8b8ba3] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] hover:text-white ${FOCUS}`;
+  const nav = `rounded-lg border border-[#e6e8f2] dark:border-[#23232f] p-1.5 text-[#8b8ba3] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] hover:text-[#14142b] dark:hover:text-white ${FOCUS}`;
 
   return (
     <Panel
@@ -790,7 +788,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
                 if (!d) return <div key={di} />;
                 const rec = daily[keyOf(d)];
                 const tone = !rec
-                  ? "border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#0d0d16]"
+                  ? "border-[#e6e8f2] dark:border-[#1f1f2b] bg-white dark:bg-[#0d0d16]"
                   : rec.pnl > 0
                   ? "border-[#22c493]/30 bg-[#22c493]/10"
                   : rec.pnl < 0
@@ -824,7 +822,7 @@ const PnLCalendar = ({ month, onMonth, daily, onPick, selected, fmtCompact }) =>
                   </button>
                 );
               })}
-              <div className="rounded-lg border border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#0f0f18] p-1.5">
+              <div className="rounded-lg border border-[#e6e8f2] dark:border-[#1f1f2b] bg-white dark:bg-[#0f0f18] p-1.5">
                 <div className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: FAINT }}>
                   Wk {wi + 1}
                 </div>
@@ -957,9 +955,9 @@ function TradingViewChart({ symbol, interval, accent = "#6C47FF" }) {
     <div className="relative h-full w-full">
       <div ref={hostRef} className="tradingview-widget-container h-full w-full" />
       {status === "loading" ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0b0b13]">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#f4f5fa] dark:bg-[#0b0b13]">
           <span
-            className="h-7 w-7 animate-spin rounded-full border-2 border-[#2a2a3a]"
+            className="h-7 w-7 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#2a2a3a]"
             style={{ borderTopColor: accent }}
           />
           <p className="text-[11.5px]" style={{ color: MUTED }}>
@@ -968,7 +966,7 @@ function TradingViewChart({ symbol, interval, accent = "#6C47FF" }) {
         </div>
       ) : null}
       {status === "failed" ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0b0b13] px-4 text-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#f4f5fa] dark:bg-[#0b0b13] px-4 text-center">
           <span
             className="flex h-10 w-10 items-center justify-center rounded-full bg-[#6C47FF]/15"
             style={{ color: accent }}
@@ -1005,7 +1003,7 @@ function TagSection({ title, items = [], color = "#b9b9cc", onManage }) {
           <button
             type="button"
             onClick={onManage}
-            className={`rounded text-[10px] font-medium text-[#b9a6ff] transition-colors hover:text-white ${FOCUS}`}
+            className={`rounded text-[10px] font-medium text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
           >
             Manage
           </button>
@@ -1173,17 +1171,17 @@ function TrackingOverlay({
             onClick={onPrev}
             disabled={!canPrev}
             aria-label="Previous trade"
-            className={`flex h-8 w-8 items-center justify-center rounded-l-lg text-[#8b8ba3] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${FOCUS}`}
+            className={`flex h-8 w-8 items-center justify-center rounded-l-lg text-[#8b8ba3] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] hover:text-[#14142b] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${FOCUS}`}
           >
             <ChevronLeft size={15} />
           </button>
-          <span className="h-4 w-px bg-[#23232f]" />
+          <span className="h-4 w-px bg-[#e6e8f2] dark:bg-[#23232f]" />
           <button
             type="button"
             onClick={onNext}
             disabled={!canNext}
             aria-label="Next trade"
-            className={`flex h-8 w-8 items-center justify-center rounded-r-lg text-[#8b8ba3] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${FOCUS}`}
+            className={`flex h-8 w-8 items-center justify-center rounded-r-lg text-[#8b8ba3] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] hover:text-[#14142b] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${FOCUS}`}
           >
             <ChevronRight size={15} />
           </button>
@@ -1260,7 +1258,7 @@ function TrackingOverlay({
                   aria-selected={tab === key}
                   onClick={() => setTab(key)}
                   className={`rounded-lg px-2 py-1.5 text-[10.5px] font-medium transition-colors ${FOCUS} ${
-                    tab === key ? "bg-[#eceef6] dark:bg-[#1d1d2c] text-white" : "text-[#8b8ba3] hover:bg-[#eceef6] dark:hover:bg-[#181822] hover:text-white"
+                    tab === key ? "bg-[#eceef6] dark:bg-[#1d1d2c] text-[#14142b] dark:text-white" : "text-[#8b8ba3] hover:bg-[#eceef6] dark:hover:bg-[#181822] hover:text-[#14142b] dark:hover:text-white"
                   }`}
                 >
                   {label}
@@ -1270,7 +1268,7 @@ function TrackingOverlay({
 
             {tab === "stats" ? (
               <div className="p-3">
-                <div className="rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0d0d16] px-3 py-2.5">
+                <div className="rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0d0d16] px-3 py-2.5">
                   <p className="text-[10px] uppercase tracking-wide" style={{ color: MUTED }}>
                     Net P&amp;L
                   </p>
@@ -1279,7 +1277,7 @@ function TrackingOverlay({
                   </p>
                 </div>
 
-                <dl className="mt-1.5 divide-y divide-[#1f1f2b]">
+                <dl className="mt-1.5 divide-y divide-[#e6e8f2] dark:divide-[#1f1f2b]">
                   {rows.map(([label, value, valueTone]) => (
                     <div key={label} className="flex items-center justify-between gap-3 py-[6px] text-[11px]">
                       <dt style={{ color: MUTED }}>{label}</dt>
@@ -1297,7 +1295,7 @@ function TrackingOverlay({
                       {rating ? `${rating} / 5` : "Not scored"}
                     </span>
                   </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#20202c]">
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#e6e8f2] dark:bg-[#20202c]">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{ width: `${progress}%`, backgroundColor: accent }}
@@ -1305,7 +1303,7 @@ function TrackingOverlay({
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0d0d16] px-2.5 py-2">
+                <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0d0d16] px-2.5 py-2">
                   <span className="text-[10.5px]" style={{ color: MUTED }}>
                     Trade rating
                   </span>
@@ -1326,7 +1324,7 @@ function TrackingOverlay({
                   <p className="text-[10px] uppercase tracking-wide" style={{ color: MUTED }}>
                     Playbook
                   </p>
-                  <p className="mt-0.5 text-[12.5px] font-semibold text-white">{name || "Not linked"}</p>
+                  <p className="mt-0.5 text-[12.5px] font-semibold text-[#14142b] dark:text-white">{name || "Not linked"}</p>
                   {trade.strategy && trade.playbook && trade.strategy !== trade.playbook ? (
                     <p className="text-[10.5px]" style={{ color: MUTED }}>
                       Strategy: {trade.strategy}
@@ -1388,7 +1386,7 @@ function TrackingOverlay({
                     href={trade.screenshotUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block overflow-hidden rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0b0b13]"
+                    className="block overflow-hidden rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#f4f5fa] dark:bg-[#0b0b13]"
                   >
                     <img
                       src={trade.screenshotUrl}
@@ -1397,7 +1395,7 @@ function TrackingOverlay({
                     />
                   </a>
                 ) : (
-                  <div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-[#2a2a3a] px-3 py-8 text-center">
+                  <div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-[#e6e8f2] dark:border-[#2a2a3a] px-3 py-8 text-center">
                     <Paperclip size={18} style={{ color: FAINT }} />
                     <p className="text-[11.5px] text-[#5a5f7a] dark:text-[#9a9ab2]">No attachments yet</p>
                     <p className="text-[10px] leading-relaxed" style={{ color: FAINT }}>
@@ -1421,14 +1419,14 @@ function TrackingOverlay({
 
         <main className="flex min-h-0 flex-1 flex-col">
           <section className="flex min-h-[380px] flex-1 flex-col">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#101018] px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e6e8f2] dark:border-[#1f1f2b] bg-white dark:bg-[#101018] px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11.5px] font-semibold text-white">{trade.pair || "Chart"}</span>
+                <span className="text-[11.5px] font-semibold text-[#14142b] dark:text-white">{trade.pair || "Chart"}</span>
                 <span className="text-[10px]" style={{ color: FAINT }}>
                   {symbol}
                 </span>
                 <div
-                  className="flex items-center rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-[#0d0d16] p-0.5"
+                  className="flex items-center rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0d0d16] p-0.5"
                   role="tablist"
                   aria-label="Chart view"
                 >
@@ -1443,14 +1441,14 @@ function TrackingOverlay({
                       aria-selected={chartView === key}
                       onClick={() => setChartView(key)}
                       className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${FOCUS} ${
-                        chartView === key ? "bg-[#6C47FF] text-white" : "text-[#8b8ba3] hover:text-white"
+                        chartView === key ? "bg-[#6C47FF] text-white" : "text-[#8b8ba3] hover:text-[#14142b] dark:hover:text-white"
                       }`}
                     >
                       {label}
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-[#0d0d16] p-0.5">
+                <div className="flex items-center rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0d0d16] p-0.5">
                   {TV_INTERVALS.map(([value, label]) => (
                     <button
                       key={value}
@@ -1458,7 +1456,7 @@ function TrackingOverlay({
                       onClick={() => setInterval(value)}
                       aria-pressed={interval === value}
                       className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${FOCUS} ${
-                        interval === value ? "bg-[#6C47FF] text-white" : "text-[#8b8ba3] hover:text-white"
+                        interval === value ? "bg-[#6C47FF] text-white" : "text-[#8b8ba3] hover:text-[#14142b] dark:hover:text-white"
                       }`}
                     >
                       {label}
@@ -1475,13 +1473,13 @@ function TrackingOverlay({
                   href={journalUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`rounded text-[10.5px] font-semibold text-[#b9a6ff] transition-colors hover:text-white ${FOCUS}`}
+                  className={`rounded text-[10.5px] font-semibold text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
                 >
                   TradingView ↗
                 </a>
               </div>
             </div>
-            <div className="relative h-[380px] w-full bg-[#0b0b13] lg:h-auto lg:min-h-0 lg:flex-1">
+            <div className="relative h-[380px] w-full bg-[#f4f5fa] dark:bg-[#0b0b13] lg:h-auto lg:min-h-0 lg:flex-1">
               {chartView === "trade" ? (
                 <TradeChart
                   trade={trade}
@@ -1496,18 +1494,18 @@ function TrackingOverlay({
             </div>
           </section>
 
-          <section className="shrink-0 border-t border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#0d0d16]">
+          <section className="shrink-0 border-t border-[#e6e8f2] dark:border-[#1f1f2b] bg-white dark:bg-[#0d0d16]">
             <div className="flex flex-wrap items-center gap-1 border-b border-[#e6e8f2] dark:border-[#1f1f2b] px-2.5 py-1.5">
               {[
                 ["note", "Trade note", FileText],
-                ["journal", "Daily journal", CalendarDays],
+                ["journal", "Day view", CalendarDays],
               ].map(([key, label, Icon]) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setNoteTab(key)}
                   className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors ${FOCUS} ${
-                    noteTab === key ? "bg-[#eceef6] dark:bg-[#1d1d2c] text-white" : "text-[#8b8ba3] hover:bg-[#eceef6] dark:hover:bg-[#181822] hover:text-white"
+                    noteTab === key ? "bg-[#eceef6] dark:bg-[#1d1d2c] text-[#14142b] dark:text-white" : "text-[#8b8ba3] hover:bg-[#eceef6] dark:hover:bg-[#181822] hover:text-[#14142b] dark:hover:text-white"
                   }`}
                 >
                   <Icon size={12} /> {label}
@@ -1523,7 +1521,7 @@ function TrackingOverlay({
                     <button
                       type="button"
                       onClick={insertTemplate}
-                      className={`flex items-center gap-1 rounded-md border border-[#2a2a3a] px-2 py-1 text-[10.5px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] transition-colors hover:border-[#e6e8f2] dark:hover:border-[#3a3a4e] hover:text-white ${FOCUS}`}
+                      className={`flex items-center gap-1 rounded-md border border-[#e6e8f2] dark:border-[#2a2a3a] px-2 py-1 text-[10.5px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] transition-colors hover:border-[#e6e8f2] dark:hover:border-[#3a3a4e] hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
                     >
                       <Sparkles size={11} /> Template
                     </button>
@@ -1531,7 +1529,7 @@ function TrackingOverlay({
                       type="button"
                       onClick={saveNote}
                       disabled={!dirty}
-                      className={`${PRIMARY} !h-7 !px-2.5 disabled:cursor-not-allowed disabled:!border disabled:!border-[#2a2a3a] disabled:!bg-[#171722] disabled:!text-[#6b7090] dark:text-[#6b7090] disabled:opacity-100`}
+                      className={`${PRIMARY} !h-7 !px-2.5 disabled:cursor-not-allowed disabled:!border disabled:!border-[#e6e8f2] dark:border-[#2a2a3a] disabled:!bg-[#eceef6] dark:bg-[#171722] disabled:!text-[#6b7090] dark:text-[#8f8fa6] disabled:opacity-100`}
                     >
                       {noteSaved ? <Check size={12} /> : null}
                       {noteSaved ? "Saved" : "Save note"}
@@ -1541,7 +1539,7 @@ function TrackingOverlay({
                   <button
                     type="button"
                     onClick={() => onOpenJournal(day)}
-                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-semibold text-[#b9a6ff] transition-colors hover:text-white ${FOCUS}`}
+                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-semibold text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
                   >
                     <CalendarDays size={11} /> Open the journal for this day
                   </button>
@@ -1561,12 +1559,12 @@ function TrackingOverlay({
               <div className="flex h-[132px] flex-col items-center justify-center gap-1.5 text-center">
                 <CalendarDays size={18} style={{ color: FAINT }} />
                 <p className="text-[12px] text-[#5a5f7a] dark:text-[#9a9ab2]">
-                  Daily journal entries live alongside the trading day.
+                  Day view entries live alongside the trading day.
                 </p>
                 <button
                   type="button"
                   onClick={() => onOpenJournal(day)}
-                  className={`rounded text-[11px] font-semibold text-[#b9a6ff] transition-colors hover:text-white ${FOCUS}`}
+                  className={`rounded text-[11px] font-semibold text-[#b9a6ff] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
                 >
                   Open the journal for this day
                 </button>
@@ -1592,9 +1590,6 @@ export default function Trades({ currentAccount }) {
       process.env.NODE_ENV !== "production" &&
       new URLSearchParams(window.location.search).get("preview") === "1"
   );
-
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
 
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2242,7 +2237,9 @@ export default function Trades({ currentAccount }) {
 
   if (!currentAccount && !PREVIEW) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6" style={{ backgroundColor: BG, color: TEXT }}>
+      <div
+        className="flex min-h-screen items-center justify-center bg-[#f4f5fa] p-6 text-[#14142b] dark:bg-[#0a0a10] dark:text-[#e9e9f2]"
+      >
         <div className="max-w-md rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] p-8 text-center">
           <AlertCircle size={34} className="mx-auto mb-3" style={{ color: "#f59e0b" }} />
           <h2 className="mb-1.5 text-lg font-semibold">No account selected</h2>
@@ -2263,7 +2260,7 @@ export default function Trades({ currentAccount }) {
   const allPageSelected = pageTrades.length > 0 && pageTrades.every((trade) => selectedIds.includes(trade.id));
 
   return (
-    <div className="-m-1 min-h-screen sm:-m-3" style={{ backgroundColor: BG, color: TEXT }}>
+    <div className="-m-1 min-h-screen bg-[#f4f5fa] text-[#14142b] dark:bg-[#0a0a10] dark:text-[#e9e9f2] sm:-m-3">
       <div className="mx-auto max-w-[1600px] p-3 sm:p-5">
         {/* Header + toolbar */}
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2407,7 +2404,7 @@ export default function Trades({ currentAccount }) {
             <button
               type="button"
               onClick={() => setSearchParams({})}
-              className={`flex items-center gap-1 rounded-md border border-[#3a2d6b] bg-[#1b1436] px-2 py-0.5 text-[10px] font-semibold text-[#cbbcff] ${FOCUS}`}
+              className={`flex items-center gap-1 rounded-md border border-[#d8ccff] dark:border-[#3a2d6b] bg-[#f1ecff] dark:bg-[#1b1436] px-2 py-0.5 text-[10px] font-semibold text-[#cbbcff] ${FOCUS}`}
             >
               Showing {selectedDate} <X size={10} />
             </button>
@@ -2419,7 +2416,7 @@ export default function Trades({ currentAccount }) {
                 setFilters(EMPTY_FILTERS);
                 setDraftFilters(EMPTY_FILTERS);
               }}
-              className={`flex items-center gap-1 rounded-md border border-[#3a2d6b] bg-[#1b1436] px-2 py-0.5 text-[10px] font-semibold text-[#cbbcff] ${FOCUS}`}
+              className={`flex items-center gap-1 rounded-md border border-[#d8ccff] dark:border-[#3a2d6b] bg-[#f1ecff] dark:bg-[#1b1436] px-2 py-0.5 text-[10px] font-semibold text-[#cbbcff] ${FOCUS}`}
             >
               {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} <X size={10} />
             </button>
@@ -2431,7 +2428,7 @@ export default function Trades({ currentAccount }) {
             <span className="flex items-center gap-2" style={{ color: "#ff9bad" }}>
               <AlertCircle size={14} /> {error}
             </span>
-            <button type="button" onClick={refreshTrades} className={`font-semibold text-white hover:underline ${FOCUS}`}>
+            <button type="button" onClick={refreshTrades} className={`font-semibold text-[#14142b] dark:text-white hover:underline ${FOCUS}`}>
               Retry
             </button>
           </div>
@@ -2448,7 +2445,7 @@ export default function Trades({ currentAccount }) {
                 type="button"
                 onClick={copyNet}
                 aria-label="Copy net P&L"
-                className={`flex h-6 w-6 items-center justify-center rounded-md border border-[#2f2560] bg-[#1a1433] text-[#a78bfa] transition-colors hover:brightness-125 ${FOCUS}`}
+                className={`flex h-6 w-6 items-center justify-center rounded-md border border-[#d8ccff] dark:border-[#2f2560] bg-[#f1ecff] dark:bg-[#1a1433] text-[#a78bfa] transition-colors hover:brightness-125 ${FOCUS}`}
               >
                 {copied ? <Check size={11} /> : <Copy size={11} />}
               </button>
@@ -2540,7 +2537,7 @@ export default function Trades({ currentAccount }) {
               onClick={() => setView(key)}
               className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[12px] font-medium transition-colors ${FOCUS} ${
                 view === key
-                  ? "border-[#6C47FF] text-white"
+                  ? "border-[#6C47FF] text-[#6C47FF] dark:text-white"
                   : "border-transparent text-[#8b8ba3] hover:text-[#3b3f5e] dark:text-[#d4d6e6]"
               }`}
             >
@@ -2566,7 +2563,7 @@ export default function Trades({ currentAccount }) {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative flex items-center gap-1.5 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0f0f18] px-2.5 py-1.5">
+                <div className="relative flex items-center gap-1.5 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0f0f18] px-2.5 py-1.5">
                   <Search size={13} style={{ color: MUTED }} />
                   <input
                     type="text"
@@ -2587,7 +2584,7 @@ export default function Trades({ currentAccount }) {
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value)}
                   aria-label="Sort trades"
-                  className="h-8 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0f0f18] px-2 text-[11.5px] text-[#c7c7d6] outline-none focus:border-[#6C47FF]"
+                  className="h-8 rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0f0f18] px-2 text-[11.5px] text-[#c7c7d6] outline-none focus:border-[#6C47FF]"
                 >
                   {SORT_OPTIONS.map(([value, label]) => (
                     <option key={value} value={value} className="bg-white dark:bg-[#12121b]">
@@ -2613,7 +2610,7 @@ export default function Trades({ currentAccount }) {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1040px] border-collapse">
                 <thead>
-                  <tr className="border-b border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#111119]">
+                  <tr className="border-b border-[#e6e8f2] dark:border-[#1f1f2b] bg-[#f7f8fc] dark:bg-[#111119]">
                     <th scope="col" className="w-9 px-3 py-2.5">
                       <input
                         type="checkbox"
@@ -2645,7 +2642,7 @@ export default function Trades({ currentAccount }) {
                 <tbody>
                   {loading ? (
                     Array.from({ length: 8 }).map((_, index) => (
-                      <tr key={`skeleton-${index}`} className="border-b border-[#191922]">
+                      <tr key={`skeleton-${index}`} className="border-b border-[#eceef6] dark:border-[#191922]">
                         {Array.from({ length: 12 }).map((__, cell) => (
                           <td key={cell} className="px-3 py-3">
                             <div
@@ -2666,7 +2663,7 @@ export default function Trades({ currentAccount }) {
                           >
                             <Search size={19} />
                           </span>
-                          <p className="text-[14px] font-semibold text-white">
+                          <p className="text-[14px] font-semibold text-[#14142b] dark:text-white">
                             {trades.length ? "No trades match these filters" : "No trades logged yet"}
                           </p>
                           <p className="mt-1 max-w-[380px] text-[12px] leading-relaxed" style={{ color: MUTED }}>
@@ -2713,8 +2710,8 @@ export default function Trades({ currentAccount }) {
                         <tr
                           key={trade.id}
                           onClick={() => setSelectedTrade(trade)}
-                          className={`cursor-pointer border-b border-[#191922] transition-colors hover:bg-[#16161f] ${
-                            checked ? "bg-[#141426]" : ""
+                          className={`cursor-pointer border-b border-[#eceef6] dark:border-[#191922] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#16161f] ${
+                            checked ? "bg-[#f7f8fc] dark:bg-[#141426]" : ""
                           }`}
                         >
                           <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
@@ -2851,7 +2848,7 @@ export default function Trades({ currentAccount }) {
                   value={pageSize}
                   onChange={(event) => setPageSize(Number(event.target.value))}
                   aria-label="Rows per page"
-                  className="h-7 rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-[#0f0f18] px-1.5 text-[11px] text-[#c7c7d6] outline-none focus:border-[#6C47FF]"
+                  className="h-7 rounded-md border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0f0f18] px-1.5 text-[11px] text-[#c7c7d6] outline-none focus:border-[#6C47FF]"
                 >
                   {[10, 25, 50, 100].map((size) => (
                     <option key={size} value={size} className="bg-white dark:bg-[#12121b]">
@@ -2965,7 +2962,7 @@ export default function Trades({ currentAccount }) {
                     ["Long", analytics.long],
                     ["Short", analytics.short],
                   ].map(([name, data]) => (
-                    <div key={name} className="rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-[#0f0f18] p-3">
+                    <div key={name} className="rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#0f0f18] p-3">
                       <div className="text-[10.5px] font-medium" style={{ color: MUTED }}>
                         {name}
                       </div>
@@ -3142,7 +3139,7 @@ export default function Trades({ currentAccount }) {
         {/* Edit modal */}
         {editModalOpen && editingTrade ? (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-4">
-            <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[#262633] bg-white dark:bg-[#12121b] text-[#14142b] dark:text-[#e9e9f2] shadow-2xl shadow-black/70">
+            <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[#e6e8f2] dark:border-[#262633] bg-white dark:bg-[#12121b] text-[#14142b] dark:text-[#e9e9f2] shadow-2xl shadow-black/70">
               <div className="flex items-center justify-between border-b border-[#e6e8f2] dark:border-[#1f1f2b] px-4 py-3">
                 <div>
                   <h2 className="text-[14px] font-semibold">Edit trade</h2>
@@ -3439,7 +3436,7 @@ function ConfluenceTags({ tags, onChange, accent = "#6C47FF" }) {
   };
 
   return (
-    <div className="rounded-lg border border-[#262633] bg-[#0f0f18] p-2.5">
+    <div className="rounded-lg border border-[#e6e8f2] dark:border-[#262633] bg-white dark:bg-[#0f0f18] p-2.5">
       <div className="flex flex-wrap gap-1.5">
         {tags.length === 0 ? (
           <span className="text-[11px]" style={{ color: FAINT }}>
@@ -3457,7 +3454,7 @@ function ConfluenceTags({ tags, onChange, accent = "#6C47FF" }) {
                 type="button"
                 onClick={() => onChange(tags.filter((item) => item !== tag))}
                 aria-label={`Remove ${tag}`}
-                className="rounded hover:text-white"
+                className="rounded hover:text-[#14142b] dark:hover:text-white"
               >
                 <X size={10} />
               </button>
@@ -3476,7 +3473,7 @@ function ConfluenceTags({ tags, onChange, accent = "#6C47FF" }) {
             }
           }}
           placeholder="Add a confluence and press Enter"
-          className="h-8 flex-1 rounded-md border border-[#262633] bg-[#101018] px-2.5 text-[11.5px] text-[#14142b] dark:text-[#e9e9f2] outline-none placeholder:text-[#8a8fb5] dark:placeholder:text-[#5d6078] focus:border-[#6C47FF]"
+          className="h-8 flex-1 rounded-md border border-[#e6e8f2] dark:border-[#262633] bg-white dark:bg-[#101018] px-2.5 text-[11.5px] text-[#14142b] dark:text-[#e9e9f2] outline-none placeholder:text-[#8a8fb5] dark:placeholder:text-[#5d6078] focus:border-[#6C47FF]"
         />
         <button type="button" onClick={commit} className={`${GHOST} !h-8 !px-2.5`}>
           Add

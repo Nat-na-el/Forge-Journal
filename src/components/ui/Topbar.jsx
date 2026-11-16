@@ -49,7 +49,7 @@ const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg text-[#6b7
 const PAGE_TITLES = {
   "/": "Dashboard",
   "/dashboard": "Dashboard",
-  "/journal": "Daily Journal",
+  "/journal": "Day View",
   "/trades": "Trades",
   "/trades/new": "Add Trade",
   "/add-trade": "Add Trade",
@@ -107,13 +107,11 @@ export default function Topbar({
   const title = PAGE_TITLES[location.pathname] || "Dashboard";
   // The dashboard, reports and playbooks pages render their own heading row, so
   // the top bar keeps only the account / actions cluster there instead of a
-  // duplicate title. The dashboard also swaps to a dark chrome; the rest stay
-  // light so the bar matches the app shell.
+  // duplicate title. The bar follows the active theme like the rest of the shell.
   const hideTitle =
     location.pathname === "/dashboard" ||
     location.pathname === "/reports" ||
     location.pathname === "/playbooks";
-  const darkChrome = location.pathname === "/dashboard";
   const accountName = currentAccount?.name || "No account";
   const user = auth.currentUser;
   const initial = (user?.displayName || user?.email || accountName || "F")
@@ -136,11 +134,7 @@ export default function Topbar({
   return (
     <>
       <header
-        className={`fixed right-0 top-0 z-50 flex h-14 items-center justify-between gap-3 border-b px-3 backdrop-blur-md transition-[left] duration-300 sm:px-6 ${
-          hideTitle && darkChrome
-            ? "border-[#1e1e28] bg-[#08080d]/90"
-            : "border-[#e6e8f2] bg-white/90 dark:border-[#262645] dark:bg-[#0b0b19]/90"
-        }`}
+        className="fixed right-0 top-0 z-50 flex h-14 items-center justify-between gap-3 border-b border-[#e6e8f2] bg-white/90 px-3 backdrop-blur-md transition-[left] duration-300 dark:border-[#262645] dark:bg-[#0b0b19]/90 sm:px-6"
         style={{ left }}
       >
         {/* Left – menu button (phones) + page title */}

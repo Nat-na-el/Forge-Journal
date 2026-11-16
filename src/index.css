@@ -52,6 +52,11 @@
   --app-border: #e6e8f2;
   --app-text: #14142b;
   --app-muted: #6b7090;
+
+  /* chart chrome that lives inside SVG <stroke> attributes */
+  --chart-grid: #e6e8f2;
+  --chart-axis: #d8dbea;
+  --chart-rule: #c8cbe0;
 }
 
 .dark {
@@ -80,6 +85,10 @@
   --app-border: #262645;
   --app-text: #e8e9f7;
   --app-muted: #8a8fb5;
+
+  --chart-grid: #1e1e28;
+  --chart-axis: #2c2c3a;
+  --chart-rule: #26263a;
 }
 
 /* Dark gradient base (used in dashboard, etc.) */

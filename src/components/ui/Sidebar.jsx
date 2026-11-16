@@ -57,7 +57,7 @@ const readAccent = () => {
 
 const MAIN_NAV = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true },
-  { to: "/journal", icon: BookOpen, label: "Daily Journal" },
+  { to: "/journal", icon: BookOpen, label: "Day View" },
   { to: "/trades", icon: Activity, label: "Trades" },
   { to: "/playbooks", icon: BookMarked, label: "Playbooks" },
   { to: "/notebook", icon: FileText, label: "Notebook" },

@@ -66,8 +66,8 @@ const PERIODS = [
 ];
 
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6C47FF]";
-const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-3 text-[12px] font-medium text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:border-[#e6e8f2] dark:border-[#33334a] hover:text-white ${FOCUS}`;
-const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] text-[#6b7090] dark:text-[#6b7090] dark:text-[#8b8ba3] transition-colors hover:text-white ${FOCUS}`;
+const TOOLBAR_BTN = `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] px-3 text-[12px] font-medium text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:border-[#d8dbea] dark:hover:border-[#33334a] hover:text-[#14142b] dark:hover:text-white ${FOCUS}`;
+const ICON_BTN = `flex h-9 w-9 items-center justify-center rounded-lg border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b] text-[#6b7090] dark:text-[#8f8fa6] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`;
 const PANEL = `rounded-xl border border-[#e6e8f2] dark:border-[#23232f] bg-white dark:bg-[#13131b]`;
 
 // ─── Numbers & dates ─────────────────────────────────────────────────────────
@@ -288,7 +288,7 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-52" })
                   item.onClick?.();
                 }}
                 className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[#eceef6] dark:hover:bg-[#1c1c28] ${
-                  item.active ? "text-white" : "text-[#5a5f7a] dark:text-[#b9b9cc]"
+                  item.active ? "text-[#14142b] dark:text-white" : "text-[#5a5f7a] dark:text-[#b9b9cc]"
                 }`}
               >
                 <span className="flex min-w-0 items-start gap-2">
@@ -317,7 +317,7 @@ function Dropdown({ label, icon: Icon, items, align = "right", width = "w-52" })
   );
 }
 
-function KpiCard({ title, hint, value, tone = TEXT, children, className = "" }) {
+function KpiCard({ title, hint, value, tone, children, className = "" }) {
   return (
     <div className={`${PANEL} px-4 py-4 sm:px-5 ${className}`}>
       <div className="flex items-center gap-1.5 text-[11.5px] font-medium" style={{ color: MUTED }}>
@@ -325,7 +325,12 @@ function KpiCard({ title, hint, value, tone = TEXT, children, className = "" }) 
         {hint ? <Info size={12} className="opacity-50" aria-hidden="true" /> : null}
       </div>
       <div className="mt-2 flex items-end justify-between gap-3">
-        <div className="text-[26px] font-bold leading-none tracking-tight sm:text-[28px]" style={{ color: tone }}>
+        <div
+          className={`text-[26px] font-bold leading-none tracking-tight sm:text-[28px] ${
+            tone ? "" : "text-[#14142b] dark:text-[#e9e9f2]"
+          }`}
+          style={tone ? { color: tone } : undefined}
+        >
           {value}
         </div>
         {children}
@@ -368,7 +373,7 @@ function SemiGauge({ win, be, loss }) {
   return (
     <div className="flex shrink-0 flex-col items-center">
       <svg width="116" height="62" viewBox="0 0 116 62" aria-hidden="true">
-        <path d={arc(0, 1)} fill="none" stroke="#1e1e28" strokeWidth={width} strokeLinecap="round" />
+        <path d={arc(0, 1)} fill="none" stroke="var(--chart-grid)" strokeWidth={width} strokeLinecap="round" />
         {arcs.map((part) => (
           <path
             key={part.color}
@@ -394,7 +399,7 @@ function PfRing({ value }) {
   const circumference = 2 * Math.PI * r;
   return (
     <svg width="60" height="60" viewBox="0 0 62 62" aria-hidden="true" className="shrink-0">
-      <circle cx="31" cy="31" r={r} fill="none" stroke="#23232f" strokeWidth="7" />
+      <circle cx="31" cy="31" r={r} fill="none" stroke="var(--chart-grid)" strokeWidth="7" />
       <circle
         cx="31"
         cy="31"
@@ -487,7 +492,7 @@ function EquityChart({ points, formatAxis = usdAxis }) {
             x2={W - PAD.right}
             y1={y(tick)}
             y2={y(tick)}
-            stroke="#20202c"
+            stroke="var(--chart-grid)"
             strokeDasharray="3 4"
           />
           <text x={PAD.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="10" fill={FAINT}>
@@ -502,7 +507,7 @@ function EquityChart({ points, formatAxis = usdAxis }) {
       <g clipPath="url(#dashEquityBelow)">
         <path d={area} fill="url(#dashEquityNeg)" />
       </g>
-      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="#2c2c3a" />
+      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="var(--chart-axis)" />
 
       <path
         d={line}
@@ -559,14 +564,14 @@ function RadarChart({ metrics, accent }) {
           key={ring}
           points={polygon(metrics.map(() => ring))}
           fill="none"
-          stroke="#26263a"
+          stroke="var(--chart-rule)"
           strokeWidth="1"
         />
       ))}
 
       {metrics.map((metric, index) => {
         const [px, py] = pointAt(index, 100);
-        return <line key={metric.label} x1={cx} y1={cy} x2={px} y2={py} stroke="#26263a" strokeWidth="1" />;
+        return <line key={metric.label} x1={cx} y1={cy} x2={px} y2={py} stroke="var(--chart-rule)" strokeWidth="1" />;
       })}
 
       <polygon
@@ -605,7 +610,7 @@ function ScoreBar({ score }) {
         Your Zella Score
       </div>
       <div className="mt-2 flex items-center gap-3">
-        <span className="text-[24px] font-bold leading-none" style={{ color: TEXT }}>
+        <span className="text-[24px] font-bold leading-none text-[#14142b] dark:text-[#e9e9f2]">
           {Number(score).toFixed(2)}
         </span>
         <div className="min-w-0 flex-1">
@@ -658,7 +663,7 @@ function NetDailyChart({ bars, formatAxis = usdAxis }) {
             x2={W - PAD.right}
             y1={y(tick)}
             y2={y(tick)}
-            stroke="#20202c"
+            stroke="var(--chart-grid)"
             strokeDasharray="3 4"
           />
           <text x={PAD.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="10" fill={FAINT}>
@@ -666,7 +671,7 @@ function NetDailyChart({ bars, formatAxis = usdAxis }) {
           </text>
         </g>
       ))}
-      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="#2c2c3a" />
+      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="var(--chart-axis)" />
 
       {bars.map((bar, index) => {
         const zero = y(0);
@@ -743,7 +748,7 @@ function TradeTimeChart({ trades, formatAxis = usdAxis }) {
             x2={W - PAD.right}
             y1={y(tick)}
             y2={y(tick)}
-            stroke="#20202c"
+            stroke="var(--chart-grid)"
             strokeDasharray="3 4"
           />
           <text x={PAD.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="10" fill={FAINT}>
@@ -751,7 +756,7 @@ function TradeTimeChart({ trades, formatAxis = usdAxis }) {
           </text>
         </g>
       ))}
-      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="#2c2c3a" />
+      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="var(--chart-axis)" />
 
       {buckets.map((bucket, index) => {
         const zero = y(0);
@@ -807,7 +812,7 @@ function DayCurve({ points, tone }) {
           <stop offset="100%" stopColor={tone} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="#2c2c3a" />
+      <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="var(--chart-axis)" />
       <text x={PAD.left - 6} y={y(high) + 4} textAnchor="end" fontSize="9" fill={FAINT}>
         {usdAxis(high)}
       </text>
@@ -868,11 +873,10 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[960px] overflow-hidden rounded-xl border shadow-2xl shadow-black/70"
-        style={{ backgroundColor: "#141420", borderColor: "#2c2c3d" }}
+        className="w-full max-w-[960px] overflow-hidden rounded-xl border border-[#e6e8f2] bg-white shadow-2xl shadow-black/20 dark:border-[#2c2c3d] dark:bg-[#141420] dark:shadow-black/70"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b" style={{ borderColor: "#23232f" }}>
+        <div className="flex items-center justify-between gap-3 border-b border-[#e6e8f2] px-5 py-3.5 dark:border-[#23232f]">
           <div className="flex flex-wrap items-baseline gap-2 text-[15px] font-semibold">
             <span>{format(day, "EEE, MMM dd, yyyy")}</span>
             <span style={{ color: "#5b5b72" }}>•</span>
@@ -884,7 +888,7 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
               type="button"
               onClick={handleSave}
               disabled={!note.trim()}
-              className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold text-white transition ${FOCUS}`}
+              className={`flex h-9 items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold text-[#14142b] dark:text-white transition ${FOCUS}`}
               style={{ backgroundColor: !note.trim() ? "#2c254a" : "#6C47FF", opacity: !note.trim() ? 0.5 : 1 }}
             >
               <Save size={13} /> Save
@@ -905,7 +909,7 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
               type="button"
               onClick={onClose}
               aria-label="Close day details"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-[#6b7090] dark:text-[#6b7090] dark:text-[#9a9aae] transition-colors hover:bg-white/5 hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#6b7090] dark:text-[#9a9aae] transition-colors hover:bg-white/5 hover:text-[#14142b] dark:hover:text-white"
             >
               <X size={18} />
             </button>
@@ -915,10 +919,10 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
         {/* Rich note editor */}
         <div className="px-5 py-3 border-b" style={{ borderColor: "#23232f" }}>
           <div className="flex items-center gap-2 mb-2 overflow-x-auto px-1">
-            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Undo" title="Undo">
+            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" aria-label="Undo" title="Undo">
               <ArrowUpRight size={12} />
             </button>
-            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Redo" title="Redo">
+            <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" aria-label="Redo" title="Redo">
               <ArrowUpRight size={12} />
             </button>
             <div className="flex items-center gap-1 text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] border-r border-[#e6e8f2] dark:border-[#23232f] pr-1">
@@ -931,13 +935,13 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
             </div>
             <div className="flex items-center gap-1 text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] border-r border-[#e6e8f2] dark:border-[#23232f] pr-1">
               <span>15</span>
-              <button type="button" className="ml-0.5 text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Increase">+</button>
-              <button type="button" className="ml-0.5 text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Decrease">−</button>
+              <button type="button" className="ml-0.5 text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" title="Increase">+</button>
+              <button type="button" className="ml-0.5 text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" title="Decrease">−</button>
             </div>
-            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Bold" title="Bold">B</button>
-            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Italic" title="Italic">I</button>
-            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Underline" title="Underline">U</button>
-            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" aria-label="Strikethrough" title="Strikethrough">S</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" aria-label="Bold" title="Bold">B</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" aria-label="Italic" title="Italic">I</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" aria-label="Underline" title="Underline">U</button>
+            <button type="button" className="flex items-center gap-1 text-[10px] font-medium text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" aria-label="Strikethrough" title="Strikethrough">S</button>
             <div className="flex items-center gap-1 text-[10px] text-[#5a5f7a] dark:text-[#b9b9cc] border-r border-[#e6e8f2] dark:border-[#23232f] pr-1">
               <span>Left Align</span>
               <ChevronDown size={10} />
@@ -957,9 +961,9 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
             <button type="button" onClick={handleVoice} aria-label={voiceListening ? "Stop voice" : "Start voice recording"} title={voiceListening ? "Stop voice" : "Voice note"} className="flex h-7 w-7 items-center justify-center rounded-full transition-colors" style={{ backgroundColor: voiceListening ? "#f2556e" : "#1e1e28" }}>
               <Mic size={13} />
             </button>
-            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Upload" aria-label="Upload file"><Upload size={13} /></button>
-            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Download" aria-label="Download note"><Download size={13} /></button>
-            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-white" title="Share" aria-label="Share note"><Copy size={13} /></button>
+            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" title="Upload" aria-label="Upload file"><Upload size={13} /></button>
+            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" title="Download" aria-label="Download note"><Download size={13} /></button>
+            <button type="button" className="flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#14142b] dark:hover:text-white" title="Share" aria-label="Share note"><Copy size={13} /></button>
             <button type="button" className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-[#5a5f7a] dark:text-[#b9b9cc] hover:text-[#f2556e]" title="Delete note" aria-label="Delete note"><X size={13} /></button>
           </div>
         </div>
@@ -992,10 +996,10 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto border-t" style={{ borderColor: "#23232f" }}>
+          <div className="overflow-x-auto border-t border-[#e6e8f2] dark:border-[#23232f]">
             <table className="w-full min-w-[720px] border-collapse text-left">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wide" style={{ backgroundColor: "#191926", color: FAINT }}>
+                <tr className="bg-[#f4f5fa] text-[10px] uppercase tracking-wide text-[#5a5f7a] dark:bg-[#191926] dark:text-[#9a9aae]">
                   {["Open time", "Ticker", "Side", "Instrument", "Net P&L", "Net ROI", "Realized R", "Playbook"].map(
                     (label) => (
                       <th key={label} className="px-3 py-2 font-semibold">
@@ -1015,29 +1019,30 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
                   return (
                     <tr
                       key={trade.id || index}
-                      className="border-t text-[11.5px]"
-                      style={{ borderColor: "#1d1d2a", backgroundColor: index % 2 ? "#16161f" : "transparent" }}
+                      className={`border-t border-[#eef0f7] text-[11.5px] dark:border-[#1d1d2a] ${
+                        index % 2 ? "bg-[#fafbff] dark:bg-[#16161f]" : ""
+                      }`}
                     >
-                      <td className="px-3 py-2" style={{ color: "#b9b9c9" }}>
+                      <td className="px-3 py-2 text-[#3b3f5e] dark:text-[#b9b9c9]">
                         {tradeDateOf(trade) ? format(tradeDateOf(trade), "HH:mm:ss") : "—"}
                       </td>
                       <td className="px-3 py-2 font-semibold">{trade.pair || "—"}</td>
-                      <td className="px-3 py-2" style={{ color: "#b9b9c9" }}>
+                      <td className="px-3 py-2 text-[#3b3f5e] dark:text-[#b9b9c9]">
                         {(trade.direction || "—").toUpperCase()}
                       </td>
-                      <td className="px-3 py-2" style={{ color: "#b9b9c9" }}>
+                      <td className="px-3 py-2 text-[#3b3f5e] dark:text-[#b9b9c9]">
                         {trade.pair || "—"}
                       </td>
                       <td className="px-3 py-2 font-semibold tabular-nums" style={{ color: pnl >= 0 ? POS : NEG }}>
                         {usd(pnl)}
                       </td>
-                      <td className="px-3 py-2 tabular-nums" style={{ color: "#9a9aae" }}>
+                      <td className="px-3 py-2 tabular-nums text-[#5a5f7a] dark:text-[#9a9aae]">
                         {roi === null ? "—" : `(${roi.toFixed(2)}%)`}
                       </td>
-                      <td className="px-3 py-2 tabular-nums" style={{ color: "#9a9aae" }}>
+                      <td className="px-3 py-2 tabular-nums text-[#5a5f7a] dark:text-[#9a9aae]">
                         {Number.isFinite(rr) ? `${rr.toFixed(2)}R` : "—"}
                       </td>
-                      <td className="px-3 py-2" style={{ color: "#9a9aae" }}>
+                      <td className="px-3 py-2 text-[#5a5f7a] dark:text-[#9a9aae]">
                         {trade.playbook?.name || trade.strategy || "—"}
                       </td>
                     </tr>
@@ -1047,11 +1052,11 @@ function DayDetailModal({ day, trades, onClose, onOpenTrades, onAddNote }) {
             </table>
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t px-5 py-3" style={{ borderColor: "#23232f" }}>
+          <div className="flex items-center justify-end gap-2 border-t border-[#e6e8f2] px-5 py-3 dark:border-[#23232f]">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-4 py-2 text-[12px] font-semibold text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:bg-white/5"
+              className="rounded-lg px-4 py-2 text-[12px] font-semibold text-[#3b3f5e] transition-colors hover:bg-[#f4f5fa] dark:text-[#c7c7d6] dark:hover:bg-white/5"
             >
               Cancel
             </button>
@@ -1416,12 +1421,12 @@ export default function Dashboard({ currentAccount }) {
             · Synced from your broker once a day
           </span>
           {demoMode ? (
-            <span className="flex items-center gap-1.5 rounded-md border border-[#3a2d6b] bg-[#1b1436] px-2 py-0.5 text-[10px] font-semibold text-[#cbbcff]">
+            <span className="flex items-center gap-1.5 rounded-md border border-[#d8ccff] dark:border-[#3a2d6b] bg-[#f1ecff] dark:bg-[#1b1436] px-2 py-0.5 text-[10px] font-semibold text-[#cbbcff]">
               Demo data
               <button
                 type="button"
                 onClick={() => setDemoMode(false)}
-                className="hover:text-white"
+                className="hover:text-[#14142b] dark:hover:text-white"
                 aria-label="Exit demo data"
               >
                 ×
@@ -1433,7 +1438,7 @@ export default function Dashboard({ currentAccount }) {
             <button
               type="button"
               onClick={() => navigate("/journal")}
-              className={`flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12px] font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
+              className={`flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12px] font-semibold text-[#14142b] dark:text-white transition hover:brightness-110 ${FOCUS}`}
               style={{ backgroundColor: accent }}
             >
               <Sunrise size={14} />
@@ -1454,7 +1459,7 @@ export default function Dashboard({ currentAccount }) {
         {error ? (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-[#f2556e]/40 bg-[#f2556e]/10 px-3 py-2 text-[12px]">
             <span style={{ color: "#ff9bad" }}>{error}</span>
-            <button type="button" className="font-semibold text-white hover:underline" onClick={handleResync}>
+            <button type="button" className="font-semibold text-[#14142b] dark:text-white hover:underline" onClick={handleResync}>
               Retry
             </button>
           </div>
@@ -1473,7 +1478,7 @@ export default function Dashboard({ currentAccount }) {
               onClick={() => copyValue("net", formatValue(stats.net))}
               aria-label="Copy net P&L"
               className="flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:brightness-125"
-              style={{ borderColor: "#2f2560", backgroundColor: "#1a1433", color: "#a78bfa" }}
+              style={{ borderColor: isDark ? "#2f2560" : "#d8ccff", backgroundColor: isDark ? "#1a1433" : "#f1ecff", color: isDark ? "#a78bfa" : "#7c5cff" }}
             >
               {copied === "net" ? <Check size={13} /> : <Copy size={13} />}
             </button>
@@ -1483,14 +1488,14 @@ export default function Dashboard({ currentAccount }) {
             title="Trade expectancy"
             hint="Average result per trade in the selected period."
             value={formatValue(stats.avgPnl)}
-            tone={stats.avgPnl >= 0 ? TEXT : NEG}
+            tone={stats.avgPnl >= 0 ? (isDark ? TEXT : "#14142b") : NEG}
           >
             <button
               type="button"
               onClick={() => copyValue("expectancy", formatValue(stats.avgPnl, true))}
               aria-label="Copy trade expectancy"
               className="flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:brightness-125"
-              style={{ borderColor: "#2f2560", backgroundColor: "#1a1433", color: "#a78bfa" }}
+              style={{ borderColor: isDark ? "#2f2560" : "#d8ccff", backgroundColor: isDark ? "#1a1433" : "#f1ecff", color: isDark ? "#a78bfa" : "#7c5cff" }}
             >
               {copied === "expectancy" ? <Check size={13} /> : <Copy size={13} />}
             </button>
@@ -1518,7 +1523,7 @@ export default function Dashboard({ currentAccount }) {
             value={(Number(stats.payoff) || 0).toFixed(2)}
           >
             <div className="w-[54%] min-w-[112px]">
-              <div className="flex h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: "#1e1e28" }}>
+              <div className="flex h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: isDark ? "#1e1e28" : "#e6e8f2" }}>
                 <span style={{ width: `${winShare}%`, backgroundColor: POS }} />
                 <span style={{ flex: 1, backgroundColor: NEG }} />
               </div>
@@ -1592,17 +1597,17 @@ export default function Dashboard({ currentAccount }) {
                   type="button"
                   onClick={() => navigate("/trades")}
                   aria-label="Open all trades"
-                  className="ml-auto transition-colors hover:text-white"
+                  className="ml-auto transition-colors hover:text-[#14142b] dark:hover:text-white"
                   style={{ color: MUTED }}
                 >
                   <ArrowUpRight size={15} />
                 </button>
               </div>
 
-              <div className="mt-3 overflow-hidden rounded-lg border" style={{ borderColor: "#1f1f2b" }}>
+              <div className="mt-3 overflow-hidden rounded-lg border" style={{ borderColor: isDark ? "#1f1f2b" : "#e6e8f2" }}>
                 <div
                   className="grid grid-cols-[1fr_0.75fr_0.9fr] text-[10px] uppercase tracking-wide"
-                  style={{ backgroundColor: CARD_ALT, color: MUTED }}
+                  style={{ backgroundColor: isDark ? CARD_ALT : "#f4f5fa", color: MUTED }}
                 >
                   <span className="px-3 py-2">{bottomTab === "open" ? "Open date" : "Close date"}</span>
                   <span className="px-3 py-2">Symbol</span>
@@ -1685,8 +1690,8 @@ export default function Dashboard({ currentAccount }) {
               <button
                 type="button"
                 onClick={() => setViewDate(new Date())}
-                className={`ml-1 rounded-md border px-2.5 py-1 text-[11px] font-medium text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:text-white ${FOCUS}`}
-                style={{ borderColor: "#2a2a3a" }}
+                className={`ml-1 rounded-md border px-2.5 py-1 text-[11px] font-medium text-[#3b3f5e] dark:text-[#c7c7d6] transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
+                style={{ borderColor: isDark ? "#2a2a3a" : "#e6e8f2" }}
               >
                 This month
               </button>
@@ -1703,7 +1708,7 @@ export default function Dashboard({ currentAccount }) {
                   type="button"
                   onClick={() => navigate("/settings")}
                   aria-label="Calendar settings"
-                  className="transition-colors hover:text-white"
+                  className="transition-colors hover:text-[#14142b] dark:hover:text-white"
                   style={{ color: MUTED }}
                 >
                   <Settings size={14} />
@@ -1712,7 +1717,7 @@ export default function Dashboard({ currentAccount }) {
                   type="button"
                   onClick={() => setViewDate(new Date())}
                   aria-label="Jump to current month"
-                  className="transition-colors hover:text-white"
+                  className="transition-colors hover:text-[#14142b] dark:hover:text-white"
                   style={{ color: MUTED }}
                 >
                   <CalendarDays size={14} />
@@ -1727,7 +1732,7 @@ export default function Dashboard({ currentAccount }) {
                     <div
                       key={label}
                       className="rounded-md py-1.5 text-center text-[10.5px] font-medium"
-                      style={{ backgroundColor: CARD_ALT, color: "#9a9ab0" }}
+                      style={{ backgroundColor: isDark ? CARD_ALT : "#eef0f7", color: isDark ? "#9a9ab0" : "#5a5f7a" }}
                     >
                       {label}
                     </div>
@@ -1743,7 +1748,7 @@ export default function Dashboard({ currentAccount }) {
                             <div
                               key={`blank-${weekIndex}-${dayIndex}`}
                               className="h-full min-h-[72px] rounded-md"
-                              style={{ backgroundColor: "#0f0f17" }}
+                              style={{ backgroundColor: isDark ? "#0f0f17" : "#f4f5fa" }}
                             />
                           );
                         }
@@ -1752,7 +1757,8 @@ export default function Dashboard({ currentAccount }) {
                         const cell = daysMap.get(key);
                         const winRate = cell && cell.count ? (cell.wins / cell.count) * 100 : 0;
                         const empty = !cell;
-                        const tone = cell ? (cell.net > 0 ? POS : cell.net < 0 ? NEG : TEXT) : TEXT;
+                        const baseText = isDark ? TEXT : "#14142b";
+                        const tone = cell ? (cell.net > 0 ? POS : cell.net < 0 ? NEG : baseText) : baseText;
 
                         return (
                           <button
@@ -1769,18 +1775,20 @@ export default function Dashboard({ currentAccount }) {
                             className="relative flex h-full min-h-[72px] flex-col items-center justify-start rounded-md px-1 pb-1.5 pt-[22px] text-center transition hover:brightness-125"
                             style={{
                               backgroundColor: empty
-                                ? "#15151d"
+                                ? isDark
+                                  ? "#15151d"
+                                  : "#ffffff"
                                 : cell.net > 0
                                 ? "rgba(34,196,147,0.16)"
                                 : cell.net < 0
                                 ? "rgba(242,85,110,0.18)"
                                 : "rgba(70,110,220,0.22)",
-                              border: `1px solid ${empty ? "#1d1d29" : "rgba(255,255,255,0.05)"}`,
+                              border: `1px solid ${empty ? (isDark ? "#1d1d29" : "#e6e8f2") : "rgba(255,255,255,0.05)"}`,
                             }}
                           >
                             <span
                               className="absolute inset-x-0 top-1 text-center text-[10.5px] tabular-nums"
-                              style={{ color: empty ? FAINT : "#d5d5e2" }}
+                              style={{ color: empty ? FAINT : isDark ? "#d5d5e2" : "#3b3f5e" }}
                             >
                               {format(day, "d")}
                             </span>
@@ -1789,10 +1797,10 @@ export default function Dashboard({ currentAccount }) {
                                 <div className="mt-0.5 text-[11.5px] font-semibold tabular-nums" style={{ color: tone }}>
                                   {formatCell(cell.net)}
                                 </div>
-                                <div className="text-[9px] leading-tight" style={{ color: "#cfcfdd" }}>
+                                <div className="text-[9px] leading-tight" style={{ color: isDark ? "#cfcfdd" : "#5a5f7a" }}>
                                   {cell.count} trade{cell.count === 1 ? "" : "s"}
                                 </div>
-                                <div className="text-[9px] leading-tight" style={{ color: "#cfcfdd" }}>
+                                <div className="text-[9px] leading-tight" style={{ color: isDark ? "#cfcfdd" : "#5a5f7a" }}>
                                   {pct(winRate, 1)}
                                 </div>
                               </>
@@ -1822,7 +1830,7 @@ export default function Dashboard({ currentAccount }) {
                     <div
                       key={index}
                       className="flex flex-1 flex-col justify-start rounded-md border px-2.5 py-2"
-                      style={{ borderColor: "#232331", backgroundColor: CARD_ALT }}
+                      style={{ borderColor: isDark ? "#232331" : "#e6e8f2", backgroundColor: isDark ? CARD_ALT : "#ffffff" }}
                     >
                       <div className="text-[9.5px]" style={{ color: MUTED }}>
                         Week {index + 1}
