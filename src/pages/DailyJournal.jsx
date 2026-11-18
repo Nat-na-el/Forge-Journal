@@ -1973,7 +1973,7 @@ export default function DailyJournal({ currentAccount }) {
                         </div>
                       </div>
 
-                      {d.list.length === 0 ? (
+                      {!isExpanded ? null : d.list.length === 0 ? (
                         <div className="px-5 pb-5 text-center">
                           {noted ? (
                             <p className={`mx-auto max-w-xl whitespace-pre-line text-left text-[12.5px] leading-relaxed ${MUTED}`}>
