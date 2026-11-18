@@ -21,6 +21,7 @@ import {
   TrendingUp,
   TrendingDown,
   Clock,
+  Plus,
 } from "lucide-react";
 import { useTheme } from "../../Theme-provider";
 import { db, auth, storage } from "../../firebase";
@@ -136,10 +137,74 @@ export default function AddTrade({ currentAccount }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
+  const [newPlaybookOpen, setNewPlaybookOpen] = useState(false);
+  const [newPlaybookName, setNewPlaybookName] = useState("");
+  const [savingPlaybook, setSavingPlaybook] = useState(false);
+  const [playbookError, setPlaybookError] = useState("");
 
   const leverage = account?.leverage || 100;
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const onChange = (e) => set({ [e.target.name]: e.target.value });
+
+  const closePlaybookForm = () => {
+    setNewPlaybookOpen(false);
+    setNewPlaybookName("");
+    setPlaybookError("");
+  };
+
+  // Create the setup here so a brand-new account can log a trade against a
+  // playbook without leaving the form. Only the name is asked for; the rest of
+  // the playbook is edited on the Playbooks page.
+  const createPlaybook = async () => {
+    const name = newPlaybookName.trim();
+    if (!name) {
+      setPlaybookError("Give the playbook a name first.");
+      return;
+    }
+    if (playbooks.some((item) => String(item.name || "").trim().toLowerCase() === name.toLowerCase())) {
+      setPlaybookError("You already have a playbook with that name.");
+      return;
+    }
+
+    setPlaybookError("");
+    const user = auth.currentUser;
+
+    // Preview builds have no signed-in user, so keep it for this session only.
+    if (!user || !account?.id) {
+      const id = `local-${Date.now()}`;
+      setPlaybooks((list) => [...list, { id, name }]);
+      set({ playbookId: id });
+      closePlaybookForm();
+      return;
+    }
+
+    setSavingPlaybook(true);
+    try {
+      const created = await addDoc(collection(db, "users", user.uid, "accounts", account.id, "playbooks"), {
+        name,
+        description: "",
+        market: "",
+        timeframe: "",
+        riskPerTrade: "",
+        entryCriteria: "",
+        exitCriteria: "",
+        rules: [],
+        color: ac.hex,
+        icon: "target",
+        shared: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setPlaybooks((list) => [...list, { id: created.id, name }]);
+      set({ playbookId: created.id });
+      closePlaybookForm();
+    } catch (err) {
+      console.error("Create playbook error:", err);
+      setPlaybookError("Couldn't save the playbook. Check your connection and try again.");
+    } finally {
+      setSavingPlaybook(false);
+    }
+  };
 
   // Playbooks for this account, so a trade can be linked to a named setup.
   useEffect(() => {
@@ -552,7 +617,21 @@ export default function AddTrade({ currentAccount }) {
               <h3 className="font-semibold text-lg">3 · Context</h3>
 
               <div>
-                <Label className="text-sm opacity-70">Playbook</Label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label className="text-sm opacity-70">Playbook this trade came from</Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPlaybookOpen((open) => !open);
+                      setPlaybookError("");
+                    }}
+                    aria-expanded={newPlaybookOpen}
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-semibold transition-opacity hover:opacity-80"
+                    style={{ color: ac.hex }}
+                  >
+                    <Plus size={12} /> {newPlaybookOpen ? "Close" : "New playbook"}
+                  </button>
+                </div>
                 <select
                   name="playbookId"
                   value={form.playbookId}
@@ -570,8 +649,61 @@ export default function AddTrade({ currentAccount }) {
                 <p className="mt-1.5 text-xs opacity-60">
                   {playbooks.length
                     ? "Linking a trade feeds that playbook's win rate and P&L."
-                    : "No playbooks yet — create them on the Playbooks page."}
+                    : "No playbooks on this account yet — create one here so the trade records its setup."}
                 </p>
+
+                {newPlaybookOpen ? (
+                  <div className="mt-2 space-y-2 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+                    <label htmlFor="new-playbook-name" className="block text-xs font-medium opacity-70">
+                      New playbook name
+                    </label>
+                    <input
+                      id="new-playbook-name"
+                      value={newPlaybookName}
+                      onChange={(event) => setNewPlaybookName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          createPlaybook();
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          closePlaybookForm();
+                        }
+                      }}
+                      autoFocus
+                      autoComplete="off"
+                      placeholder="e.g. London breakout"
+                      disabled={savingPlaybook}
+                      className="w-full rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-sm outline-none focus:ring-2 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900"
+                      style={{ "--tw-ring-color": ac.hex }}
+                    />
+                    {playbookError ? <p className="text-xs text-rose-500">{playbookError}</p> : null}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={createPlaybook}
+                        disabled={savingPlaybook}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                        style={{ backgroundColor: ac.hex }}
+                      >
+                        {savingPlaybook ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                        {savingPlaybook ? "Creating…" : "Create playbook"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closePlaybookForm}
+                        disabled={savingPlaybook}
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold opacity-70 transition-opacity hover:opacity-100 disabled:opacity-40 dark:border-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <p className="text-[11px] opacity-50">
+                      Rules, market and risk per trade are editable on the Playbooks page.
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               <div>

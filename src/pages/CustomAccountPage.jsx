@@ -122,13 +122,13 @@ export default function CustomAccountPage() {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={55}
-          aria-label="Add trade progress"
+          aria-label="Add account progress"
         >
           <div className="h-full rounded-full" style={{ width: "55%", backgroundColor: AT_ACCENT }} />
         </div>
 
         <header className="mt-8 text-center">
-          <p className={`text-[13px] font-medium ${AT_MUTED}`}>Add Trades</p>
+          <p className={`text-[13px] font-medium ${AT_MUTED}`}>Add Account</p>
           <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-white">Account details</h1>
           <p className={`mx-auto mt-2 max-w-[360px] text-[12px] leading-relaxed ${AT_FAINT}`}>
             Create the account once. Trades you log from now on will be filed under it.

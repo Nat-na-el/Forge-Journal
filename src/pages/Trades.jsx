@@ -2342,7 +2342,7 @@ export default function Trades({ currentAccount }) {
               ]}
             />
 
-            <button type="button" onClick={() => navigate("/add-trade")} className={PRIMARY}>
+            <button type="button" onClick={() => navigate("/trades/new")} className={PRIMARY}>
               <PlusCircle size={15} /> Add trade
             </button>
           </div>
@@ -2655,7 +2655,7 @@ export default function Trades({ currentAccount }) {
                               </button>
                             ) : (
                               <>
-                                <button type="button" onClick={() => navigate("/add-trade")} className={PRIMARY}>
+                                <button type="button" onClick={() => navigate("/trades/new")} className={PRIMARY}>
                                   <PlusCircle size={14} /> Add a trade
                                 </button>
                                 <button type="button" onClick={() => setCsvModalOpen(true)} className={GHOST}>

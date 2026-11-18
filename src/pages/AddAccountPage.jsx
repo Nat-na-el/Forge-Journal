@@ -1,5 +1,5 @@
 // src/pages/AddAccountPage.jsx
-// "Choose Broker" step of the Add Trade workflow. A single narrow column with
+// "Choose Broker" step of the Add Account workflow. A single narrow column with
 // a search field: the popular platforms show as a two-column grid, and typing
 // swaps in a full result list plus the generic-template escape hatch.
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -120,13 +120,13 @@ export default function AddAccountPage() {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={35}
-          aria-label="Add trade progress"
+          aria-label="Add account progress"
         >
           <div className="h-full rounded-full" style={{ width: "35%", backgroundColor: AT_ACCENT }} />
         </div>
 
         <header className="mt-8 text-center">
-          <p className={`text-[13px] font-medium ${AT_MUTED}`}>Add Trades</p>
+          <p className={`text-[13px] font-medium ${AT_MUTED}`}>Add Account</p>
           <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-white">Choose Broker</h1>
         </header>
 

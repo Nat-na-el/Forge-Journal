@@ -125,7 +125,7 @@ export default function Sidebar({
     setIsAccountDropdownOpen(false);
   };
 
-  const goAddTrade = () => {
+  const goAddAccount = () => {
     navigate("/add-trade");
     if (isMobile) setOpen(false);
   };
@@ -273,9 +273,9 @@ export default function Sidebar({
                   <ChevronsRight size={18} />
                 </button>
                 <button
-                  onClick={goAddTrade}
-                  aria-label="Add trade"
-                  title="Add trade"
+                  onClick={goAddAccount}
+                  aria-label="Add account"
+                  title="Add account"
                   style={{ backgroundColor: accent }}
                   className={`${railBtn} text-white hover:brightness-110 ${FOCUS}`}
                 >
@@ -327,12 +327,12 @@ export default function Sidebar({
 
               <div className="px-2.5 pb-3">
                 <button
-                  onClick={goAddTrade}
+                  onClick={goAddAccount}
                   className={`flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-white/10 text-[13px] font-semibold text-white transition hover:brightness-125 ${FOCUS}`}
                   style={{ backgroundColor: accent + "99" }}
                 >
                   <Plus size={15} />
-                  Add Trade
+                  Add Account
                 </button>
               </div>
 

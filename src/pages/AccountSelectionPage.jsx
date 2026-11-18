@@ -1,7 +1,7 @@
 // src/pages/AccountSelectionPage.jsx
-// Entry point of the Add Trade workflow: every trading account connected to
-// this journal, with broker, sync state, balance and quick actions. Accounts
-// are chosen here before a trade is logged; new ones come from /add-trade/add-account.
+// Entry point of the accounts area: every trading account connected to
+// this journal, with broker, sync state, balance and quick actions. New ones
+// come from /add-trade/add-account; logging a trade jumps straight to the form.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
@@ -468,7 +468,7 @@ export default function AccountSelectionPage({ onDeleteAccount, onResetAccount, 
                               className={`rounded text-[12px] font-medium hover:underline ${AT_FOCUS}`}
                               style={{ color: "#a48bff" }}
                             >
-                              Add trades
+                              Add a trade
                             </button>
                           )}
                         </td>

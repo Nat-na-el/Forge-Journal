@@ -94,13 +94,13 @@ export default function MT5ConnectPage() {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={55}
-          aria-label="Add trade progress"
+          aria-label="Add account progress"
         >
           <div className="h-full rounded-full" style={{ width: "55%", backgroundColor: AT_ACCENT }} />
         </div>
 
         <header className="mt-8 text-center">
-          <p className={`text-[13px] font-medium ${AT_MUTED}`}>Add Trades</p>
+          <p className={`text-[13px] font-medium ${AT_MUTED}`}>Add Account</p>
           <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-white">Link MetaTrader</h1>
           <p className={`mx-auto mt-2 max-w-[360px] text-[12px] leading-relaxed ${AT_FAINT}`}>
             Works with MetaTrader 4 and 5 hosting. Imported trades appear in a new journal account.
