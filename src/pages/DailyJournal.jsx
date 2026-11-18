@@ -36,6 +36,20 @@ import {
   RefreshCw,
   List,
   Image,
+  Sparkles,
+  Play,
+  ExternalLink,
+  MoreHorizontal,
+  ListChecks,
+  BookOpen,
+  Bold,
+  Italic,
+  Underline,
+  AlignLeft,
+  ListOrdered,
+  Highlighter,
+  LayoutTemplate,
+  Filter,
 } from "lucide-react";
 import {
   format,
@@ -117,6 +131,9 @@ const FOCUS =
 const ICON_BTN =
   "flex h-9 w-9 items-center justify-center rounded-lg text-[#6b7090] transition-colors hover:bg-[#f1f2f8] hover:text-[#14142b] dark:text-[#8a8fb5] dark:hover:bg-[#1e1e3a] dark:hover:text-white " +
   FOCUS;
+const GHOST_BTN =
+  "inline-flex items-center gap-1.5 rounded-lg border border-[#e6e8f2] px-2.5 py-1.5 text-[11.5px] font-medium text-[#14142b] transition-colors hover:bg-[#f1f2f8] dark:border-[#262645] dark:text-[#e8e9f7] dark:hover:bg-[#1e1e3a] " +
+  FOCUS;
 
 // Same accent palette + storage key as the Dashboard and Sidebar
 const ACCENTS = {
@@ -130,6 +147,29 @@ const ACCENTS = {
 
 const MOODS = ["Disciplined", "Focused", "Confident", "Neutral", "Anxious", "FOMO", "Revenge", "Tired"];
 const SCORE_LABELS = ["Win Rate", "Notes", "Screenshots", "Confluences", "Risk Plan", "R:R ≥ 1.5"];
+
+// Preview builds have no Firestore session, so the picker gets these instead
+const DEMO_PLAYBOOKS = [
+  {
+    id: "demo-london-breakout",
+    name: "London breakout",
+    rules: [
+      "Wait for the London open (08:00–10:00)",
+      "Trade only in the direction of the H1 trend",
+      "Risk a maximum of 0.5% per trade",
+      "No entry inside the Asian range",
+    ],
+  },
+  {
+    id: "demo-trend-pullback",
+    name: "Trend pullback",
+    rules: [
+      "Price respects the 20 EMA",
+      "Lower timeframe prints a reversal candle",
+      "Stop goes beyond the swing",
+    ],
+  },
+];
 
 const COMMON_ASSETS = [
   "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD", "USDCHF",
@@ -200,6 +240,9 @@ const emptyForm = (base = formatDateTimeLocal()) => ({
   status: "executed",
   confluences: [],
   screenshotUrl: "",
+  playbookId: "",
+  playbookRules: [],
+  playbookChecks: [],
 });
 
 // Helper: compress image before upload
@@ -265,17 +308,20 @@ function dayStats(list) {
   const rrVals = ex
     .map((e) => (e.rr === "" || e.rr === "∞" || e.rr == null ? NaN : Number(e.rr)))
     .filter((v) => Number.isFinite(v));
+  const commission = list.reduce((s, e) => s + (Number(e.commission) || 0), 0);
+  const gross = grossW - grossL;
   return {
     count: list.length,
     executed: ex.length,
     pending: list.length - ex.length,
     wins: wins.length,
     losses: losses.length,
-    net: grossW - grossL,
+    net: gross - commission,
+    gross,
     grossW,
     grossL,
     lots: list.reduce((s, e) => s + (Number(e.lotSize) || 0), 0),
-    commission: list.reduce((s, e) => s + (Number(e.commission) || 0), 0),
+    commission,
     winRate: ex.length ? Math.round((wins.length / ex.length) * 100) : 0,
     pf: grossL ? (grossW / grossL).toFixed(2) : grossW > 0 ? "∞" : "—",
     avgRR: rrVals.length ? (rrVals.reduce((a, b) => a + b, 0) / rrVals.length).toFixed(2) : "—",
@@ -350,226 +396,378 @@ const ConfluenceTags = ({ tags, onChange, accent }) => {
 // ────────────────────────────────────────────────
 // Day note (mood, reflection, reviewed flag) – like Tradezella's daily note
 // ────────────────────────────────────────────────
-const DayNote = ({ dateKey, saved, onSave, accent }) => {
-  const savedMoods = (saved?.moods || []).join("|");
+const DayNoteModal = ({ dateKey, saved, stats, accent, onSave, onClose }) => {
+  const navigate = useNavigate();
+  const savedPlan = saved?.plan || {};
+  const savedRecap = saved?.recap || {};
   const [note, setNote] = useState(saved?.note || "");
-  const [moods, setMoods] = useState(saved?.moods || []);
   const [reviewed, setReviewed] = useState(!!saved?.reviewed);
-  const [busy, setBusy] = useState(false);
-  const [sections, setSections] = useState({
-    plan: true,
-    session: false,
-    recap: false,
+  const [plan, setPlan] = useState({
+    watchlist: savedPlan.watchlist || "",
+    economic: savedPlan.economic || "",
+    bias: savedPlan.bias || "",
+    levels: savedPlan.levels || "",
+    gameplan: savedPlan.gameplan || "",
   });
+  const [recap, setRecap] = useState({
+    overall: savedRecap.overall || "",
+    plusMinus: savedRecap.plusMinus || "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [templatesNote, setTemplatesNote] = useState("");
+  const [openSections, setOpenSections] = useState({ plan: true, session: true, recap: true });
+  const [openItems, setOpenItems] = useState({});
 
-  useEffect(() => {
-    setNote(saved?.note || "");
-    setMoods(saved?.moods || []);
-    setReviewed(!!saved?.reviewed);
-  }, [saved?.note, saved?.reviewed, savedMoods]);
+  const dateObj = parseISO(dateKey);
+  const net = Number(stats?.net) || 0;
+  const hadTrades = (stats?.executed || 0) > 0;
 
   const dirty =
     note !== (saved?.note || "") ||
     reviewed !== !!saved?.reviewed ||
-    moods.join("|") !== savedMoods;
+    Object.keys(plan).some((key) => plan[key] !== (savedPlan[key] || "")) ||
+    Object.keys(recap).some((key) => recap[key] !== (savedRecap[key] || ""));
 
-  const toggleMood = (m) => setMoods((cur) => (cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m]));
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
-  const toggleSection = (key) =>
-    setSections((cur) => ({ ...cur, [key]: !cur[key] }));
+  const toggleSection = (key) => setOpenSections((cur) => ({ ...cur, [key]: !cur[key] }));
+  const toggleItem = (key) => setOpenItems((cur) => ({ ...cur, [key]: !cur[key] }));
+
+  const applyTemplate = (kind) => {
+    if (kind === "plan") {
+      setPlan((cur) => ({
+        watchlist: cur.watchlist || "EURUSD, GBPUSD, XAUUSD",
+        economic: cur.economic || "High-impact releases to sit out:",
+        bias: cur.bias || "Daily bias:\nWeekly bias:",
+        levels: cur.levels || "Key levels:\n- Support:\n- Resistance:",
+        gameplan: cur.gameplan || "If price ..., then I will ...",
+      }));
+      setTemplatesNote("Pre-market plan added to the empty fields.");
+    } else {
+      setRecap((cur) => ({
+        overall: cur.overall || "What worked:\nWhat I would repeat:\nWhat to fix:",
+        plusMinus: cur.plusMinus || "Plus:\n- \nMinus:\n- ",
+      }));
+      setTemplatesNote("End-of-day review added to the empty fields.");
+    }
+    setTemplatesOpen(false);
+  };
 
   const save = async () => {
     setBusy(true);
-    await onSave(dateKey, { note, moods, reviewed });
+    await onSave(dateKey, { note, reviewed, plan, recap });
     setBusy(false);
+    onClose();
+  };
+
+  const planItems = [
+    ["watchlist", "Watchlist"],
+    ["economic", "Economic events"],
+    ["bias", "Daily/Weekly Bias"],
+    ["levels", "Levels to Watch"],
+    ["gameplan", "Gameplan"],
+  ];
+  const recapItems = [
+    ["overall", "Overall Day Recap"],
+    ["plusMinus", 'The "Plus/Minus"'],
+  ];
+
+  const headerBtn = `inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-medium transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${DIVIDER} ${HEAD} ${FOCUS}`;
+  const toolIcon = `flex h-7 w-7 items-center justify-center rounded-md ${MUTED}`;
+  const area = `w-full resize-y rounded-lg border bg-[#f7f8fc] px-3 py-2 text-[12.5px] leading-relaxed outline-none focus:ring-2 focus:ring-[#6C47FF] dark:bg-[#101024] ${DIVIDER}`;
+
+  const renderItem = (group, key, label) => {
+    const value = group === "plan" ? plan[key] : recap[key];
+    const open = !!openItems[key];
+    return (
+      <div key={key}>
+        <button
+          type="button"
+          onClick={() => toggleItem(key)}
+          aria-expanded={open}
+          className={`flex w-full items-center gap-1.5 rounded-md py-1.5 pl-4 pr-2 text-left text-[12.5px] font-medium transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${HEAD} ${FOCUS}`}
+        >
+          <ChevronRight size={12} className={`shrink-0 transition-transform ${MUTED} ${open ? "rotate-90" : ""}`} />
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+          {value.trim() ? <Check size={11} style={{ color: accent }} /> : null}
+        </button>
+        {open ? (
+          <textarea
+            value={value}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (group === "plan") setPlan((cur) => ({ ...cur, [key]: next }));
+              else setRecap((cur) => ({ ...cur, [key]: next }));
+            }}
+            placeholder={`Write your ${label.toLowerCase()}…`}
+            aria-label={label}
+            rows={3}
+            className={`${area} mb-1.5 ml-4 w-[calc(100%-1rem)]`}
+            style={{ "--tw-ring-color": accent }}
+          />
+        ) : null}
+      </div>
+    );
   };
 
   return (
-    <div className={`border-t px-4 sm:px-5 py-4 ${DIVIDER}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <h4 className={`flex items-center gap-2 text-sm font-semibold ${HEAD}`}>
-          <FileText size={15} style={{ color: accent }} />
-          Day note
-        </h4>
-        <label className={`flex cursor-pointer items-center gap-2 text-xs font-medium ${MUTED}`}>
-          <input
-            type="checkbox"
-            checked={reviewed}
-            onChange={(e) => setReviewed(e.target.checked)}
-            className="h-4 w-4 rounded"
-            style={{ accentColor: accent }}
-          />
-          Mark day as reviewed
-        </label>
-      </div>
-
-      <div className="flex flex-wrap gap-1.5 mb-3" role="group" aria-label="How did you feel today">
-        {MOODS.map((m) => {
-          const on = moods.includes(m);
-          return (
+    <div
+      className="fixed inset-0 z-[1600] flex items-start justify-center overflow-y-auto bg-black/60 p-3 backdrop-blur-sm sm:items-center sm:p-6"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Day view for ${format(dateObj, "d MMMM yyyy")}`}
+        className={`relative w-full max-w-3xl overflow-hidden rounded-2xl border bg-white shadow-2xl dark:bg-[#15152b] ${DIVIDER}`}
+      >
+        {/* Header */}
+        <div className={`flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:px-5 ${DIVIDER}`}>
+          <h2 className={`text-[17px] font-semibold ${HEAD}`}>Day view</h2>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setTemplatesOpen((open) => !open)}
+                aria-expanded={templatesOpen}
+                className={headerBtn}
+              >
+                <LayoutTemplate size={13} /> Templates
+              </button>
+              {templatesOpen ? (
+                <div className={`absolute right-0 top-full z-10 mt-1 w-56 overflow-hidden rounded-lg border bg-white shadow-xl dark:bg-[#15152b] ${DIVIDER}`}>
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate("plan")}
+                    className={`block w-full px-3 py-2 text-left text-[12px] font-medium hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${HEAD}`}
+                  >
+                    Pre-market plan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate("recap")}
+                    className={`block w-full px-3 py-2 text-left text-[12px] font-medium hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${HEAD}`}
+                  >
+                    End-of-day review
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <button
-              key={m}
               type="button"
-              onClick={() => toggleMood(m)}
-              aria-pressed={on}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${FOCUS} ${
-                on ? "text-white border-transparent" : `${MUTED} ${DIVIDER} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`
-              }`}
-              style={on ? { backgroundColor: accent } : undefined}
+              onClick={() => {
+                onClose();
+                navigate(`/notebook?date=${dateKey}`);
+              }}
+              className={headerBtn}
             >
-              {m}
+              View in Notebook <ExternalLink size={12} />
             </button>
-          );
-        })}
-      </div>
+            <button
+              type="button"
+              onClick={() => setReviewed((value) => !value)}
+              aria-pressed={reviewed}
+              aria-label={reviewed ? "Remove reviewed mark" : "Mark day as reviewed"}
+              title={reviewed ? "Marked as reviewed" : "Mark day as reviewed"}
+              className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${DIVIDER} ${FOCUS}`}
+              style={{ color: reviewed ? accent : undefined }}
+            >
+              <Star size={14} fill={reviewed ? "currentColor" : "none"} />
+            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMoreOpen((open) => !open)}
+                aria-expanded={moreOpen}
+                aria-label="More options"
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${DIVIDER} ${MUTED} ${FOCUS}`}
+              >
+                <MoreHorizontal size={15} />
+              </button>
+              {moreOpen ? (
+                <div className={`absolute right-0 top-full z-10 mt-1 w-52 overflow-hidden rounded-lg border bg-white shadow-xl dark:bg-[#15152b] ${DIVIDER}`}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReviewed((value) => !value);
+                      setMoreOpen(false);
+                    }}
+                    className={`block w-full px-3 py-2 text-left text-[12px] font-medium hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${HEAD}`}
+                  >
+                    {reviewed ? "Remove reviewed mark" : "Mark day as reviewed"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNote("");
+                      setPlan({ watchlist: "", economic: "", bias: "", levels: "", gameplan: "" });
+                      setRecap({ overall: "", plusMinus: "" });
+                      setMoreOpen(false);
+                      setTemplatesNote("All note fields cleared. Save to keep it.");
+                    }}
+                    className="block w-full px-3 py-2 text-left text-[12px] font-medium text-[#d93a57] hover:bg-[#f2556e]/10 dark:text-[#ff6b86]"
+                  >
+                    Clear note fields
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close day view"
+              className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${MUTED} ${FOCUS}`}
+            >
+              <X size={17} />
+            </button>
+          </div>
+        </div>
 
-      {/* Editor toolbar */}
-      <div className={`flex flex-wrap items-center gap-1 border-b mb-3 ${DIVIDER}`}>
-        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Undo">
-          <X size={13} />
-        </button>
-        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Redo">
-          <ChevronDown size={13} />
-        </button>
-        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Bold">
-          <b />
-        </button>
-        <span className="h-3 w-px bg-[#e6e8f2] dark:bg-[#262645] my-0.5" />
-        <div className="flex items-center gap-1">
-          <span className={`text-[10px] ${MUTED}`}>Font</span>
-          <select
-            defaultValue="Arial"
-            className="text-[10px] bg-transparent border-none outline-none text-xs font-medium"
+        {/* Body */}
+        <div className="max-h-[min(78dvh,780px)] overflow-y-auto px-4 py-3 sm:px-5">
+          {/* Day summary */}
+          <div className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 ${DIVIDER}`}>
+            <ChevronRight size={13} className={`mt-1 shrink-0 ${MUTED}`} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`text-[13px] font-semibold ${HEAD}`}>{format(dateObj, "EEE, MMM d, yyyy")}</span>
+                <span className={MUTED}>·</span>
+                <span className={`text-[13px] font-semibold ${hadTrades ? pnlClass(net) : MUTED}`}>
+                  Net P&L {hadTrades ? money(net) : "—"}
+                </span>
+              </div>
+              <div className={`mt-0.5 text-[11px] ${MUTED}`}>
+                {stats?.count || 0} {stats?.count === 1 ? "trade" : "trades"}
+                {stats?.executed ? ` · ${stats.winRate}% win rate` : ""}
+              </div>
+            </div>
+          </div>
+
+          {/* Text toolbar (decorative: the note is plain text) */}
+          <div className={`mt-3 flex flex-wrap items-center gap-0.5 rounded-lg border px-1.5 py-1 ${DIVIDER}`} aria-hidden="true">
+            <span className={toolIcon}><ListOrdered size={13} /></span>
+            <span className={toolIcon}><AlignLeft size={13} /></span>
+            <span className={`mx-1 h-4 w-px ${DIVIDER} border-l`} />
+            <span className={toolIcon}><Bold size={13} /></span>
+            <span className={toolIcon}><Italic size={13} /></span>
+            <span className={toolIcon}><Underline size={13} /></span>
+            <span className={toolIcon}><Highlighter size={13} /></span>
+            <span className={`mx-1 h-4 w-px ${DIVIDER} border-l`} />
+            <span className={`rounded-md border px-1.5 py-0.5 text-[11px] ${DIVIDER} ${MUTED}`}>Arial</span>
+            <span className={`rounded-md border px-1.5 py-0.5 text-[11px] ${DIVIDER} ${MUTED}`}>14</span>
+            <span className={toolIcon}><List size={13} /></span>
+            <span className={toolIcon}><Image size={13} /></span>
+            <span className="ml-auto flex items-center gap-1">
+              <span className={toolIcon}><RefreshCw size={12} /></span>
+              <span className={toolIcon}><Star size={12} /></span>
+            </span>
+          </div>
+
+          {templatesNote ? <p className={`mt-2 text-[11px] ${MUTED}`}>{templatesNote}</p> : null}
+
+          {/* Preparation & Game plan */}
+          <section className="mt-2">
+            <button
+              type="button"
+              onClick={() => toggleSection("plan")}
+              aria-expanded={openSections.plan}
+              className={`flex w-full items-center gap-1.5 py-1.5 text-left ${FOCUS}`}
+            >
+              <ChevronDown size={13} className={`transition-transform ${MUTED} ${openSections.plan ? "" : "-rotate-90"}`} />
+              <Target size={15} style={{ color: NEG }} />
+              <span className={`text-[13px] font-semibold ${HEAD}`}>Preparation &amp; Game plan</span>
+            </button>
+            {openSections.plan ? (
+              <div className="space-y-0.5">{planItems.map(([key, label]) => renderItem("plan", key, label))}</div>
+            ) : null}
+          </section>
+
+          <div className={`my-2 border-t ${DIVIDER}`} />
+
+          {/* Session log */}
+          <section>
+            <button
+              type="button"
+              onClick={() => toggleSection("session")}
+              aria-expanded={openSections.session}
+              className={`flex w-full items-center gap-1.5 py-1.5 text-left ${FOCUS}`}
+            >
+              <ChevronDown size={13} className={`transition-transform ${MUTED} ${openSections.session ? "" : "-rotate-90"}`} />
+              <FileText size={15} style={{ color: accent }} />
+              <span className={`text-[13px] font-semibold ${HEAD}`}>Session log</span>
+            </button>
+            {openSections.session ? (
+              <>
+                <p className={`pl-6 text-[11px] leading-relaxed ${MUTED}`}>
+                  Log your thoughts with timestamps for future recaps. Use voice-to-text to help you.
+                </p>
+                <textarea
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Log your thoughts with timestamps for future recaps."
+                  aria-label="Session log"
+                  rows={4}
+                  className={`${area} mt-2`}
+                  style={{ "--tw-ring-color": accent }}
+                />
+              </>
+            ) : null}
+          </section>
+
+          <div className={`my-2 border-t ${DIVIDER}`} />
+
+          {/* EOD performance recap */}
+          <section>
+            <button
+              type="button"
+              onClick={() => toggleSection("recap")}
+              aria-expanded={openSections.recap}
+              className={`flex w-full items-center gap-1.5 py-1.5 text-left ${FOCUS}`}
+            >
+              <ChevronDown size={13} className={`transition-transform ${MUTED} ${openSections.recap ? "" : "-rotate-90"}`} />
+              <BarChart3 size={15} style={{ color: POS }} />
+              <span className={`text-[11.5px] font-bold uppercase tracking-wide ${HEAD}`}>EOD Performance Recap</span>
+            </button>
+            {openSections.recap ? (
+              <div className="space-y-0.5">{recapItems.map(([key, label]) => renderItem("recap", key, label))}</div>
+            ) : null}
+          </section>
+        </div>
+
+        {/* Footer */}
+        <div className={`flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 sm:px-5 ${DIVIDER}`}>
+          <div className={`flex flex-wrap items-center gap-3 text-[11px] ${MUTED}`}>
+            <span className="inline-flex items-center gap-1.5">
+              <ListChecks size={12} /> {stats?.count || 0} {stats?.count === 1 ? "trade" : "trades"} logged
+            </span>
+            {dirty ? <span>Unsaved changes</span> : null}
+          </div>
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy}
+            style={{ backgroundColor: accent }}
+            className={`inline-flex items-center gap-2 rounded-lg px-5 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS}`}
           >
-            <option>Arial</option>
-            <option>Georgia</option>
-            <option>Courier New</option>
-          </select>
-          <span className={`text-[10px] ${MUTED}`}>14</span>
-        </div>
-        <span className="h-3 w-px bg-[#e6e8f2] dark:bg-[#262645] my-0.5" />
-        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="List">
-          <List size={13} />
-        </button>
-        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Link">
-          <Link size={13} />
-        </button>
-        <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Image">
-          <Image size={13} />
-        </button>
-        <div className="ml-auto flex items-center gap-1">
-          <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Templates">
-            <RefreshCw size={13} />
-          </button>
-          <button className={`p-1 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] rounded ${FOCUS}`} title="Favorite">
-            <Star size={13} />
+            {busy ? <Loader2 size={13} className="animate-spin" /> : null}
+            Save
           </button>
         </div>
-      </div>
-
-      <textarea
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        placeholder="Log your thoughts with timestamps for future recaps."
-        aria-label="Session log"
-        className={`w-full min-h-[120px] resize-y rounded-lg border bg-white dark:bg-[#101024] p-3 text-sm outline-none focus:ring-2 focus:ring-[#6C47FF] ${DIVIDER}`}
-      />
-
-      {/* Preparation & Game plan */}
-      <section className="mt-4">
-        <button
-          onClick={() => toggleSection("plan")}
-          className="flex w-full items-center justify-between gap-2 text-left"
-          aria-expanded={sections.plan}
-        >
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#14142b] dark:text-white">
-            <Target size={15} style={{ color: accent }} />
-            Preparation and Game plan
-          </div>
-          <ChevronDown size={14} className={`transition-transform ${MUTED} ${!sections.plan ? "-rotate-90" : ""}`} />
-        </button>
-        {sections.plan && (
-          <div className="mt-2 space-y-1.5 text-xs">
-            {[
-              "Watchlist",
-              "Economic events",
-              "Daily/Weekly Bias",
-              "Levels to Watch",
-              "Gameplan",
-            ].map((item) => (
-              <div key={item} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left cursor-pointer hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}">
-                <span className="flex items-center gap-1">{item}</span>
-                <ChevronRight size={12} className={MUTED} />
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Session log */}
-      <section className="mt-4">
-        <button
-          onClick={() => toggleSection("session")}
-          className="flex w-full items-center justify-between gap-2 text-left"
-          aria-expanded={sections.session}
-        >
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#14142b] dark:text-white">
-            <FileText size={15} style={{ color: accent }} />
-            Session log
-          </div>
-          <ChevronDown size={14} className={`transition-transform ${MUTED} ${!sections.session ? "-rotate-90" : ""}`} />
-        </button>
-        {sections.session && (
-          <div className="mt-2">
-            <p className={`text-[11px] leading-relaxed ${MUTED} mb-2`}>
-              Log your thoughts with timestamps for future recaps. Use voice-to-text to help you.
-            </p>
-            <div className="rounded-lg border bg-[#f7f8fc] dark:bg-[#101024] px-3 py-3 ${DIVIDER}" />
-          </div>
-        )}
-      </section>
-
-      {/* EOD Performance Recap */}
-      <section className="mt-4">
-        <button
-          onClick={() => toggleSection("recap")}
-          className="flex w-full items-center justify-between gap-2 text-left"
-          aria-expanded={sections.recap}
-        >
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#14142b] dark:text-white">
-            <BarChart3 size={15} style={{ color: accent }} />
-            EOD Performance Recap
-          </div>
-          <ChevronDown size={14} className={`transition-transform ${MUTED} ${!sections.recap ? "-rotate-90" : ""}`} />
-        </button>
-        {sections.recap && (
-          <div className="mt-2 space-y-1.5 text-xs">
-            {["Overall Day Recap", 'The "Plus/Minus"'].map((item) => (
-              <div key={item} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left cursor-pointer hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}">
-                <span className="flex items-center gap-1">{item}</span>
-                <ChevronRight size={12} className={MUTED} />
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="mt-4 flex items-center justify-end gap-3">
-        {dirty && <span className={`text-xs ${MUTED}`}>Unsaved changes</span>}
-        <button
-          type="button"
-          onClick={save}
-          disabled={!dirty || busy}
-          style={{ backgroundColor: accent }}
-          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed ${FOCUS}`}
-        >
-          {busy && <Loader2 size={14} className="animate-spin" />}
-          Save note
-        </button>
       </div>
     </div>
   );
 };
+
 
 // ────────────────────────────────────────────────
 // Main page
@@ -615,6 +813,11 @@ export default function DailyJournal({ currentAccount }) {
   );
   const navigate = useNavigate();
   const [form, setForm] = useState(emptyForm());
+  const [playbooks, setPlaybooks] = useState([]);
+  const [newPlaybookOpen, setNewPlaybookOpen] = useState(false);
+  const [newPlaybookName, setNewPlaybookName] = useState("");
+  const [savingPlaybook, setSavingPlaybook] = useState(false);
+  const [playbookError, setPlaybookError] = useState("");
 
   const modalContentRef = useRef(null);
   const uploadRef = useRef(null);
@@ -744,6 +947,115 @@ export default function DailyJournal({ currentAccount }) {
     if (currentAccount && (user || PREVIEW)) refreshEntries();
   }, [currentAccount, user, PREVIEW]);
 
+  // ─── Playbooks for this account (shown in the entry form) ──────────
+  useEffect(() => {
+    if (!currentAccount?.id) {
+      setPlaybooks([]);
+      return undefined;
+    }
+    if (PREVIEW) {
+      setPlaybooks(DEMO_PLAYBOOKS);
+      return undefined;
+    }
+    if (!user) return undefined;
+    let cancelled = false;
+    getDocs(collection(db, "users", user.uid, "accounts", currentAccount.id, "playbooks"))
+      .then((snap) => {
+        if (!cancelled) setPlaybooks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch((err) => console.warn("Playbooks could not be loaded:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAccount?.id, user, PREVIEW]);
+
+  const selectedPlaybook = useMemo(
+    () => playbooks.find((playbook) => playbook.id === form.playbookId) || null,
+    [playbooks, form.playbookId]
+  );
+  // Entries keep a snapshot of the rules so the checklist still reads right
+  // after a playbook is edited or deleted.
+  const activeRules = form.playbookRules?.length ? form.playbookRules : selectedPlaybook?.rules || [];
+
+  const resetPlaybookForm = () => {
+    setNewPlaybookOpen(false);
+    setNewPlaybookName("");
+    setPlaybookError("");
+  };
+
+  const choosePlaybook = (id) => {
+    const playbook = playbooks.find((item) => item.id === id);
+    setForm((prev) => ({
+      ...prev,
+      playbookId: id,
+      playbookRules: playbook?.rules || [],
+      playbookChecks: [],
+    }));
+  };
+
+  const togglePlaybookRule = (rule) => {
+    setForm((prev) => {
+      const checks = Array.isArray(prev.playbookChecks) ? prev.playbookChecks : [];
+      return {
+        ...prev,
+        playbookChecks: checks.includes(rule) ? checks.filter((item) => item !== rule) : [...checks, rule],
+      };
+    });
+  };
+
+  // Create a playbook without leaving the entry form; only the name is asked
+  // for here, the rules are edited on the Playbooks page.
+  const createPlaybook = async () => {
+    const name = newPlaybookName.trim();
+    if (!name) {
+      setPlaybookError("Give the playbook a name first.");
+      return;
+    }
+    if (playbooks.some((item) => String(item.name || "").trim().toLowerCase() === name.toLowerCase())) {
+      setPlaybookError("You already have a playbook with that name.");
+      return;
+    }
+    setPlaybookError("");
+
+    if (!user || !currentAccount?.id) {
+      const id = `local-${Date.now()}`;
+      setPlaybooks((list) => [...list, { id, name, rules: [] }]);
+      choosePlaybook(id);
+      resetPlaybookForm();
+      return;
+    }
+
+    setSavingPlaybook(true);
+    try {
+      const created = await addDoc(
+        collection(db, "users", user.uid, "accounts", currentAccount.id, "playbooks"),
+        {
+          name,
+          description: "",
+          market: "",
+          timeframe: "",
+          riskPerTrade: "",
+          entryCriteria: "",
+          exitCriteria: "",
+          rules: [],
+          color: ac.hex,
+          icon: "target",
+          shared: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }
+      );
+      setPlaybooks((list) => [...list, { id: created.id, name, rules: [] }]);
+      setForm((prev) => ({ ...prev, playbookId: created.id, playbookRules: [], playbookChecks: [] }));
+      resetPlaybookForm();
+    } catch (err) {
+      console.error("Create playbook error:", err);
+      setPlaybookError("Couldn't save the playbook. Check your connection and try again.");
+    } finally {
+      setSavingPlaybook(false);
+    }
+  };
+
   // ─── Auto‑calculate PnL and R:R (only if executed and exit given) ─
   useEffect(() => {
     if (form.status === "pending" || !form.exit) {
@@ -818,13 +1130,13 @@ export default function DailyJournal({ currentAccount }) {
   const monthEndKey = dayKey(endOfMonth(viewMonth));
   const inMonth = (k) => k >= monthStartKey && k <= monthEndKey;
 
-  const monthEntries = useMemo(
-    () => entries.filter((e) => inMonth(entryDay(e))),
-    [entries, monthStartKey, monthEndKey]
-  );
-  const monthStats = useMemo(() => dayStats(monthEntries), [monthEntries]);
-
-  const hasNote = (n) => !!n && ((n.note || "").trim().length > 0 || (n.moods || []).length > 0 || n.reviewed);
+  const hasNote = (n) =>
+    !!n &&
+    ((n.note || "").trim().length > 0 ||
+      (n.moods || []).length > 0 ||
+      n.reviewed ||
+      Object.values(n.plan || {}).some((value) => String(value || "").trim().length > 0) ||
+      Object.values(n.recap || {}).some((value) => String(value || "").trim().length > 0));
 
   // Journal streak: consecutive days (ending today) with entries or a note
   const journaledSet = useMemo(() => {
@@ -887,8 +1199,8 @@ export default function DailyJournal({ currentAccount }) {
   const calendarDays = useMemo(
     () =>
       eachDayOfInterval({
-        start: startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 1 }),
-        end: endOfWeek(endOfMonth(viewMonth), { weekStartsOn: 1 }),
+        start: startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 }),
+        end: endOfWeek(endOfMonth(viewMonth), { weekStartsOn: 0 }),
       }),
     [viewMonth]
   );
@@ -1024,6 +1336,7 @@ export default function DailyJournal({ currentAccount }) {
     const base = dateKey === todayKey ? now : `${dateKey}T${now.slice(11)}`;
     setEditingEntry(null);
     setForm(emptyForm(base));
+    resetPlaybookForm();
     setModalOpen(true);
   };
 
@@ -1047,7 +1360,11 @@ export default function DailyJournal({ currentAccount }) {
       status: entry.status || "executed",
       confluences: Array.isArray(entry.confluences) ? entry.confluences : [],
       screenshotUrl: entry.screenshotUrl || "",
+      playbookId: entry.playbookId || "",
+      playbookRules: Array.isArray(entry.playbookRules) ? entry.playbookRules : [],
+      playbookChecks: Array.isArray(entry.playbookChecks) ? entry.playbookChecks : [],
     });
+    resetPlaybookForm();
     setModalOpen(true);
   };
 
@@ -1089,7 +1406,16 @@ export default function DailyJournal({ currentAccount }) {
       status: form.status || "executed",
       confluences: form.confluences || [],
       screenshotUrl: form.screenshotUrl || "",
+      playbookId: form.playbookId || "",
+      playbook: form.playbookId ? selectedPlaybook?.name || editingEntry?.playbook || "" : "",
+      playbookRules: activeRules,
+      playbookChecks: form.playbookChecks || [],
     };
+    // New trades record the setup name as their strategy; edits only touch it
+    // when a playbook is actually chosen, so handwritten strategies survive.
+    if (!editingEntry || form.playbookId) {
+      payload.strategy = form.playbookId ? selectedPlaybook?.name || "" : "";
+    }
 
     try {
       if (editingEntry) {
@@ -1202,95 +1528,60 @@ export default function DailyJournal({ currentAccount }) {
     >
       <div className="mx-auto max-w-[1600px]">
         {/* ───────── Header / toolbar ───────── */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
-          <div className="min-w-0 flex items-center gap-3">
-            <div className={`flex items-center rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b]`}>
-              <button
-                type="button"
-                onClick={() => setViewMode("day")}
-                aria-pressed={viewMode === "day"}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${FOCUS} ${viewMode === "day" ? "bg-[#6C47FF] text-white" : MUTED}`}
-              >
-                Day
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("week")}
-                aria-pressed={viewMode === "week"}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${FOCUS} ${viewMode === "week" ? "bg-[#6C47FF] text-white" : MUTED}`}
-              >
-                Week
-              </button>
-            </div>
-            <h1 className={`text-xl font-bold tracking-tight sm:text-2xl whitespace-nowrap ${HEAD}`}>Day View</h1>
-            <p className={`mt-1 text-sm ${MUTED}`}>
-              {currentAccount.name} · auto P&L at {accountLeverage}:1 leverage
-            </p>
-          </div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className={`min-w-0 text-[12px] ${MUTED}`}>
+            <span className={`font-semibold ${HEAD}`}>{currentAccount.name}</span> · auto P&L at {accountLeverage}:1 leverage
+          </p>
 
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-            <div className={`flex rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-1`}>
-              {FILTERS.map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setFilter(key)}
-                  aria-pressed={filter === key}
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${FOCUS} ${filter === key ? "text-white shadow-sm" : `${MUTED} hover:text-[#14142b] dark:hover:text-white`}`}
-                  style={filter === key ? { backgroundColor: ac.hex } : undefined}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className={`flex items-center gap-1.5 rounded-lg border ${DIVIDER} bg-white px-2.5 py-1.5 dark:bg-[#15152b]`}>
+              <Filter size={13} className={MUTED} />
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                aria-label="Filter days"
+                className="cursor-pointer bg-transparent text-[12px] font-semibold outline-none"
+              >
+                {FILTERS.map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </label>
 
-            <div className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2`}>
-              <Search size={15} className={MUTED} />
+            <div className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white px-2.5 py-1.5 dark:bg-[#15152b]`}>
+              <Search size={14} className={MUTED} />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search symbol"
                 aria-label="Search by symbol"
-                className="w-32 sm:w-40 bg-transparent text-sm outline-none"
+                className="w-28 bg-transparent text-[12px] outline-none sm:w-36"
               />
               {search && (
                 <button onClick={() => setSearch("")} aria-label="Clear search" className={MUTED}>
-                  <X size={14} />
+                  <X size={13} />
                 </button>
               )}
             </div>
 
-            <div
-              className={`cursor-pointer flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2 text-sm font-semibold ${HEAD}`}
-              onClick={() => selectDay(todayKey)}
-            >
-              {format(subDays(new Date(), 30), "MMM d")} – {format(new Date(), "MMM d, yyyy")}
-              <ChevronDown size={14} className={MUTED} />
-            </div>
-
-            <div className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white dark:bg-[#15152b] px-3 py-2`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${currentAccount?.mt5Connected ? "bg-[#22c493]" : "bg-[#8a8fb5]"}`} />
-              <span className="max-w-[140px] truncate text-[13px] font-semibold text-[#14142b] dark:text-white">
-                {currentAccount.name}
-              </span>
-              <ChevronDown size={14} className={MUTED} />
-            </div>
-
             <button
-              onClick={() => setNoteModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
-              style={{ backgroundColor: ac.hex }}
-              aria-label="Start my day"
+              type="button"
+              onClick={() => selectDay(todayKey)}
+              className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white px-2.5 py-1.5 text-[12px] font-semibold dark:bg-[#15152b] ${HEAD} ${FOCUS}`}
             >
-              <Target size={14} />
-              Start my day
+              {format(subDays(new Date(), 30), "MMM d, yyyy")} – {format(new Date(), "MMM d, yyyy")}
+              <ChevronDown size={13} className={MUTED} />
             </button>
 
             <button
-              onClick={() => navigate("/settings")}
-              className={ICON_BTN}
-              aria-label="Settings"
+              type="button"
+              onClick={() => navigate("/add-trade")}
+              title="Switch trading account"
+              className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white px-2.5 py-1.5 dark:bg-[#15152b] ${FOCUS}`}
             >
-              <Settings size={18} />
+              <span className={`h-1.5 w-1.5 rounded-full ${currentAccount?.mt5Connected ? "bg-[#22c493]" : "bg-[#8a8fb5]"}`} />
+              <span className={`max-w-[140px] truncate text-[12px] font-semibold ${HEAD}`}>{currentAccount.name}</span>
+              <ChevronDown size={13} className={MUTED} />
             </button>
           </div>
         </div>
@@ -1310,31 +1601,34 @@ export default function DailyJournal({ currentAccount }) {
           </div>
         )}
 
-        {loading ? (
-          <div className="flex justify-center items-center h-72">
-            <div
-              className="h-10 w-10 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#262645]"
-              style={{ borderTopColor: ac.hex }}
-              role="progressbar"
-              aria-label="Loading journal"
-            />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
             {/* ───────── Right rail (first on phones) ───────── */}
             <div className="order-first lg:order-last flex flex-col gap-4 lg:sticky lg:top-6">
               {/* Month calendar */}
               <Card className={`${CARD} p-0`}>
-                <div className={`border-b px-4 py-3 ${DIVIDER}`}>
-                  <h3 className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
-                    <CalendarDays size={16} style={{ color: ac.hex }} />
-                    {monthLabel}
-                  </h3>
+                <div className={`flex items-center justify-between border-b px-3 py-2.5 ${DIVIDER}`}>
+                  <button
+                    type="button"
+                    onClick={() => setViewMonth(subMonths(viewMonth, 1))}
+                    aria-label="Previous month"
+                    className={`flex h-7 w-7 items-center justify-center rounded-md ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+                  <h3 className={`text-[13px] font-semibold ${HEAD}`}>{monthLabel}</h3>
+                  <button
+                    type="button"
+                    onClick={() => setViewMonth(addMonths(viewMonth, 1))}
+                    aria-label="Next month"
+                    className={`flex h-7 w-7 items-center justify-center rounded-md ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                  >
+                    <ChevronRight size={15} />
+                  </button>
                 </div>
-                <div className="p-4">
+                <div className="p-3">
                   <div className="grid grid-cols-7 gap-1">
-                    {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-                      <div key={i} className={`pb-1 text-center text-[10px] font-semibold ${MUTED}`}>
+                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                      <div key={d} className={`pb-1 text-center text-[10px] font-semibold ${MUTED}`}>
                         {d}
                       </div>
                     ))}
@@ -1358,7 +1652,7 @@ export default function DailyJournal({ currentAccount }) {
                           onClick={() => selectDay(k)}
                           aria-label={`${format(d, "d MMMM")}${t ? `, ${t.count} entries` : ""}`}
                           aria-current={isToday(d) ? "date" : undefined}
-                          className={`relative aspect-square rounded-md text-xs font-semibold tabular-nums transition-colors ${FOCUS} ${cur ? HEAD : `${MUTED} opacity-40`} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`}
+                          className={`relative aspect-square rounded-md text-[11px] font-semibold tabular-nums transition-colors ${FOCUS} ${cur ? HEAD : `${MUTED} opacity-40`} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`}
                           style={{
                             backgroundColor: tone,
                             boxShadow: sel ? `inset 0 0 0 2px ${ac.hex}` : isToday(d) ? `inset 0 0 0 1px ${ac.hex}88` : undefined,
@@ -1372,41 +1666,75 @@ export default function DailyJournal({ currentAccount }) {
                       );
                     })}
                   </div>
-                  <div className={`mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] ${MUTED}`}>
+                  <div className={`mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] ${MUTED}`}>
                     <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm" style={{ backgroundColor: POS }} /> Green</span>
                     <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm" style={{ backgroundColor: NEG }} /> Red</span>
                     <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-amber-500" /> Pending</span>
-                    <span className="inline-flex items-center gap-1.5"><i className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ac.hex }} /> Note</span>
                   </div>
                 </div>
-                <div className={`grid grid-cols-2 gap-px border-t bg-[#e6e8f2] dark:bg-[#262645] ${DIVIDER} overflow-hidden rounded-b-xl`}>
-                  {[
-                    ["Win rate", monthStats.executed ? `${monthStats.winRate}%` : "—"],
-                    ["Profit factor", monthStats.pf],
-                    ["Trades", monthStats.count],
-                    ["Commissions", money(monthStats.commission, false)],
-                  ].map(([label, value]) => (
-                    <div key={label} className="bg-white dark:bg-[#15152b] px-4 py-3">
-                      <div className={`text-[11px] font-medium ${MUTED}`}>{label}</div>
-                      <div className={`mt-0.5 text-base font-bold tabular-nums ${HEAD}`}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className={`flex items-center justify-between border-t px-4 py-3 ${DIVIDER}`}>
-                  <span className={`flex items-center gap-2 text-sm ${MUTED}`}>
-                    <Flame size={16} className={streak ? "text-amber-500" : ""} />
-                    Journal streak
-                  </span>
-                  <span className={`text-sm font-bold ${streak ? HEAD : MUTED}`}>
-                    {streak} {streak === 1 ? "day" : "days"}
-                  </span>
+                <div className={`flex items-center justify-center gap-1.5 border-t px-3 py-2 text-[11px] ${DIVIDER} ${MUTED}`}>
+                  <Flame size={12} className={streak ? "text-amber-500" : ""} />
+                  {streak} {streak === 1 ? "day" : "days"} journal streak
                 </div>
               </Card>
             </div>
 
             {/* ───────── Day feed ───────── */}
-            <div className="flex min-w-0 flex-col gap-4">
-              {!isAccountReady ? (
+            <div className="flex min-w-0 flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className={`flex items-center gap-0.5 rounded-lg border ${DIVIDER} bg-white p-0.5 dark:bg-[#15152b]`}>
+                  {[
+                    ["day", "Day"],
+                    ["week", "Week"],
+                  ].map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setViewMode(key)}
+                      aria-pressed={viewMode === key}
+                      className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors ${FOCUS} ${
+                        viewMode === key
+                          ? "bg-[#f1f2f8] font-semibold dark:bg-[#1e1e3a] " + HEAD
+                          : MUTED
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoteDateKey(selectedDate);
+                      setNoteModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+                    style={{ backgroundColor: ac.hex }}
+                  >
+                    <Sparkles size={13} />
+                    Start my day
+                  </button>
+                  <button
+                    onClick={() => navigate("/settings")}
+                    className={ICON_BTN}
+                    aria-label="Settings"
+                  >
+                    <Settings size={17} />
+                  </button>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="flex h-60 items-center justify-center">
+                  <div
+                    className="h-9 w-9 animate-spin rounded-full border-2 border-[#e6e8f2] dark:border-[#262645]"
+                    style={{ borderTopColor: ac.hex }}
+                    role="progressbar"
+                    aria-label="Loading journal"
+                  />
+                </div>
+              ) : !isAccountReady ? (
                 <Card className={`${CARD} p-8 text-center`}>
                   <p className={`text-lg font-semibold ${HEAD}`}>Preparing your account...</p>
                   <p className={`mt-1 text-sm ${MUTED}`}>Please wait while we set up your journal.</p>
@@ -1443,27 +1771,28 @@ export default function DailyJournal({ currentAccount }) {
                   )}
                 </Card>
               ) : (
-                feedDays.map((d) => {
+                                feedDays.map((d) => {
                   const s = d.stats;
                   const isSel = d.key === selectedDate;
                   const isCollapsed = !!collapsed[d.key];
                   const dateObj = parseISO(d.key);
-                  const cells = [
-                    ["Total trades", s.count],
-                    ["Win rate", s.executed ? `${s.winRate}%` : "—"],
-                    ["Volume", s.lots.toFixed(2)],
-                    ["Commissions", money(s.commission, false)],
-                    ["Winners / Losers", `${s.wins} / ${s.losses}`],
-                    ["Profit factor", s.pf],
-                  ];
                   const pnl = Number(s.net) || 0;
                   const hadTrades = s.executed > 0;
-                  const noteCount = (d.note?.moods || []).length;
+                  const noted = hasNote(d.note);
+                  const stats = [
+                    ["Total Trades", s.count],
+                    ["Gross P&L", hadTrades ? money(s.gross) : "—"],
+                    ["Winners/Losers", s.executed ? `${s.wins}/${s.losses}` : "—"],
+                    ["Commissions", money(s.commission, false)],
+                    ["Win Rate", s.executed ? `${s.winRate}%` : "—"],
+                    ["Volume", Number(s.lots.toFixed(2))],
+                    ["Profit Factor", s.pf],
+                  ];
                   return (
                     <Card
                       key={d.key}
                       id={`day-${d.key}`}
-                      className={`${CARD} scroll-mt-6 p-0 overflow-hidden border ${DIVIDER}`}
+                      className={`${CARD} scroll-mt-6 overflow-hidden border p-0 ${DIVIDER}`}
                       style={
                         isSel
                           ? { boxShadow: `0 0 0 2px ${ac.hex}`, borderColor: ac.hex }
@@ -1471,146 +1800,149 @@ export default function DailyJournal({ currentAccount }) {
                       }
                     >
                       {/* Day header */}
-                      <button
-                        onClick={() => setCollapsed((c) => ({ ...c, [d.key]: !c[d.key] }))}
-                        aria-expanded={!isCollapsed}
-                        aria-label={`Toggle ${format(dateObj, "EEE, MMM d, yyyy")}`}
-                        className={`flex w-full items-start justify-between gap-3 px-4 sm:px-5 py-3.5 ${isCollapsed ? "" : "border-b " + DIVIDER} bg-white dark:bg-[#15152b] transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                      <div
+                        className={`flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2.5 dark:bg-[#15152b] sm:px-4 ${
+                          isCollapsed ? "" : "border-b " + DIVIDER
+                        }`}
                       >
-                        <div className="min-w-0 flex items-center gap-3">
-                          <ChevronDown
-                            size={16}
-                            className={`shrink-0 transition-transform ${MUTED} ${isCollapsed ? "-rotate-90" : ""}`}
+                        <button
+                          type="button"
+                          onClick={() => setCollapsed((c) => ({ ...c, [d.key]: !c[d.key] }))}
+                          aria-expanded={!isCollapsed}
+                          aria-label={`Toggle ${format(dateObj, "EEE, MMM d, yyyy")}`}
+                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-2 text-left transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                        >
+                          <ChevronRight
+                            size={15}
+                            className={`shrink-0 transition-transform ${MUTED} ${isCollapsed ? "" : "rotate-90"}`}
                           />
                           <div className="min-w-0">
-                            <div className={`flex items-center gap-2 text-[15px] font-semibold ${HEAD}`}>
-                              {format(dateObj, "EEE, MMM d, yyyy")}
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className={`text-[14px] font-semibold ${HEAD}`}>
+                                {format(dateObj, "EEE, MMM d, yyyy")}
+                              </span>
+                              <span className={MUTED}>·</span>
+                              <span className={`text-[13px] font-semibold tabular-nums ${hadTrades ? pnlClass(pnl) : MUTED}`}>
+                                Net P&L {hadTrades ? money(pnl) : "—"}
+                              </span>
                               {isToday(dateObj) && (
                                 <span
-                                  className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-white"
+                                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
                                   style={{ backgroundColor: ac.hex }}
                                 >
                                   Today
                                 </span>
                               )}
                               {d.note?.reviewed && (
-                                <span className="inline-flex items-center gap-1 rounded-md bg-[#22c493]/15 px-2 py-0.5 text-[11px] font-semibold text-[#0e9f77] dark:text-[#2dd4a0]">
-                                  <Check size={11} /> Reviewed
+                                <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-[#0e9f77] dark:text-[#2dd4a0]">
+                                  <Check size={10} /> Reviewed
                                 </span>
                               )}
                             </div>
-                            <div className={`mt-0.5 flex items-center gap-2 text-xs ${MUTED}`}>
-                              <span>
-                                {s.count} {s.count === 1 ? "entry" : "entries"}
-                                {s.pending > 0 ? `, ${s.pending} pending` : ""}
-                              </span>
-                              {noteCount > 0 && <span>{noteCount} note{noteCount > 1 ? "s" : ""}</span>}
+                            <div className={`mt-0.5 text-[11px] ${MUTED}`}>
+                              {s.count} {s.count === 1 ? "trade" : "trades"}
+                              {s.executed ? ` · ${s.winRate}% win rate` : ""}
+                              {s.pending ? ` · ${s.pending} pending` : ""}
                             </div>
                           </div>
-                        </div>
+                        </button>
 
-                        <div className="ml-4 flex shrink-0 items-center gap-3 text-right min-w-[150px]">
-                          <div>
-                            <div className={`text-[11px] ${MUTED}`}>Net P&L</div>
-                            <div className={`text-lg font-bold tabular-nums ${hadTrades ? pnlClass(pnl) : MUTED}`}>
-                              {hadTrades ? money(pnl) : "—"}
-                            </div>
-                          </div>
-                          <div className="h-6 w-[1px] bg-[#e6e8f2] dark:bg-[#262645] self-stretch" />
-                          <div className="flex items-end gap-1 text-xs tabular-nums">
-                            {hadTrades && pnl > 0 ? (
-                              <TrendingUp size={10} className="text-[#22c493]" />
-                            ) : hadTrades && pnl < 0 ? (
-                              <TrendingDown size={10} className="text-[#f2556e]" />
-                            ) : null}
-                          </div>
-                        </div>
-
-                        {/* Day actions */}
-                        <div className="flex items-center gap-2 ml-2 shrink-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setNoteDateKey(d.key)}
-                            onMouseDown={(e) => e.preventDefault()}
-                            aria-label={`Add note for ${format(dateObj, "d MMMM")}`}
-                            className={`rounded-md p-1.5 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-                            title="Add note"
+                            onClick={() => navigate(`/mentor?date=${d.key}`)}
+                            className={GHOST_BTN}
                           >
-                            <FileText size={15} />
+                            <Sparkles size={12} style={{ color: ac.hex }} /> Review with AI
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/replay?date=${d.key}`)}
+                            className={GHOST_BTN}
+                          >
+                            <Play size={11} /> Replay
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNoteDateKey(d.key);
+                              setNoteModalOpen(true);
+                            }}
+                            className={GHOST_BTN}
+                          >
+                            <FileText size={11} /> {noted ? "View note" : "Add note"}
                           </button>
                           <button
                             type="button"
                             onClick={() => openNewEntry(d.key)}
                             disabled={!isAccountReady}
                             aria-label={`Add trade on ${format(dateObj, "d MMMM")}`}
-                            className={`rounded-md p-1.5 ${MUTED} ${!isAccountReady ? "opacity-50 cursor-not-allowed" : "hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]"} transition-colors ${FOCUS}`}
                             title="Add trade"
+                            className={`${GHOST_BTN} disabled:cursor-not-allowed disabled:opacity-40`}
                           >
-                            <Plus size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/journal?date=${d.key}`)}
-                            className={`rounded-md p-1.5 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] transition-colors ${FOCUS}`}
-                            title="Open day view"
-                          >
-                            <Maximize size={15} />
+                            <Plus size={13} />
                           </button>
                         </div>
-                      </button>
+                      </div>
 
                       {!isCollapsed && (
                         <>
                           {d.list.length === 0 ? (
-                            <div className="px-5 py-8 text-center">
-                              <p className={`text-sm ${MUTED}`}>No trades logged on this day.</p>
+                            <div className="px-4 py-6 text-center">
+                              {noted ? (
+                                <p className={`mx-auto max-w-xl whitespace-pre-line text-left text-[12.5px] leading-relaxed ${MUTED}`}>
+                                  {(d.note?.note || "").trim().slice(0, 320) || "Day note saved."}
+                                </p>
+                              ) : (
+                                <p className={`text-[12.5px] ${MUTED}`}>No trades logged on this day.</p>
+                              )}
                               <button
+                                type="button"
                                 onClick={() => openNewEntry(d.key)}
                                 disabled={!isAccountReady}
                                 style={{ color: ac.hex }}
-                                className={`mt-2 text-sm font-semibold hover:underline rounded ${FOCUS} ${!isAccountReady ? "opacity-50 cursor-not-allowed" : ""}`}
+                                className={`mt-2 rounded text-[12.5px] font-semibold hover:underline ${FOCUS} disabled:cursor-not-allowed disabled:opacity-40`}
                               >
-                                Log an entry
+                                + Log an entry
                               </button>
                             </div>
                           ) : (
                             <>
-                              {/* Sparkline + stats rail */}
-                              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-0 border-t ${DIVIDER}">
+                              {/* Sparkline + stats */}
+                              <div className="grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.55fr)]">
                                 <div className={`p-4 sm:p-5 lg:border-r ${DIVIDER}`}>
-                                  <div className={`mb-2 text-xs font-medium ${MUTED}`}>
-                                    Cumulative P&L through the day
-                                  </div>
-                                  <div className="relative h-32">
+                                  <div className="relative h-[150px]">
                                     <Line data={sparkData(d.list, s.net)} options={sparkOptions} />
                                   </div>
-                                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
-                                    {cells.map(([label, value]) => (
-                                      <div
-                                        key={label}
-                                        className={`rounded-lg border px-3 py-2 bg-[#f7f8fc] dark:bg-[#101024] ${DIVIDER}`}
-                                      >
-                                        <div className={`font-medium ${MUTED}`}>{label}</div>
-                                        <div className="mt-0.5 text-xs font-bold tabular-nums text-[#14142b] dark:text-[#e8e9f7]">
-                                          {value}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
                                 </div>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-5 p-4 sm:grid-cols-4 sm:p-5">
+                                  {stats.map(([label, value]) => (
+                                    <div key={label}>
+                                      <div className={`text-[10.5px] ${MUTED}`}>{label}</div>
+                                      <div
+                                        className={`mt-1 text-[12.5px] font-bold tabular-nums ${
+                                          label === "Gross P&L" && hadTrades ? pnlClass(s.gross) : HEAD
+                                        }`}
+                                      >
+                                        {value}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
 
                               {/* Trades table */}
-                              <div className={`overflow-x-auto border-l ${DIVIDER}`}>
+                              <div className={`overflow-x-auto border-t ${DIVIDER}`}>
                                 <table className="w-full min-w-[560px] text-sm">
                                   <thead>
-                                    <tr className={`border-b text-left text-xs ${MUTED} ${DIVIDER}`}>
-                                      <th className="px-4 sm:px-5 py-2.5 font-medium">Time</th>
-                                      <th className="px-3 py-2.5 font-medium">Symbol</th>
-                                      <th className="px-3 py-2.5 font-medium">Side</th>
-                                      <th className="px-3 py-2.5 font-medium text-right">Lots</th>
-                                      <th className="px-3 py-2.5 font-medium text-right">R:R</th>
-                                      <th className="px-3 py-2.5 font-medium text-right">Net P&L</th>
-                                      <th className="px-4 sm:px-5 py-2.5 font-medium text-right">
+                                    <tr className={`border-b text-left text-[11px] ${MUTED} ${DIVIDER}`}>
+                                      <th className="px-4 py-2 font-medium sm:px-5">Time</th>
+                                      <th className="px-3 py-2 font-medium">Symbol</th>
+                                      <th className="px-3 py-2 font-medium">Side</th>
+                                      <th className="px-3 py-2 text-right font-medium">Lots</th>
+                                      <th className="px-3 py-2 text-right font-medium">R:R</th>
+                                      <th className="px-3 py-2 text-right font-medium">Net P&L</th>
+                                      <th className="px-4 py-2 text-right font-medium sm:px-5">
                                         <span className="sr-only">Actions</span>
                                       </th>
                                     </tr>
@@ -1621,15 +1953,26 @@ export default function DailyJournal({ currentAccount }) {
                                       const p = Number(entry.pnl) || 0;
                                       const isLong = /buy|long/i.test(String(entry.direction || ""));
                                       const extras =
-                                        entry.notes || entry.screenshotUrl || (entry.confluences || []).length > 0;
+                                        entry.notes ||
+                                        entry.screenshotUrl ||
+                                        (entry.confluences || []).length > 0 ||
+                                        entry.playbook ||
+                                        entry.strategy ||
+                                        (entry.playbookRules || []).length > 0;
                                       return (
                                         <React.Fragment key={entry.id}>
-                                          <tr className={`border-b ${DIVIDER} ${extras ? "border-b-0" : ""} hover:bg-[#f7f8fc] dark:hover:bg-[#1b1b36] transition-colors`}>
-                                            <td className={`px-4 sm:px-5 py-3 whitespace-nowrap tabular-nums ${MUTED}`}>{timeOf(entry)}</td>
-                                            <td className={`px-3 py-3 font-semibold ${HEAD}`}>{entry.pair || "—"}</td>
-                                            <td className="px-3 py-3">
+                                          <tr
+                                            className={`border-b ${DIVIDER} ${extras ? "border-b-0" : ""} transition-colors hover:bg-[#f7f8fc] dark:hover:bg-[#1b1b36]`}
+                                          >
+                                            <td className={`whitespace-nowrap px-4 py-2.5 tabular-nums sm:px-5 ${MUTED}`}>
+                                              {timeOf(entry)}
+                                            </td>
+                                            <td className={`px-3 py-2.5 text-[12.5px] font-semibold ${HEAD}`}>
+                                              {entry.pair || "—"}
+                                            </td>
+                                            <td className="px-3 py-2.5">
                                               <span
-                                                className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${
+                                                className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-semibold ${
                                                   isLong
                                                     ? "bg-[#22c493]/15 text-[#0e9f77] dark:text-[#2dd4a0]"
                                                     : "bg-[#f2556e]/15 text-[#d93a57] dark:text-[#ff6b86]"
@@ -1638,21 +1981,27 @@ export default function DailyJournal({ currentAccount }) {
                                                 {entry.direction || "—"}
                                               </span>
                                             </td>
-                                            <td className={`px-3 py-3 text-right tabular-nums ${MUTED}`}>{entry.lotSize || "—"}</td>
-                                            <td className={`px-3 py-3 text-right tabular-nums ${MUTED}`}>
+                                            <td className={`px-3 py-2.5 text-right text-[12px] tabular-nums ${MUTED}`}>
+                                              {entry.lotSize || "—"}
+                                            </td>
+                                            <td className={`px-3 py-2.5 text-right text-[12px] tabular-nums ${MUTED}`}>
                                               {!pending && entry.rr ? entry.rr : "—"}
                                             </td>
-                                            <td className={`px-3 py-3 text-right font-bold tabular-nums ${pending ? "text-amber-600 dark:text-amber-400" : pnlClass(p)}`}>
+                                            <td
+                                              className={`px-3 py-2.5 text-right text-[12px] font-bold tabular-nums ${
+                                                pending ? "text-amber-600 dark:text-amber-400" : pnlClass(p)
+                                              }`}
+                                            >
                                               {pending ? "Pending" : money(p)}
                                             </td>
-                                            <td className="px-4 sm:px-5 py-3">
-                                              <div className="flex justify-end gap-1">
+                                            <td className="px-4 py-2.5 sm:px-5">
+                                              <div className="flex justify-end gap-0.5">
                                                 <button
                                                   onClick={() => openEdit(entry)}
                                                   aria-label="Edit entry"
                                                   className={`rounded-md p-1.5 ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
                                                 >
-                                                  <Pencil size={15} />
+                                                  <Pencil size={13} />
                                                 </button>
                                                 <button
                                                   onClick={() => {
@@ -1661,16 +2010,16 @@ export default function DailyJournal({ currentAccount }) {
                                                     setDeleteModalOpen(true);
                                                   }}
                                                   aria-label="Delete entry"
-                                                  className={`rounded-md p-1.5 text-[#d93a57] dark:text-[#ff6b86] hover:bg-[#f2556e]/10 ${FOCUS}`}
+                                                  className={`rounded-md p-1.5 text-[#d93a57] hover:bg-[#f2556e]/10 dark:text-[#ff6b86] ${FOCUS}`}
                                                 >
-                                                  <Trash2 size={15} />
+                                                  <Trash2 size={13} />
                                                 </button>
                                               </div>
                                             </td>
                                           </tr>
                                           {extras && (
                                             <tr className={`border-b ${DIVIDER}`}>
-                                              <td colSpan={7} className="px-4 sm:px-5 pb-3.5 pt-0">
+                                              <td colSpan={7} className="px-4 pb-3 pt-0 sm:px-5">
                                                 <div className="flex flex-wrap items-start gap-3">
                                                   {entry.screenshotUrl && (
                                                     <a
@@ -1682,27 +2031,54 @@ export default function DailyJournal({ currentAccount }) {
                                                       <img
                                                         src={entry.screenshotUrl}
                                                         alt={`${entry.pair || "Trade"} chart`}
-                                                        className={`h-16 w-24 rounded-lg border object-cover hover:opacity-80 transition ${DIVIDER}`}
+                                                        className={`h-16 w-24 rounded-lg border object-cover transition hover:opacity-80 ${DIVIDER}`}
                                                       />
                                                     </a>
                                                   )}
                                                   <div className="min-w-0 flex-1 space-y-2">
-                                                    {(entry.confluences || []).length > 0 && (
-                                                      <div className="flex flex-wrap gap-1.5">
-                                                        {entry.confluences.map((c) => (
-                                                          <span
-                                                            key={c}
-                                                            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold"
-                                                            style={{ backgroundColor: ac.hex + "22", color: ac.hex }}
-                                                          >
-                                                            <Tag size={10} />
-                                                            {c}
-                                                          </span>
-                                                        ))}
-                                                      </div>
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                      {(entry.playbook || entry.strategy) && (
+                                                        <span
+                                                          className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold"
+                                                          style={{ backgroundColor: ac.hex + "22", color: ac.hex }}
+                                                        >
+                                                          <ListChecks size={10} />
+                                                          {entry.playbook || entry.strategy}
+                                                        </span>
+                                                      )}
+                                                      {(entry.confluences || []).map((c) => (
+                                                        <span
+                                                          key={c}
+                                                          className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold"
+                                                          style={{ backgroundColor: ac.hex + "22", color: ac.hex }}
+                                                        >
+                                                          <Tag size={10} />
+                                                          {c}
+                                                        </span>
+                                                      ))}
+                                                    </div>
+                                                    {(entry.playbookRules || []).length > 0 && (
+                                                      <ul className="space-y-1">
+                                                        {(entry.playbookRules || []).map((rule) => {
+                                                          const done = (entry.playbookChecks || []).includes(rule);
+                                                          return (
+                                                            <li key={rule} className="flex items-start gap-1.5 text-[11.5px]">
+                                                              <span
+                                                                className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border ${
+                                                                  done ? "border-transparent" : DIVIDER
+                                                                }`}
+                                                                style={done ? { backgroundColor: POS } : undefined}
+                                                              >
+                                                                {done && <Check size={9} className="text-white" />}
+                                                              </span>
+                                                              <span className={done ? MUTED : HEAD}>{rule}</span>
+                                                            </li>
+                                                          );
+                                                        })}
+                                                      </ul>
                                                     )}
                                                     {entry.notes && (
-                                                      <p className={`line-clamp-3 text-sm leading-relaxed ${MUTED}`}>{entry.notes}</p>
+                                                      <p className={`line-clamp-3 text-[12.5px] leading-relaxed ${MUTED}`}>{entry.notes}</p>
                                                     )}
                                                   </div>
                                                 </div>
@@ -1715,21 +2091,28 @@ export default function DailyJournal({ currentAccount }) {
                                   </tbody>
                                 </table>
                               </div>
-                              </div>
                             </>
                           )}
 
-                          <DayNote dateKey={d.key} saved={d.note} onSave={saveDayNote} accent={ac.hex} />
-
                           {d.list.length > 0 && (
-                            <div className={`flex justify-end border-t px-4 sm:px-5 py-2.5 ${DIVIDER}`}>
+                            <div className={`flex items-center justify-between gap-3 border-t px-4 py-2 ${DIVIDER}`}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNoteDateKey(d.key);
+                                  setNoteModalOpen(true);
+                                }}
+                                className={`inline-flex items-center gap-1.5 rounded text-[11px] font-medium hover:underline ${MUTED} ${FOCUS}`}
+                              >
+                                <BookOpen size={11} /> {noted ? "Open day note" : "Write day note"}
+                              </button>
                               <button
                                 onClick={() => {
                                   setEntryToDelete(null);
                                   setClearDayKey(d.key);
                                   setDeleteModalOpen(true);
                                 }}
-                                className={`rounded text-xs font-semibold text-[#d93a57] dark:text-[#ff6b86] hover:underline ${FOCUS}`}
+                                className={`rounded text-[11px] font-semibold text-[#d93a57] hover:underline dark:text-[#ff6b86] ${FOCUS}`}
                               >
                                 Clear this day's entries
                               </button>
@@ -1743,6 +2126,18 @@ export default function DailyJournal({ currentAccount }) {
               )}
             </div>
           </div>
+
+        {/* ───────── Day view note dialog ───────── */}
+        {noteModalOpen && (
+          <DayNoteModal
+            key={noteDateKey}
+            dateKey={noteDateKey}
+            saved={dayNotes[noteDateKey]}
+            stats={dayStats(grouped[noteDateKey] || [])}
+            accent={ac.hex}
+            onSave={saveDayNote}
+            onClose={() => setNoteModalOpen(false)}
+          />
         )}
 
         {/* ───────── Add / Edit Entry Modal ───────── */}
@@ -1915,6 +2310,144 @@ export default function DailyJournal({ currentAccount }) {
                       accent={ac.hex}
                       onChange={(newTags) => setForm({ ...form, confluences: newTags })}
                     />
+                  </div>
+
+                  {/* Playbook + its rules checklist */}
+                  <div className={`rounded-xl border p-3 sm:p-4 ${DIVIDER}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Label className="flex items-center gap-1.5 text-sm font-medium">
+                        <ListChecks size={14} style={{ color: ac.hex }} />
+                        Playbook this trade came from
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewPlaybookOpen((open) => !open);
+                          setPlaybookError("");
+                        }}
+                        aria-expanded={newPlaybookOpen}
+                        className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-80 ${FOCUS}`}
+                        style={{ color: ac.hex }}
+                      >
+                        <Plus size={11} /> {newPlaybookOpen ? "Close" : "New playbook"}
+                      </button>
+                    </div>
+
+                    <select
+                      value={form.playbookId}
+                      onChange={(e) => choosePlaybook(e.target.value)}
+                      aria-label="Playbook"
+                      className={`${FIELD} mt-2`}
+                    >
+                      <option value="">No playbook</option>
+                      {form.playbookId && !playbooks.some((playbook) => playbook.id === form.playbookId) ? (
+                        <option value={form.playbookId}>{editingEntry?.playbook || "Saved playbook"}</option>
+                      ) : null}
+                      {playbooks.map((playbook) => (
+                        <option key={playbook.id} value={playbook.id}>
+                          {playbook.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className={`mt-1.5 text-[11px] leading-relaxed ${MUTED}`}>
+                      {playbooks.length
+                        ? "Pick the setup behind this trade; its rules show up below as a checklist."
+                        : "No playbooks on this account yet — create one here so the trade records its setup."}
+                    </p>
+
+                    {newPlaybookOpen ? (
+                      <div className={`mt-2 space-y-2 rounded-lg border p-3 ${DIVIDER}`}>
+                        <label htmlFor="day-new-playbook" className={`block text-[11px] font-medium ${MUTED}`}>
+                          New playbook name
+                        </label>
+                        <input
+                          id="day-new-playbook"
+                          value={newPlaybookName}
+                          onChange={(event) => setNewPlaybookName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              createPlaybook();
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              resetPlaybookForm();
+                            }
+                          }}
+                          autoFocus
+                          autoComplete="off"
+                          placeholder="e.g. London breakout"
+                          disabled={savingPlaybook}
+                          className={`${FIELD} h-9 text-[13px]`}
+                        />
+                        {playbookError ? <p className="text-[11px] text-[#d93a57] dark:text-[#ff6b86]">{playbookError}</p> : null}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={createPlaybook}
+                            disabled={savingPlaybook}
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white transition hover:brightness-110 disabled:opacity-60 ${FOCUS}`}
+                            style={{ backgroundColor: ac.hex }}
+                          >
+                            {savingPlaybook ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                            {savingPlaybook ? "Creating…" : "Create playbook"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={resetPlaybookForm}
+                            disabled={savingPlaybook}
+                            className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-opacity hover:opacity-100 disabled:opacity-40 ${DIVIDER} ${MUTED} ${FOCUS}`}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        <p className={`text-[10.5px] ${MUTED}`}>
+                          Rules, market and risk per trade are editable on the Playbooks page.
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {form.playbookId ? (
+                      activeRules.length > 0 ? (
+                        <div className="mt-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-[10.5px] font-semibold uppercase tracking-wide ${MUTED}`}>
+                              Playbook checklist
+                            </span>
+                            <span className={`text-[10.5px] tabular-nums ${MUTED}`}>
+                              {(form.playbookChecks || []).length}/{activeRules.length} checked
+                            </span>
+                          </div>
+                          <ul className="mt-1.5 space-y-0.5">
+                            {activeRules.map((rule) => {
+                              const done = (form.playbookChecks || []).includes(rule);
+                              return (
+                                <li key={rule}>
+                                  <label
+                                    className={`flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1.5 text-[12px] leading-snug transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${
+                                      done ? MUTED : HEAD
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={done}
+                                      onChange={() => togglePlaybookRule(rule)}
+                                      className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded"
+                                      style={{ accentColor: ac.hex }}
+                                    />
+                                    <span className={done ? "line-through" : ""}>{rule}</span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ) : (
+                        <p className={`mt-3 text-[11px] ${MUTED}`}>
+                          This playbook has no rules yet. Add them on the Playbooks page and they will appear here.
+                        </p>
+                      )
+                    ) : null}
                   </div>
 
                   {/* Screenshot – URL input + file upload */}

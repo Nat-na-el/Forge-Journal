@@ -53,6 +53,8 @@ const emptyForm = () => ({
   lotSize: "0.1",
   pnlManual: "",
   playbookId: "",
+  playbookRules: [],
+  playbookChecks: [],
   strategy: "",
   notes: "",
   screenshotUrl: "",
@@ -146,6 +148,21 @@ export default function AddTrade({ currentAccount }) {
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const onChange = (e) => set({ [e.target.name]: e.target.value });
 
+  const selectedPlaybook = playbooks.find((p) => p.id === form.playbookId) || null;
+  const playbookRules = form.playbookRules?.length ? form.playbookRules : selectedPlaybook?.rules || [];
+
+  const choosePlaybook = (id) => {
+    const playbook = playbooks.find((p) => p.id === id);
+    set({ playbookId: id, playbookRules: playbook?.rules || [], playbookChecks: [] });
+  };
+
+  const toggleRule = (rule) => {
+    const checks = Array.isArray(form.playbookChecks) ? form.playbookChecks : [];
+    set({
+      playbookChecks: checks.includes(rule) ? checks.filter((item) => item !== rule) : [...checks, rule],
+    });
+  };
+
   const closePlaybookForm = () => {
     setNewPlaybookOpen(false);
     setNewPlaybookName("");
@@ -173,7 +190,7 @@ export default function AddTrade({ currentAccount }) {
     if (!user || !account?.id) {
       const id = `local-${Date.now()}`;
       setPlaybooks((list) => [...list, { id, name }]);
-      set({ playbookId: id });
+      set({ playbookId: id, playbookRules: [], playbookChecks: [] });
       closePlaybookForm();
       return;
     }
@@ -196,7 +213,7 @@ export default function AddTrade({ currentAccount }) {
         updatedAt: serverTimestamp(),
       });
       setPlaybooks((list) => [...list, { id: created.id, name }]);
-      set({ playbookId: created.id });
+      set({ playbookId: created.id, playbookRules: [], playbookChecks: [] });
       closePlaybookForm();
     } catch (err) {
       console.error("Create playbook error:", err);
@@ -303,7 +320,6 @@ export default function AddTrade({ currentAccount }) {
     if (!pending && !form.exit && form.pnlManual === "")
       return setError("Add an exit price (or a P&L), or mark the trade as Pending.");
 
-    const selectedPlaybook = playbooks.find((p) => p.id === form.playbookId);
     const strategyText = (form.strategy || "").trim() || selectedPlaybook?.name || "";
 
     const payload = {
@@ -320,6 +336,8 @@ export default function AddTrade({ currentAccount }) {
       lotSize: Number(form.lotSize) || 0.1,
       playbookId: form.playbookId || "",
       playbook: selectedPlaybook?.name || "",
+      playbookRules,
+      playbookChecks: form.playbookChecks || [],
       strategy: strategyText,
       notes: form.notes.trim(),
       status: form.status,
@@ -635,7 +653,7 @@ export default function AddTrade({ currentAccount }) {
                 <select
                   name="playbookId"
                   value={form.playbookId}
-                  onChange={onChange}
+                  onChange={(e) => choosePlaybook(e.target.value)}
                   className="w-full mt-1 p-3 rounded-xl border text-sm outline-none focus:ring-2 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
                   style={{ "--tw-ring-color": ac.hex }}
                 >
@@ -651,6 +669,48 @@ export default function AddTrade({ currentAccount }) {
                     ? "Linking a trade feeds that playbook's win rate and P&L."
                     : "No playbooks on this account yet — create one here so the trade records its setup."}
                 </p>
+
+                {form.playbookId ? (
+                  playbookRules.length > 0 ? (
+                    <div className="mt-3 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide opacity-60">
+                          Playbook checklist
+                        </span>
+                        <span className="text-[11px] tabular-nums opacity-60">
+                          {(form.playbookChecks || []).length}/{playbookRules.length} checked
+                        </span>
+                      </div>
+                      <ul className="mt-1.5 space-y-0.5">
+                        {playbookRules.map((rule) => {
+                          const done = (form.playbookChecks || []).includes(rule);
+                          return (
+                            <li key={rule}>
+                              <label
+                                className={`flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1.5 text-xs leading-snug transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 ${
+                                  done ? "opacity-50" : ""
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={done}
+                                  onChange={() => toggleRule(rule)}
+                                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded"
+                                  style={{ accentColor: ac.hex }}
+                                />
+                                <span className={done ? "line-through" : ""}>{rule}</span>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs opacity-60">
+                      This playbook has no rules yet. Add them on the Playbooks page and they will appear here.
+                    </p>
+                  )
+                ) : null}
 
                 {newPlaybookOpen ? (
                   <div className="mt-2 space-y-2 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
