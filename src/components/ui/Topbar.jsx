@@ -111,7 +111,8 @@ export default function Topbar({
   const hideTitle =
     location.pathname === "/dashboard" ||
     location.pathname === "/reports" ||
-    location.pathname === "/playbooks";
+    location.pathname === "/playbooks" ||
+    location.pathname === "/journal";
   const accountName = currentAccount?.name || "No account";
   const user = auth.currentUser;
   const initial = (user?.displayName || user?.email || accountName || "F")

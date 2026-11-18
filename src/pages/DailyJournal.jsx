@@ -50,6 +50,8 @@ import {
   Highlighter,
   LayoutTemplate,
   Filter,
+  Trophy,
+  User,
 } from "lucide-react";
 import {
   format,
@@ -121,7 +123,7 @@ const MUTED = "text-[#6b7090] dark:text-[#8a8fb5]";
 const HEAD = "text-[#14142b] dark:text-white";
 const DIVIDER = "border-[#e6e8f2] dark:border-[#262645]";
 const CARD =
-  "gap-0 rounded-xl bg-white dark:bg-[#15152b] border border-[#e6e8f2] dark:border-[#262645] shadow-sm dark:shadow-none";
+  "gap-0 rounded-[10px] bg-white dark:bg-[#15152b] border border-[#e6e8f2] dark:border-[#262645] shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:shadow-none";
 const PANEL =
   "rounded-xl border border-[#e6e8f2] dark:border-[#262645] bg-[#f7f8fc] dark:bg-[#101024]";
 const FIELD =
@@ -133,6 +135,12 @@ const ICON_BTN =
   FOCUS;
 const GHOST_BTN =
   "inline-flex items-center gap-1.5 rounded-lg border border-[#e6e8f2] px-2.5 py-1.5 text-[11.5px] font-medium text-[#14142b] transition-colors hover:bg-[#f1f2f8] dark:border-[#262645] dark:text-[#e8e9f7] dark:hover:bg-[#1e1e3a] " +
+  FOCUS;
+const TOOL_BTN =
+  "inline-flex h-8 items-center gap-1.5 rounded-md border border-[#e6e8f2] bg-white px-2.5 text-[12px] font-medium text-[#475467] transition-colors hover:bg-[#f9fafb] dark:border-[#262645] dark:bg-[#15152b] dark:text-[#c9ccea] dark:hover:bg-[#1e1e3a] " +
+  FOCUS;
+const CARD_BTN =
+  "inline-flex h-7 items-center gap-1.5 rounded-md border border-[#e6e8f2] bg-white px-2 text-[11.5px] font-medium text-[#344054] transition-colors hover:bg-[#f9fafb] dark:border-[#262645] dark:bg-[#15152b] dark:text-[#e8e9f7] dark:hover:bg-[#1e1e3a] " +
   FOCUS;
 
 // Same accent palette + storage key as the Dashboard and Sidebar
@@ -791,8 +799,16 @@ export default function DailyJournal({ currentAccount }) {
   const [selectedDate, setSelectedDate] = useState(() => dayKey(new Date()));
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
   const [filter, setFilter] = useState("all");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [collapsed, setCollapsed] = useState({});
+  const [expandedDay, setExpandedDay] = useState({});
+  const [bannerOpen, setBannerOpen] = useState(() => {
+    try {
+      return localStorage.getItem("forgexDayViewBanner") !== "off";
+    } catch {
+      return true;
+    }
+  });
   const [viewMode, setViewMode] = useState("day");
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [noteDateKey, setNoteDateKey] = useState(selectedDate);
@@ -1282,9 +1298,15 @@ export default function DailyJournal({ currentAccount }) {
     scales: {
       x: { display: false },
       y: {
-        grid: { color: chartGrid },
+        grid: { color: isDark ? "rgba(255,255,255,0.05)" : "#eef0f4", drawTicks: false },
         border: { display: false },
-        ticks: { color: chartText, maxTicksLimit: 3, callback: fmtAxis },
+        ticks: {
+          color: isDark ? "#6b7090" : "#98a2b3",
+          font: { size: 10 },
+          maxTicksLimit: 4,
+          padding: 6,
+          callback: (value) => `${Number(value) < 0 ? "-" : ""}$${Math.abs(Number(value)).toLocaleString()}`,
+        },
       },
     },
   };
@@ -1323,7 +1345,6 @@ export default function DailyJournal({ currentAccount }) {
   const selectDay = (key) => {
     setSelectedDate(key);
     setViewMonth(startOfMonth(parseISO(key)));
-    setCollapsed((c) => ({ ...c, [key]: false }));
     setTimeout(() => {
       document.getElementById(`day-${key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 140);
@@ -1515,6 +1536,14 @@ export default function DailyJournal({ currentAccount }) {
   }
 
   const monthLabel = format(viewMonth, "MMMM yyyy");
+  const monthToneMax = (() => {
+    const prefix = format(viewMonth, "yyyy-MM");
+    return Object.entries(dayTotals).reduce(
+      (max, [key, value]) =>
+        key.startsWith(prefix) && value.executed ? Math.max(max, Math.abs(value.net)) : max,
+      1
+    );
+  })();
   const FILTERS = [
     ["all", "All days"],
     ["win", "Green"],
@@ -1524,67 +1553,145 @@ export default function DailyJournal({ currentAccount }) {
 
   return (
     <div
-      className={`${isDark ? "dark bg-[#0b0b19] text-[#e8e9f7]" : "bg-[#f4f5fa] text-[#14142b]"} min-h-screen w-full p-3 sm:p-6 lg:p-8`}
+      className={`${isDark ? "dark bg-[#0b0b19] text-[#e8e9f7]" : "bg-[#f8f9fc] text-[#14142b]"} min-h-screen w-full p-3 sm:p-5 lg:p-6`}
     >
       <div className="mx-auto max-w-[1600px]">
-        {/* ───────── Header / toolbar ───────── */}
+        {/* ───────── Page header + toolbar ───────── */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className={`min-w-0 text-[12px] ${MUTED}`}>
-            <span className={`font-semibold ${HEAD}`}>{currentAccount.name}</span> · auto P&L at {accountLeverage}:1 leverage
-          </p>
+          <h1 className={`text-[15px] font-semibold tracking-tight ${HEAD}`}>Day View</h1>
 
           <div className="flex flex-wrap items-center gap-2">
-            <label className={`flex items-center gap-1.5 rounded-lg border ${DIVIDER} bg-white px-2.5 py-1.5 dark:bg-[#15152b]`}>
-              <Filter size={13} className={MUTED} />
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                aria-label="Filter days"
-                className="cursor-pointer bg-transparent text-[12px] font-semibold outline-none"
-              >
-                {FILTERS.map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-            </label>
+            <button
+              type="button"
+              onClick={() => selectDay(todayKey)}
+              title="Jump to today"
+              aria-label="Jump to today"
+              className={TOOL_BTN}
+            >
+              <DollarSign size={14} />
+            </button>
 
-            <div className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white px-2.5 py-1.5 dark:bg-[#15152b]`}>
-              <Search size={14} className={MUTED} />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search symbol"
-                aria-label="Search by symbol"
-                className="w-28 bg-transparent text-[12px] outline-none sm:w-36"
-              />
-              {search && (
-                <button onClick={() => setSearch("")} aria-label="Clear search" className={MUTED}>
-                  <X size={13} />
+            <div className="relative">
+              <div className={`${TOOL_BTN} gap-2`}>
+                <Filter size={13} />
+                <span className="tabular-nums">
+                  {(filter !== "all" ? 1 : 0) + (search ? 1 : 0) || 1} filter
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFilterOpen((open) => !open)}
+                  aria-expanded={filterOpen}
+                  aria-label="Filter days"
+                  className="rounded p-0.5 opacity-70 transition-opacity hover:opacity-100"
+                >
+                  <Settings size={12} />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilter("all");
+                    setSearch("");
+                  }}
+                  aria-label="Clear filters"
+                  className="rounded p-0.5 opacity-70 transition-opacity hover:opacity-100"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+
+              {filterOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setFilterOpen(false)} />
+                  <div className={`absolute right-0 top-full z-40 mt-1 w-60 rounded-lg border bg-white p-2 shadow-xl dark:bg-[#15152b] ${DIVIDER}`}>
+                    <div className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${DIVIDER}`}>
+                      <Search size={13} className={MUTED} />
+                      <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search symbol"
+                        aria-label="Search by symbol"
+                        className="w-full bg-transparent text-[12px] outline-none"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="mt-1.5 space-y-0.5">
+                      {FILTERS.map(([key, label]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            setFilter(key);
+                            setFilterOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[12px] transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${
+                            filter === key ? "font-semibold" : ""
+                          } ${HEAD} ${FOCUS}`}
+                        >
+                          {label}
+                          {filter === key ? <Check size={12} style={{ color: ac.hex }} /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
 
             <button
               type="button"
               onClick={() => selectDay(todayKey)}
-              className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white px-2.5 py-1.5 text-[12px] font-semibold dark:bg-[#15152b] ${HEAD} ${FOCUS}`}
+              className={TOOL_BTN}
             >
-              {format(subDays(new Date(), 30), "MMM d, yyyy")} – {format(new Date(), "MMM d, yyyy")}
-              <ChevronDown size={13} className={MUTED} />
+              <CalendarDays size={13} />
+              {format(subDays(new Date(), 30), "MMM dd, yyyy")}-{format(new Date(), "MMM dd, yyyy")}
+              <ChevronDown size={13} className="opacity-60" />
             </button>
 
             <button
               type="button"
               onClick={() => navigate("/add-trade")}
               title="Switch trading account"
-              className={`flex items-center gap-2 rounded-lg border ${DIVIDER} bg-white px-2.5 py-1.5 dark:bg-[#15152b] ${FOCUS}`}
+              className={TOOL_BTN}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${currentAccount?.mt5Connected ? "bg-[#22c493]" : "bg-[#8a8fb5]"}`} />
-              <span className={`max-w-[140px] truncate text-[12px] font-semibold ${HEAD}`}>{currentAccount.name}</span>
-              <ChevronDown size={13} className={MUTED} />
+              <User size={13} />
+              <span className="max-w-[140px] truncate">{currentAccount.name}</span>
+              <ChevronDown size={13} className="opacity-60" />
             </button>
           </div>
         </div>
+
+        {/* ───────── Announcement ───────── */}
+        {bannerOpen && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#ddd6fe] bg-gradient-to-r from-[#f6f3ff] via-white to-white px-3 py-2 dark:border-[#392f66] dark:from-[#191233] dark:via-[#15152b] dark:to-[#15152b]">
+            <span className="rounded bg-[#6C47FF] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              New
+            </span>
+            <p className={`min-w-0 flex-1 text-[12.5px] ${HEAD}`}>
+              Generate in-depth analysis for your existing accounts and receive monthly performance reports
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate("/add-trade")}
+              className={`rounded-md px-3 py-1.5 text-[12px] font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
+              style={{ backgroundColor: ac.hex }}
+            >
+              To Accounts
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBannerOpen(false);
+                try {
+                  localStorage.setItem("forgexDayViewBanner", "off");
+                } catch {}
+              }}
+              aria-label="Dismiss announcement"
+              className={`${MUTED} transition-colors hover:text-[#14142b] dark:hover:text-white ${FOCUS}`}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
 
         {/* Feedback */}
         {error && (
@@ -1601,34 +1708,34 @@ export default function DailyJournal({ currentAccount }) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_236px]">
             {/* ───────── Right rail (first on phones) ───────── */}
-            <div className="order-first lg:order-last flex flex-col gap-4 lg:sticky lg:top-6">
+            <div className="order-first lg:order-last flex flex-col gap-4 lg:sticky lg:top-20">
               {/* Month calendar */}
               <Card className={`${CARD} p-0`}>
-                <div className={`flex items-center justify-between border-b px-3 py-2.5 ${DIVIDER}`}>
+                <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
                   <button
                     type="button"
                     onClick={() => setViewMonth(subMonths(viewMonth, 1))}
                     aria-label="Previous month"
-                    className={`flex h-7 w-7 items-center justify-center rounded-md ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                    className={`flex h-6 w-6 items-center justify-center rounded-md ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
                   >
-                    <ChevronLeft size={15} />
+                    <ChevronLeft size={14} />
                   </button>
-                  <h3 className={`text-[13px] font-semibold ${HEAD}`}>{monthLabel}</h3>
+                  <h3 className={`text-[12.5px] font-semibold ${HEAD}`}>{monthLabel}</h3>
                   <button
                     type="button"
                     onClick={() => setViewMonth(addMonths(viewMonth, 1))}
                     aria-label="Next month"
-                    className={`flex h-7 w-7 items-center justify-center rounded-md ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                    className={`flex h-6 w-6 items-center justify-center rounded-md ${MUTED} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
                   >
-                    <ChevronRight size={15} />
+                    <ChevronRight size={14} />
                   </button>
                 </div>
-                <div className="p-3">
-                  <div className="grid grid-cols-7 gap-1">
+                <div className="px-2.5 pb-3 pt-1">
+                  <div className="grid grid-cols-7 gap-[3px]">
                     {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
-                      <div key={d} className={`pb-1 text-center text-[10px] font-semibold ${MUTED}`}>
+                      <div key={d} className={`pb-1 text-center text-[9.5px] font-medium ${MUTED}`}>
                         {d}
                       </div>
                     ))}
@@ -1637,44 +1744,42 @@ export default function DailyJournal({ currentAccount }) {
                       const t = dayTotals[k];
                       const cur = isSameMonth(d, viewMonth);
                       const sel = k === selectedDate;
-                      const noted = hasNote(dayNotes[k]);
-                      const tone =
-                        t && t.executed
-                          ? t.net >= 0
-                            ? "rgba(34,196,147,0.16)"
-                            : "rgba(242,85,110,0.16)"
-                          : t
-                          ? "rgba(245,158,11,0.12)"
-                          : undefined;
+                      const ratio = t && t.executed ? Math.min(1, Math.abs(t.net) / monthToneMax) : 0;
+                      let tone;
+                      if (t && t.executed) {
+                        tone = `rgba(${t.net >= 0 ? "18,183,106" : "240,68,56"},${(0.16 + ratio * 0.28).toFixed(2)})`;
+                      } else if (t) {
+                        tone = "rgba(245,158,11,0.14)";
+                      } else if (cur) {
+                        tone = isDark ? "rgba(255,255,255,0.05)" : "#f6f7f9";
+                      }
                       return (
                         <button
                           key={k}
                           onClick={() => selectDay(k)}
                           aria-label={`${format(d, "d MMMM")}${t ? `, ${t.count} entries` : ""}`}
                           aria-current={isToday(d) ? "date" : undefined}
-                          className={`relative aspect-square rounded-md text-[11px] font-semibold tabular-nums transition-colors ${FOCUS} ${cur ? HEAD : `${MUTED} opacity-40`} hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a]`}
+                          className={`relative flex h-7 items-center justify-center rounded-md text-[11px] font-medium tabular-nums transition-colors hover:brightness-95 dark:hover:brightness-110 ${FOCUS} ${
+                            cur ? HEAD : `${MUTED} opacity-40`
+                          }`}
                           style={{
-                            backgroundColor: tone,
-                            boxShadow: sel ? `inset 0 0 0 2px ${ac.hex}` : isToday(d) ? `inset 0 0 0 1px ${ac.hex}88` : undefined,
+                            backgroundColor: sel
+                              ? isDark
+                                ? "#101024"
+                                : "#ffffff"
+                              : tone,
+                            boxShadow: sel
+                              ? `inset 0 0 0 1.5px ${ac.hex}`
+                              : isToday(d)
+                              ? `inset 0 0 0 1px ${ac.hex}66`
+                              : undefined,
                           }}
                         >
                           {format(d, "d")}
-                          {noted && (
-                            <i className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full" style={{ backgroundColor: ac.hex }} />
-                          )}
                         </button>
                       );
                     })}
                   </div>
-                  <div className={`mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] ${MUTED}`}>
-                    <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm" style={{ backgroundColor: POS }} /> Green</span>
-                    <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm" style={{ backgroundColor: NEG }} /> Red</span>
-                    <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-amber-500" /> Pending</span>
-                  </div>
-                </div>
-                <div className={`flex items-center justify-center gap-1.5 border-t px-3 py-2 text-[11px] ${DIVIDER} ${MUTED}`}>
-                  <Flame size={12} className={streak ? "text-amber-500" : ""} />
-                  {streak} {streak === 1 ? "day" : "days"} journal streak
                 </div>
               </Card>
             </div>
@@ -1682,7 +1787,7 @@ export default function DailyJournal({ currentAccount }) {
             {/* ───────── Day feed ───────── */}
             <div className="flex min-w-0 flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className={`flex items-center gap-0.5 rounded-lg border ${DIVIDER} bg-white p-0.5 dark:bg-[#15152b]`}>
+                <div className={`flex items-center gap-0.5 rounded-md border ${DIVIDER} bg-white p-0.5 dark:bg-[#15152b]`}>
                   {[
                     ["day", "Day"],
                     ["week", "Week"],
@@ -1692,9 +1797,9 @@ export default function DailyJournal({ currentAccount }) {
                       type="button"
                       onClick={() => setViewMode(key)}
                       aria-pressed={viewMode === key}
-                      className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors ${FOCUS} ${
+                      className={`rounded-[4px] px-3 py-1.5 text-[12px] transition-colors ${FOCUS} ${
                         viewMode === key
-                          ? "bg-[#f1f2f8] font-semibold dark:bg-[#1e1e3a] " + HEAD
+                          ? "bg-[#f2f3f7] font-medium dark:bg-[#1e1e3a] " + HEAD
                           : MUTED
                       }`}
                     >
@@ -1709,7 +1814,7 @@ export default function DailyJournal({ currentAccount }) {
                       setNoteDateKey(selectedDate);
                       setNoteModalOpen(true);
                     }}
-                    className="inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-[12.5px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+                    className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-[12px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98] ${FOCUS}`}
                     style={{ backgroundColor: ac.hex }}
                   >
                     <Sparkles size={13} />
@@ -1717,10 +1822,12 @@ export default function DailyJournal({ currentAccount }) {
                   </button>
                   <button
                     onClick={() => navigate("/settings")}
-                    className={ICON_BTN}
+                    className={`flex h-8 w-8 items-center justify-center rounded-md border text-[#6b7090] transition-colors hover:bg-[#f9fafb] hover:text-[#14142b] dark:border-[#262645] dark:text-[#8a8fb5] dark:hover:bg-[#1e1e3a] dark:hover:text-white ${
+                      isDark ? "border-[#262645]" : "border-[#e6e8f2]"
+                    } ${FOCUS}`}
                     aria-label="Settings"
                   >
-                    <Settings size={17} />
+                    <Settings size={15} />
                   </button>
                 </div>
               </div>
@@ -1773,15 +1880,14 @@ export default function DailyJournal({ currentAccount }) {
               ) : (
                                 feedDays.map((d) => {
                   const s = d.stats;
-                  const isSel = d.key === selectedDate;
-                  const isCollapsed = !!collapsed[d.key];
+                  const isExpanded = !!expandedDay[d.key];
                   const dateObj = parseISO(d.key);
                   const pnl = Number(s.net) || 0;
                   const hadTrades = s.executed > 0;
                   const noted = hasNote(d.note);
                   const stats = [
                     ["Total Trades", s.count],
-                    ["Gross P&L", hadTrades ? money(s.gross) : "—"],
+                    ["Gross P&L", hadTrades ? money(s.gross, false) : "—"],
                     ["Winners/Losers", s.executed ? `${s.wins}/${s.losses}` : "—"],
                     ["Commissions", money(s.commission, false)],
                     ["Win Rate", s.executed ? `${s.winRate}%` : "—"],
@@ -1792,75 +1898,55 @@ export default function DailyJournal({ currentAccount }) {
                     <Card
                       key={d.key}
                       id={`day-${d.key}`}
-                      className={`${CARD} scroll-mt-6 overflow-hidden border p-0 ${DIVIDER}`}
-                      style={
-                        isSel
-                          ? { boxShadow: `0 0 0 2px ${ac.hex}`, borderColor: ac.hex }
-                          : undefined
-                      }
+                      className={`${CARD} scroll-mt-6 overflow-hidden p-0`}
                     >
                       {/* Day header */}
-                      <div
-                        className={`flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2.5 dark:bg-[#15152b] sm:px-4 ${
-                          isCollapsed ? "" : "border-b " + DIVIDER
-                        }`}
-                      >
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
                         <button
                           type="button"
-                          onClick={() => setCollapsed((c) => ({ ...c, [d.key]: !c[d.key] }))}
-                          aria-expanded={!isCollapsed}
-                          aria-label={`Toggle ${format(dateObj, "EEE, MMM d, yyyy")}`}
-                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-2 text-left transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
+                          onClick={() => setExpandedDay((c) => ({ ...c, [d.key]: !c[d.key] }))}
+                          aria-expanded={isExpanded}
+                          aria-label={`Toggle trades for ${format(dateObj, "EEE, MMM d, yyyy")}`}
+                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-md py-0.5 text-left ${FOCUS}`}
                         >
                           <ChevronRight
-                            size={15}
-                            className={`shrink-0 transition-transform ${MUTED} ${isCollapsed ? "" : "rotate-90"}`}
+                            size={14}
+                            className={`shrink-0 transition-transform ${MUTED} ${isExpanded ? "rotate-90" : ""}`}
                           />
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className={`text-[14px] font-semibold ${HEAD}`}>
-                                {format(dateObj, "EEE, MMM d, yyyy")}
-                              </span>
-                              <span className={MUTED}>·</span>
-                              <span className={`text-[13px] font-semibold tabular-nums ${hadTrades ? pnlClass(pnl) : MUTED}`}>
-                                Net P&L {hadTrades ? money(pnl) : "—"}
-                              </span>
-                              {isToday(dateObj) && (
-                                <span
-                                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                                  style={{ backgroundColor: ac.hex }}
-                                >
-                                  Today
-                                </span>
-                              )}
-                              {d.note?.reviewed && (
-                                <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-[#0e9f77] dark:text-[#2dd4a0]">
-                                  <Check size={10} /> Reviewed
-                                </span>
-                              )}
-                            </div>
-                            <div className={`mt-0.5 text-[11px] ${MUTED}`}>
-                              {s.count} {s.count === 1 ? "trade" : "trades"}
-                              {s.executed ? ` · ${s.winRate}% win rate` : ""}
-                              {s.pending ? ` · ${s.pending} pending` : ""}
-                            </div>
-                          </div>
+                          <span className={`truncate text-[13.5px] font-semibold ${HEAD}`}>
+                            {format(dateObj, "EEE, MMM d, yyyy")}
+                          </span>
+                          <span className={`text-[13px] ${MUTED}`}>·</span>
+                          <span className="whitespace-nowrap text-[13px]">
+                            <span className={`font-medium ${HEAD}`}>Net P&amp;L </span>
+                            <span className={`font-semibold tabular-nums ${hadTrades ? pnlClass(pnl) : MUTED}`}>
+                              {hadTrades ? money(pnl, false) : "—"}
+                            </span>
+                          </span>
+                          {isToday(dateObj) && (
+                            <span
+                              className="rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-white"
+                              style={{ backgroundColor: ac.hex }}
+                            >
+                              Today
+                            </span>
+                          )}
                         </button>
 
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => navigate(`/mentor?date=${d.key}`)}
-                            className={GHOST_BTN}
+                            className={CARD_BTN}
                           >
-                            <Sparkles size={12} style={{ color: ac.hex }} /> Review with AI
+                            <Trophy size={12} style={{ color: ac.hex }} /> Review with AI
                           </button>
                           <button
                             type="button"
                             onClick={() => navigate(`/replay?date=${d.key}`)}
-                            className={GHOST_BTN}
+                            className={CARD_BTN}
                           >
-                            <Play size={11} /> Replay
+                            <Play size={11} style={{ color: ac.hex }} /> Replay
                           </button>
                           <button
                             type="button"
@@ -1868,69 +1954,67 @@ export default function DailyJournal({ currentAccount }) {
                               setNoteDateKey(d.key);
                               setNoteModalOpen(true);
                             }}
-                            className={GHOST_BTN}
+                            className={CARD_BTN}
                           >
-                            <FileText size={11} /> {noted ? "View note" : "Add note"}
+                            <Plus size={12} style={{ color: ac.hex }} /> Add note
                           </button>
                           <button
                             type="button"
-                            onClick={() => openNewEntry(d.key)}
-                            disabled={!isAccountReady}
-                            aria-label={`Add trade on ${format(dateObj, "d MMMM")}`}
-                            title="Add trade"
-                            className={`${GHOST_BTN} disabled:cursor-not-allowed disabled:opacity-40`}
+                            onClick={() => {
+                              setNoteDateKey(d.key);
+                              setNoteModalOpen(true);
+                            }}
+                            aria-label={`Day note for ${format(dateObj, "d MMMM")}`}
+                            title={noted ? "Open day note" : "Write day note"}
+                            className={`ml-0.5 flex h-7 w-7 items-center justify-center rounded-md ${MUTED} transition-colors hover:bg-[#f1f2f8] dark:hover:bg-[#1e1e3a] ${FOCUS}`}
                           >
-                            <Plus size={13} />
+                            <FileText size={14} />
                           </button>
                         </div>
                       </div>
 
-                      {!isCollapsed && (
-                        <>
-                          {d.list.length === 0 ? (
-                            <div className="px-4 py-6 text-center">
-                              {noted ? (
-                                <p className={`mx-auto max-w-xl whitespace-pre-line text-left text-[12.5px] leading-relaxed ${MUTED}`}>
-                                  {(d.note?.note || "").trim().slice(0, 320) || "Day note saved."}
-                                </p>
-                              ) : (
-                                <p className={`text-[12.5px] ${MUTED}`}>No trades logged on this day.</p>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => openNewEntry(d.key)}
-                                disabled={!isAccountReady}
-                                style={{ color: ac.hex }}
-                                className={`mt-2 rounded text-[12.5px] font-semibold hover:underline ${FOCUS} disabled:cursor-not-allowed disabled:opacity-40`}
-                              >
-                                + Log an entry
-                              </button>
-                            </div>
+                      {d.list.length === 0 ? (
+                        <div className="px-5 pb-5 text-center">
+                          {noted ? (
+                            <p className={`mx-auto max-w-xl whitespace-pre-line text-left text-[12.5px] leading-relaxed ${MUTED}`}>
+                              {(d.note?.note || "").trim().slice(0, 320) || "Day note saved."}
+                            </p>
                           ) : (
-                            <>
-                              {/* Sparkline + stats */}
-                              <div className="grid grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.55fr)]">
-                                <div className={`p-4 sm:p-5 lg:border-r ${DIVIDER}`}>
-                                  <div className="relative h-[150px]">
-                                    <Line data={sparkData(d.list, s.net)} options={sparkOptions} />
+                            <p className={`text-[12.5px] ${MUTED}`}>No trades logged on this day.</p>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openNewEntry(d.key)}
+                            disabled={!isAccountReady}
+                            style={{ color: ac.hex }}
+                            className={`mt-2 rounded text-[12.5px] font-semibold hover:underline ${FOCUS} disabled:cursor-not-allowed disabled:opacity-40`}
+                          >
+                            + Log an entry
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Sparkline + stats */}
+                          <div className="grid grid-cols-1 gap-0 pb-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,2fr)]">
+                            <div className="px-4 pb-2 pt-1 sm:px-5">
+                              <div className="relative h-[132px]">
+                                <Line data={sparkData(d.list, s.net)} options={sparkOptions} />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-5 gap-y-6 px-4 pb-5 pt-2 sm:grid-cols-4 sm:px-5">
+                              {stats.map(([label, value]) => (
+                                <div key={label}>
+                                  <div className={`text-[10.5px] ${MUTED}`}>{label}</div>
+                                  <div className={`mt-1 text-[12.5px] font-semibold tabular-nums ${HEAD}`}>
+                                    {value}
                                   </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-5 p-4 sm:grid-cols-4 sm:p-5">
-                                  {stats.map(([label, value]) => (
-                                    <div key={label}>
-                                      <div className={`text-[10.5px] ${MUTED}`}>{label}</div>
-                                      <div
-                                        className={`mt-1 text-[12.5px] font-bold tabular-nums ${
-                                          label === "Gross P&L" && hadTrades ? pnlClass(s.gross) : HEAD
-                                        }`}
-                                      >
-                                        {value}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
+                              ))}
+                            </div>
+                          </div>
 
+                          {isExpanded && (
+                            <>
                               {/* Trades table */}
                               <div className={`overflow-x-auto border-t ${DIVIDER}`}>
                                 <table className="w-full min-w-[560px] text-sm">
@@ -2091,10 +2175,8 @@ export default function DailyJournal({ currentAccount }) {
                                   </tbody>
                                 </table>
                               </div>
-                            </>
-                          )}
 
-                          {d.list.length > 0 && (
+                              {d.list.length > 0 && (
                             <div className={`flex items-center justify-between gap-3 border-t px-4 py-2 ${DIVIDER}`}>
                               <button
                                 type="button"
@@ -2120,6 +2202,8 @@ export default function DailyJournal({ currentAccount }) {
                           )}
                         </>
                       )}
+                      </>
+                    )}
                     </Card>
                   );
                 })
